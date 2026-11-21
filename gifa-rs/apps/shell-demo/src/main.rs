@@ -30,6 +30,7 @@ fn main() {
     let selftest = !hold;
 
     gifa_shell::create(ShellConfig {
+        chrome_url: None,
         chrome_html: include_str!("../web/chrome.html").to_string(),
         stage_html: include_str!("../web/stage.html").to_string(),
         bounds: Bounds::new(80, 80, W, H),

@@ -1,409 +1,82 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<title>GIFA chrome 层</title>
-<style>
-  :root { --bar: #1b1d24; --line: #2b2f3a; --fg: #e6e6e6; --dim: #8b93a3; --accent: #3b6cf6; }
-  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden;
-               font: 12px/1.4 "Microsoft YaHei", system-ui, sans-serif; user-select: none; }
+  <head>
+    <meta charset="utf-8" />
+    <title>原神跟跑助手</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- 图标全部是内联 SVG：emoji 在不同系统字体下大小、颜色、基线都不一样，
+         而且浮窗缩到很小时会糊成一团。app.js 只切 class，不再往按钮里写字符。 -->
+    <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <symbol id="f-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></symbol>
+      <symbol id="f-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></symbol>
+      <symbol id="f-min" viewBox="0 0 24 24"><path d="M6 12.5h12" /></symbol>
+      <symbol id="f-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" /></symbol>
+      <symbol id="f-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></symbol>
+      <symbol id="f-pause" viewBox="0 0 24 24"><path d="M8.5 5.5v13M15.5 5.5v13" /></symbol>
+      <symbol id="f-volume" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 9a4 4 0 010 6M19.5 6.5a7.5 7.5 0 010 11" /></symbol>
+      <symbol id="f-mute" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M17 9.5l4.5 5M21.5 9.5l-4.5 5" /></symbol>
+      <symbol id="f-video" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2" /><path d="M16 10l5-3v10l-5-3z" /></symbol>
+    </svg>
 
-  /* 标题栏 30px */
-  #bar { position: fixed; left: 0; top: 0; right: 0; height: 30px; box-sizing: border-box;
-         background: var(--bar); color: var(--fg); display: flex; align-items: center; gap: 8px;
-         padding: 0 8px; border-bottom: 1px solid var(--line); }
-  #bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex: none; }
-  #bar .dot.on { background: #3ddc84; }
-  #bar .title { font-weight: 600; max-width: 32%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #bar .meta { color: var(--dim); white-space: nowrap; }
-  #bar .spacer { flex: 1; }
-  #bar .account { color: var(--dim); max-width: 22%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #bar button { height: 22px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--line);
-                background: #242833; color: var(--fg); font-size: 12px; cursor: pointer; }
-  #bar button:hover { background: #2f3542; }
-  #bar button.on { background: #24406e; border-color: #3b6cf6; }
-  #bar select { height: 22px; max-width: 160px; border-radius: 4px; border: 1px solid var(--line);
-                background: #242833; color: var(--fg); font-size: 12px; outline: none; }
-  #bar select.hidden { display: none; }
+    <div id="app">
+      <header id="titlebar">
+        <div class="brand"><span class="dot"></span><span class="name">跟跑助手</span></div>
+        <div class="vtitle" id="videoTitle"></div>
+        <div class="tools">
+          <select id="layoutSelect" class="sel layout-sel hidden" aria-label="视频小地图布局" title="视频小地图布局"></select>
+          <select id="partSelect" class="sel hidden" title="分 P"></select>
+          <button id="btnLink" class="tb" title="换视频（粘贴链接）"><svg class="ico"><use href="#f-link"></use></svg></button>
+          <button id="btnSettings" class="tb" title="打开启动器（全部设置）"><svg class="ico"><use href="#f-gear"></use></svg></button>
+          <span class="tb-sep"></span>
+          <button id="btnMin" class="tb" title="最小化"><svg class="ico"><use href="#f-min"></use></svg></button>
+          <button id="btnClose" class="tb danger" title="关闭浮窗"><svg class="ico"><use href="#f-close"></use></svg></button>
+        </div>
+      </header>
 
-  /* URL 条 40px */
-  #urlbar { position: fixed; left: 0; right: 0; top: 30px; height: 40px; box-sizing: border-box;
-            background: var(--bar); border-bottom: 1px solid var(--line);
-            display: flex; align-items: center; gap: 6px; padding: 6px 8px; }
-  #urlbar.hidden { display: none; }
-  #urlbar input { flex: 1; height: 26px; border-radius: 5px; border: 1px solid var(--line);
-                  background: rgba(255,255,255,.05); color: var(--fg); padding: 0 9px;
-                  font-size: 12px; outline: none; }
-  #urlbar button { height: 26px; padding: 0 12px; border: 0; border-radius: 5px;
-                   background: var(--accent); color: #fff; cursor: pointer; }
+      <div id="urlbar">
+        <input id="urlInput" type="text" spellcheck="false" placeholder="粘贴 B 站链接 / BV 号，回车载入" />
+        <button id="btnLoad" class="primary">载入</button>
+      </div>
 
-  /* 控制条 34px */
-  #foot { position: fixed; left: 0; bottom: 0; right: 0; height: 34px; box-sizing: border-box;
-          background: var(--bar); color: var(--dim); display: flex; align-items: center; gap: 10px;
-          padding: 0 10px; border-top: 1px solid var(--line); }
-  #foot button { width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent;
-                 color: var(--fg); font-size: 14px; cursor: pointer; }
-  #foot button:hover { background: #2f3542; }
-  #progress { flex: 1; height: 4px; border-radius: 2px; background: #333a47; position: relative; cursor: pointer; }
-  #progress i { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; border-radius: 2px;
-                background: linear-gradient(90deg, #c4121d, #ff5a48); }
-  #time { font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; }
-  #rate { min-width: 34px; text-align: center; }
+      <main id="stage">
+        <div id="placeholder">
+          <div class="ph-icon"><svg class="ico"><use href="#f-video"></use></svg></div>
+          <p>粘贴一个 B 站攻略视频链接</p>
+          <span>支持 BV 号、av 号、b23.tv 短链、带分 P 的链接</span>
+        </div>
 
-  /* 悬浮 pill（状态 / 临时提示共用这一个矩形，避免多开一块区域） */
-  #pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: 48px;
-          width: 600px; height: 38px; box-sizing: border-box; border-radius: 19px;
-          background: rgba(16,16,16,.85); border: 1px solid rgba(255,255,255,.18);
-          color: #dfe3ea; display: flex; align-items: center; padding: 0 14px; gap: 8px;
-          overflow: hidden; white-space: nowrap; }
-  #pill .k { color: var(--dim); }
-  #pill #status { overflow: hidden; text-overflow: ellipsis; }
-  #pill.toast { border-color: rgba(61,108,246,.75); }
+        <div id="calib" class="hidden">
+          <div id="calibBox" class="calib-box">
+            <span class="calib-tag">小地图圆心</span>
+          </div>
+          <div class="calib-bar">
+            <span id="calibHint">把圆环大致套住视频里的小地图，滚轮调大小</span>
+            <span id="calibSize">—</span>
+            <button id="calibCancel" class="ghost">取消</button>
+            <button id="calibOk" class="primary">完成</button>
+          </div>
+        </div>
+      </main>
 
-  /* 标定层：盖住舞台（只在标定时参与命中测试） */
-  #calib { position: fixed; left: 0; right: 0; bottom: 34px; display: none;
-           cursor: crosshair; z-index: 30; }
-  #calib.active { display: block; }
-  #ring { position: fixed; box-sizing: border-box; border: 1.5px dashed #f0b427;
-          border-radius: 50%; transform: translate(-50%, -50%);
-          box-shadow: 0 0 0 1px rgba(0,0,0,.55) inset, 0 0 0 1px rgba(0,0,0,.55);
-          pointer-events: none; }
-  #ring::before, #ring::after { content: ''; position: absolute; background: #f0b427; opacity: .9; }
-  #ring::before { left: 50%; top: -9px; width: 1.5px; height: 8px; transform: translateX(-50%); }
-  #ring::after { top: 50%; left: -9px; height: 1.5px; width: 8px; transform: translateY(-50%); }
-  #calibBar { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
-              display: flex; align-items: center; gap: 10px; padding: 7px 12px;
-              background: rgba(16,16,16,.9); border: 1px solid rgba(255,255,255,.18);
-              border-radius: 10px; color: #dfe3ea; font-size: 12px; white-space: nowrap; }
-  #calibBar button { height: 26px; padding: 0 12px; border: 0; border-radius: 5px;
-                     background: #2f3542; color: #e6e6e6; cursor: pointer; }
-  #calibBar button.primary { background: #3b6cf6; color: #fff; }
-  #calibInfo { color: #9aa0aa; font-variant-numeric: tabular-nums; }
+      <footer id="controls">
+        <button id="btnPlay" class="play" title="播放 / 暂停">
+          <svg class="ico i-play"><use href="#f-play"></use></svg>
+          <svg class="ico i-pause"><use href="#f-pause"></use></svg>
+        </button>
+        <span id="timeText" class="time">00:00 / 00:00</span>
+        <div id="progress" class="progress"><div id="bar" class="bar"></div><div id="knob" class="knob"></div></div>
+        <button id="btnSpeed" class="mini" title="倍速">1.0×</button>
+        <button id="btnMute" class="mini" title="静音">
+          <svg class="ico i-volume"><use href="#f-volume"></use></svg>
+          <svg class="ico i-mute"><use href="#f-mute"></use></svg>
+        </button>
+      </footer>
 
-  /* 右下角缩放手柄 */
-  #grip { position: fixed; right: 0; bottom: 34px; width: 18px; height: 18px; cursor: nwse-resize; }
-  #grip::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px;
-                 border-right: 2px solid rgba(255,255,255,.55);
-                 border-bottom: 2px solid rgba(255,255,255,.55); border-radius: 0 0 3px 0; }
-</style>
-</head>
-<body>
-  <div id="bar">
-    <span class="dot" id="accDot"></span>
-    <span class="title" id="vtitle">未载入</span>
-    <span class="meta" id="vmeta">—</span>
-    <select id="partSelect" class="hidden" title="分 P"></select>
-    <select id="layoutSelect" class="hidden" title="小地图布局"></select>
-    <span class="spacer"></span>
-    <span class="account" id="account">未登录</span>
-    <button id="btnLogin" title="扫码登录 B 站">登录</button>
-    <button id="btnCalib" title="标定视频里的小地图位置">标定</button>
-    <button id="btnClean" title="隐藏顶栏/推荐/评论">纯净</button>
-    <button id="btnUrl" title="换视频">换视频</button>
-    <button id="btnClose" title="关闭浮窗">关闭</button>
-  </div>
-
-  <div id="urlbar">
-    <input id="urlInput" placeholder="粘贴 B 站链接 / BV 号 / b23.tv 短链，回车或点载入" spellcheck="false">
-    <button id="btnLoad">载入</button>
-  </div>
-
-  <div id="pill">
-    <span class="k" id="pillKey">状态</span>
-    <span id="status">等待页面…</span>
-  </div>
-
-  <div id="foot">
-    <button id="btnPlay" title="播放 / 暂停">▶</button>
-    <span id="time">00:00 / 00:00</span>
-    <div id="progress"><i></i></div>
-    <span id="rate">1.0×</span>
-  </div>
-
-  <div id="calib">
-    <div id="ring"></div>
-    <div id="calibBar">
-      <span id="calibInfo">拖圆环套住小地图，滚轮调大小</span>
-      <button id="calibCancel">取消</button>
-      <button id="calibOk" class="primary">完成</button>
+      <div id="grip" title="拖动调整大小"></div>
+      <div id="toast"></div>
     </div>
-  </div>
-
-  <div id="grip"></div>
-
-<script>
-  const post = (m) => { try { window.ipc.postMessage(JSON.stringify(m)); } catch (_) {} };
-  const dpr = () => window.devicePixelRatio || 1;
-  const rectPx = (el) => {
-    const r = el.getBoundingClientRect(), k = dpr();
-    return { x: Math.round(r.x * k), y: Math.round(r.y * k), w: Math.round(r.width * k), h: Math.round(r.height * k) };
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  // ---------------- 小地图标定
-  const calibEl = $('calib');
-  const ringEl = $('ring');
-  const calib = { active: false, cx: 0, cy: 0, r: 80, drag: false };
-
-  function paintCalib() {
-    if (!calib.active) return;
-    ringEl.style.left = calib.cx + 'px';
-    ringEl.style.top = calib.cy + 'px';
-    ringEl.style.width = calib.r * 2 + 'px';
-    ringEl.style.height = calib.r * 2 + 'px';
-    $('calibInfo').textContent =
-      `圆环 ${Math.round(calib.r)}px · 拖圆环套住小地图，滚轮调大小`;
-  }
-
-  function openCalib() {
-    // 标定层要正好盖住舞台：top 由标题栏/URL 条高度决定（CSS 里没法写死）
-    calibEl.style.top = stageTopCss() + 'px';
-    // 注意顺序：先显示再量。display:none 时 getBoundingClientRect 全是 0，
-    // 圆环会被摆到左上角、半径退化到最小值 —— 第一版就是这么错的。
-    calib.active = true;
-    calibEl.classList.add('active');
-    const box = calibEl.getBoundingClientRect();
-    calib.cx = box.left + box.width / 2;
-    calib.cy = box.top + box.height / 2;
-    calib.r = Math.max(40, Math.min(box.width, box.height) * 0.18);
-    paintCalib();
-    reportLayout();
-  }
-
-  function closeCalib(send) {
-    if (!calib.active) return;
-    calib.active = false;
-    calibEl.classList.remove('active');
-    reportLayout();
-    if (send) {
-      const k = dpr();
-      // 舞台相对坐标（物理像素）：y 减掉标题栏/URL 条
-      const top = stageTopCss();
-      post({
-        t: 'calib-done',
-        cx: Math.round(calib.cx * k),
-        cy: Math.round((calib.cy - top) * k),
-        r: Math.round(calib.r * k),
-      });
-    }
-  }
-
-  calibEl.addEventListener('mousedown', (e) => {
-    calib.drag = true;
-    calib.cx = e.clientX;
-    calib.cy = e.clientY;
-    paintCalib();
-    e.preventDefault();
-  });
-  addEventListener('mousemove', (e) => {
-    if (!calib.drag) return;
-    calib.cx = e.clientX;
-    calib.cy = e.clientY;
-    paintCalib();
-  });
-  addEventListener('mouseup', () => { calib.drag = false; });
-  calibEl.addEventListener('wheel', (e) => {
-    if (!calib.active) return;
-    e.preventDefault();
-    calib.r = Math.max(20, Math.min(400, calib.r + (e.deltaY > 0 ? 6 : -6)));
-    paintCalib();
-  }, { passive: false });
-
-  $('calibOk').addEventListener('click', () => closeCalib(true));
-  $('calibCancel').addEventListener('click', () => closeCalib(false));
-
-  // 自检用：没有真实鼠标时直接摆圆环
-  window.gifaCalib = (active, cx, cy, r) => {
-    if (!active) { closeCalib(false); return; }
-    if (!calib.active) openCalib();
-    if (typeof cx === 'number') calib.cx = cx;
-    if (typeof cy === 'number') calib.cy = cy;
-    if (typeof r === 'number') calib.r = r;
-    paintCalib();
-    reportLayout();
-  };
-  window.gifaCalibDone = () => closeCalib(true);
-
-  // ---------------- 布局下拉
-  let layoutsKey = '';
-  function renderLayouts(s) {
-    const sel = $('layoutSelect');
-    const list = s.layouts || [];
-    const key = list.map((l) => l.id + '=' + l.name).join('|') + '#' + (s.activeLayout || '');
-    if (key !== layoutsKey) {
-      layoutsKey = key;
-      sel.innerHTML = '';
-      for (const l of list) {
-        const o = document.createElement('option');
-        o.value = l.id;
-        o.textContent = l.name;
-        sel.appendChild(o);
-      }
-      sel.value = s.activeLayout || '';
-    }
-    sel.classList.toggle('hidden', list.length <= 1);
-  }
-  $('layoutSelect').addEventListener('change', (e) => {
-    post({ t: 'layout-select', id: e.target.value });
-  });
-  const barEl = $('bar'), urlEl = $('urlbar'), footEl = $('foot'), pillEl = $('pill'), gripEl = $('grip');
-
-  // 舞台顶边（标定层从这儿开始，不含标题栏/URL 条）
-  function stageTopCss() {
-    return (urlEl.classList.contains('hidden') ? 0 : urlEl.getBoundingClientRect().height) +
-      barEl.getBoundingClientRect().height;
-  }
-
-  function reportLayout() {
-    const overlay = [rectPx(pillEl), rectPx(gripEl)];
-    // 标定时把整块舞台也纳入"窗口存在的区域"，圆环才看得见、拖得动
-    if (calib.active) {
-      calibEl.style.top = stageTopCss() + 'px';
-      overlay.push(rectPx(calibEl));
-    }
-    post({
-      t: 'layout',
-      titlebar: Math.round(barEl.getBoundingClientRect().height * dpr()),
-      footer: Math.round(footEl.getBoundingClientRect().height * dpr()),
-      urlbar: urlEl.classList.contains('hidden') ? null : rectPx(urlEl),
-      overlay,
-    });
-  }
-
-  const fmt = (s) => {
-    if (!isFinite(s) || s <= 0) return '00:00';
-    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-    return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
-  };
-
-  // ---- 临时提示：复用 pill，不额外占窗口区域
-  let toastUntil = 0, lastToast = '';
-  function showToast(text) {
-    lastToast = text;
-    toastUntil = Date.now() + 4000;
-    pillEl.classList.add('toast');
-    $('pillKey').textContent = '提示';
-    $('status').textContent = text;
-    setTimeout(paintStatus, 4100);
-  }
-
-  let statusText = '等待页面…';
-  function paintStatus() {
-    if (Date.now() < toastUntil) return;
-    pillEl.classList.remove('toast');
-    $('pillKey').textContent = '状态';
-    $('status').textContent = statusText;
-  }
-
-  // ---- 分 P 下拉：只在 pages 变化时重建，避免打字/滚动被重置
-  let pagesKey = '';
-  function renderParts(s) {
-    const sel = $('partSelect');
-    const pages = s.pages || [];
-    const key = pages.length + ':' + pages.map((p) => p.page + '=' + p.part).join('|');
-    if (key !== pagesKey) {
-      pagesKey = key;
-      sel.innerHTML = '';
-      for (const p of pages) {
-        const o = document.createElement('option');
-        o.value = String(p.page);
-        o.textContent = 'P' + p.page + ' ' + (p.part || '');
-        sel.appendChild(o);
-      }
-    }
-    sel.classList.toggle('hidden', pages.length <= 1);
-    if (document.activeElement !== sel) sel.value = String(s.part || 1);
-  }
-
-  // ---- Rust 每 250ms 推一次状态
-  window.gifaState = (s) => {
-    document.title = s.title || 'GIFA';
-    $('vtitle').textContent = s.title || '未载入';
-    $('vmeta').textContent = s.bvid
-      ? (s.bvid + ' · P' + s.part + ' · ' + (s.videoW || 0) + '×' + (s.videoH || 0))
-      : '—';
-    $('account').textContent = s.account || '未登录';
-    $('accDot').classList.toggle('on', !!s.loggedIn);
-    $('btnLogin').classList.toggle('on', !!s.loggedIn);
-    $('btnPlay').textContent = s.paused ? '▶' : '⏸';
-    $('time').textContent = fmt(s.time) + ' / ' + fmt(s.dur);
-    $('rate').textContent = (s.rate || 1).toFixed(2).replace(/0$/, '') + '×';
-    $('progress').firstElementChild.style.width =
-      (s.dur > 0 ? Math.min(100, s.time / s.dur * 100) : 0) + '%';
-
-    const st = [];
-    st.push(s.hasVideo ? (s.paused ? '已暂停' : '播放中') : '等待 <video>');
-    if (s.dur > 0) st.push(fmt(s.dur));
-    if (s.owner) st.push('UP ' + s.owner);
-    if (s.muted) st.push('静音');
-    statusText = st.join(' · ');
-    paintStatus();
-
-    if (s.toast && s.toast !== lastToast) showToast(s.toast);
-    renderParts(s);
-    renderLayouts(s);
-  };
-
-  // ---- 交互
-  barEl.addEventListener('mousedown', (e) => {
-    if (e.button !== 0 || e.target.closest('button,select')) return;
-    post({ t: 'drag' });
-  });
-  gripEl.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    post({ t: 'resize' });
-  });
-
-  $('btnPlay').addEventListener('click', () => post({ t: 'toggle' }));
-  document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && document.activeElement !== $('urlInput')) {
-      e.preventDefault();
-      post({ t: 'toggle' });
-    }
-  });
-
-  $('partSelect').addEventListener('change', (e) => {
-    post({ t: 'part', p: Number(e.target.value) });
-  });
-
-  let clean = false;
-  $('btnClean').addEventListener('click', () => {
-    clean = !clean;
-    $('btnClean').classList.toggle('on', clean);
-    post({ t: 'clean', on: clean });
-  });
-
-  $('btnLogin').addEventListener('click', () => post({ t: 'login' }));
-  $('btnCalib').addEventListener('click', () => post({ t: 'calib' }));
-
-  $('btnUrl').addEventListener('click', () => {
-    urlEl.classList.toggle('hidden');
-    reportLayout();
-    if (!urlEl.classList.contains('hidden')) $('urlInput').focus();
-  });
-
-  $('progress').addEventListener('click', (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-    post({ t: 'seek-ratio', ratio });
-  });
-
-  function load() {
-    const text = $('urlInput').value.trim();
-    if (!text) return;
-    post({ t: 'load', text });
-    urlEl.classList.add('hidden');
-    reportLayout();
-  }
-  $('btnLoad').addEventListener('click', load);
-  $('urlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
-
-  $('btnClose').addEventListener('click', () => post({ t: 'close' }));
-
-  addEventListener('resize', reportLayout);
-  reportLayout();
-</script>
-</body>
+    <script src="app.js"></script>
+  </body>
 </html>

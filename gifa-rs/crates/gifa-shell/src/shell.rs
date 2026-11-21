@@ -120,6 +120,8 @@ impl RectDe {
 }
 
 pub struct ShellConfig {
+    /// chrome 页的地址（`file:///.../chrome.html`）：给了就用它，能加载同级 style.css / app.js
+    pub chrome_url: Option<String>,
     pub chrome_html: String,
     pub stage_html: String,
     pub bounds: Bounds,
@@ -1012,15 +1014,19 @@ pub fn navigate_stage(url: &str) {
 }
 
 fn build_chrome(chrome: &HWND, cfg: &ShellConfig) -> Result<WebView, String> {
-    WebViewBuilder::new()
-        .with_html(&cfg.chrome_html)
+    let mut b = WebViewBuilder::new()
         .with_transparent(true)
         .with_bounds(rect_for(RectI::new(0, 0, 640, 360)))
         .with_ipc_handler(|req: wry::http::Request<String>| {
             on_chrome_message(req.body());
         })
-        .with_devtools(false)
-        .build_as_child(&HwndHost(chrome.0 as isize))
+        .with_devtools(false);
+    // 给了 file:// 地址就用地址加载：同级 style.css / app.js 才能解析
+    b = match cfg.chrome_url.as_deref() {
+        Some(url) => b.with_url(url),
+        None => b.with_html(&cfg.chrome_html),
+    };
+    b.build_as_child(&HwndHost(chrome.0 as isize))
         .map_err(|e| format!("创建 chrome WebView2 失败: {e}"))
 }
 
@@ -1339,6 +1345,15 @@ pub fn hover_ticks() -> u64 {
 
 pub fn set_interactive(on: bool) {
     with_shell(|s| s.interactive = on);
+}
+
+/// 最小化（标题栏的最小化按钮）
+pub fn minimize() {
+    if let Some(h) = float_hwnd() {
+        unsafe {
+            let _ = ShowWindow(h, SW_MINIMIZE);
+        }
+    }
 }
 
 pub fn hide() {

@@ -16,7 +16,7 @@ pub use probe::Hit;
 pub use region::{RectI, RegionSpec};
 pub use shell::{
     bounds, close, close_popup, create, eval_chrome, hide, inbox, is_bilibili_url,
-    navigate_stage, open_popup, player_command, popup_open,
+    minimize, navigate_stage, open_popup, player_command, popup_open,
     classify_at, click_through, disc_size, hover_ticks, disc_update, disc_visible, immersion, overlay_center,
     overlay_drawn, overlay_drew_arc, overlay_drawn_log, overlay_init, overlay_rect, overlay_view_stale, overlay_move_center, overlay_placing, overlay_set_placing,
     overlay_set_radius, overlay_size, overlay_update, overlay_visible, set_click_through,

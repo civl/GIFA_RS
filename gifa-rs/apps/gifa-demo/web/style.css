@@ -1,0 +1,742 @@
+/* ============================================================================
+   跟跑浮窗 —— 压在游戏画面上的小播放器
+   ----------------------------------------------------------------------------
+   · 标题栏 30px + 控制条 34px 是定值：main.js 按「16:9 画面 + 64」算窗口高度，改了要同步；
+   · 图标是 index.html 里的内联 SVG，状态（播放中 / 静音）由 app.js 切 class；
+   · 强调蓝与启动器一致；框选圆环用暖金，免得和小地图里的青色玩家箭头撞色。
+   ========================================================================== */
+
+:root {
+  --bg: #0c0d11;
+  --bar: #14151b; /* 标题栏 / 控制条 / 地址栏 */
+  --line: rgba(255, 255, 255, 0.09);
+  --fg: #eceae6;
+  --fg-2: #c6c5cc;
+  --dim: #8d8d99;
+  --accent: #49b2fc;
+  --accent-soft: rgba(73, 178, 252, 0.16);
+  --on-accent: #0b2438; /* 蓝底上的文字 */
+  --calib: #e7c98b;
+  --danger: #ff6b6b;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  font-size: 12px;
+  user-select: none;
+  cursor: default;
+}
+
+.icon-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.ico {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+button {
+  font: inherit;
+}
+
+/* 键盘焦点才出现的描边；鼠标点击不出现 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* ---------------------------------------------------------------- 标题栏 */
+
+#titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  flex: 0 0 30px;
+  padding: 0 4px 0 10px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+.brand .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(73, 178, 252, 0.18);
+}
+
+/* 片名是这条栏里最有用的信息，比品牌字更亮一档 */
+.vtitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: 11.5px;
+}
+
+.vtitle:not(:empty) {
+  padding-left: 9px;
+  border-left: 1px solid var(--line);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+/* 标题栏图标按钮 */
+.tb {
+  -webkit-app-region: no-drag;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.tb:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--fg);
+}
+
+.tb.danger:hover {
+  background: #d13438;
+  color: #fff;
+}
+
+/* 把「功能按钮」和「窗口按钮」隔开一点，避免想点设置时误关窗口 */
+.tb-sep {
+  width: 1px;
+  height: 12px;
+  margin: 0 3px;
+  background: var(--line);
+}
+
+/* 原生 <select> 的展开列表由 Chromium/系统绘制：Windows 浅色主题下是白底，
+ * 而文字会继承 color。以前这里只给了近白的 var(--fg) + 半透明白背景，
+ * 结果就是「白底白字」完全看不清。color-scheme 让原生控件走深色，
+ * option 再显式给一遍深底浅字兜底，两者互相独立。 */
+.sel {
+  -webkit-app-region: no-drag;
+  max-width: 150px;
+  height: 22px;
+  margin-right: 2px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color-scheme: dark;
+  background: #23252c;
+  color: var(--fg);
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+
+.sel:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.sel option {
+  background: #23252c;
+  color: var(--fg);
+}
+
+.sel option:checked {
+  background: #1f5f96;
+  color: #fff;
+}
+
+.sel.hidden {
+  display: none;
+}
+
+.layout-sel { max-width: 112px; }
+@media (max-width: 460px) {
+  .sel.layout-sel { display: none; }
+}
+
+/* ------------------------------------------------------------------ 按钮 */
+
+button.primary {
+  height: 26px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+button.primary:hover {
+  background: #6cc3ff;
+}
+
+button.ghost {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg-2);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+button.ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg);
+}
+
+/* ---------------------------------------------------------------- 地址栏 */
+
+#urlbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+}
+
+#urlbar.hidden {
+  display: none;
+}
+
+#urlInput {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11.5px;
+  outline: none;
+  user-select: text;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+#urlInput::placeholder {
+  color: #6f6f7b;
+}
+
+#urlInput:focus {
+  border-color: rgba(73, 178, 252, 0.6);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ------------------------------------------------------------------ 舞台 */
+
+#stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  display: flex;
+}
+
+#stage webview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  border: 0;
+}
+
+#placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  text-align: center;
+  color: var(--dim);
+  background: radial-gradient(circle at 50% 42%, rgba(73, 178, 252, 0.08), transparent 62%), #0a0b0f;
+  pointer-events: none;
+  z-index: 2;
+}
+
+#placeholder.hidden {
+  display: none;
+}
+
+#placeholder .ph-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+#placeholder .ph-icon .ico {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.6;
+}
+
+#placeholder p {
+  font-size: 13px;
+  color: var(--fg);
+}
+
+#placeholder span {
+  font-size: 11px;
+  color: #6f6f7b;
+}
+
+/* ---------------------------------------------------------------- 控制条 */
+
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0 14px 0 8px;
+  background: var(--bar);
+  border-top: 1px solid var(--line);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+body:not(.ui) #controls {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+.play {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.play:hover {
+  background: rgba(73, 178, 252, 0.3);
+}
+
+/* 播放三角是实心的，暂停两竖是粗描边 */
+.play .i-play {
+  fill: currentColor;
+  stroke-width: 1.2;
+}
+
+.play .i-pause {
+  stroke-width: 2.6;
+}
+
+/* 同一个按钮里放两枚图标，按状态只显示一枚（app.js 的 applyState 切 class） */
+.play .i-pause,
+.play.playing .i-play,
+.mini .i-mute,
+.mini.muted .i-volume {
+  display: none;
+}
+
+.play.playing .i-pause,
+.mini.muted .i-mute {
+  display: block;
+}
+
+.time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+/* 可点区域 16px 高，看得见的轨道只有 3px，悬停时加粗到 5px */
+.progress {
+  position: relative;
+  flex: 1;
+  min-width: 30px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.progress::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: height 0.12s;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 3px;
+  width: 0;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.08s linear, height 0.12s;
+}
+
+.progress:hover::before,
+.progress.dragging::before,
+.progress:hover .bar,
+.progress.dragging .bar {
+  height: 5px;
+}
+
+.progress.dragging .bar {
+  transition: height 0.12s;
+}
+
+.knob {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translateY(-50%) scale(0);
+  transition: transform 0.12s, left 0.08s linear;
+}
+
+.progress:hover .knob,
+.progress.dragging .knob {
+  transform: translateY(-50%) scale(1);
+}
+
+.progress.dragging .knob {
+  transition: transform 0.12s;
+}
+
+.mini {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 22px;
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.mini:hover {
+  background: rgba(255, 255, 255, 0.13);
+  color: var(--fg);
+}
+
+.mini.muted {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------------ 缩放手柄 */
+
+#grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  z-index: 20;
+  background: linear-gradient(135deg, transparent 46%, rgba(255, 255, 255, 0.28) 50%, transparent 54%),
+    linear-gradient(135deg, transparent 68%, rgba(255, 255, 255, 0.18) 72%, transparent 76%);
+}
+
+/* ------------------------------------------------------------------ 提示 */
+
+#toast {
+  position: absolute;
+  left: 50%;
+  bottom: 46px;
+  transform: translate(-50%, 6px);
+  max-width: 84%;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: rgba(22, 23, 29, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--fg);
+  font-size: 11.5px;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 60;
+}
+
+#toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ------------------------------------------- 小地图识别区域框选（标定） */
+
+#calib {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+#calib.hidden {
+  display: none;
+}
+
+/* 圆环 + 中心准星。准星中间留 8px 空隙：要对准的是小地图中央的玩家箭头，
+ * 不能把它盖住。金线两侧各压一圈暗边，雪地、沙漠这类亮底上也看得清。 */
+.calib-box {
+  position: absolute;
+  z-index: 1;
+  border: 1.5px solid var(--calib);
+  border-radius: 50%;
+  background:
+    linear-gradient(to bottom, var(--calib) 0 7px, transparent 7px 15px, var(--calib) 15px 22px) center / 1.5px 22px no-repeat,
+    linear-gradient(to right, var(--calib) 0 7px, transparent 7px 15px, var(--calib) 15px 22px) center / 22px 1.5px no-repeat;
+  /* 最后一层把圆环以外的画面压暗，只留出小地图那一片，方便对准 */
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 0 9999px rgba(8, 9, 12, 0.5);
+  cursor: grab;
+  touch-action: none;
+}
+
+.calib-box:active {
+  cursor: grabbing;
+}
+
+.calib-tag {
+  position: absolute;
+  left: 50%;
+  top: -26px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 9px;
+  background: rgba(10, 11, 15, 0.9);
+  border: 1px solid rgba(231, 201, 139, 0.35);
+  color: var(--calib);
+  font-size: 10.5px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.calib-bar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 16px);
+  margin-bottom: 12px;
+  padding: 7px 8px 7px 14px;
+  border-radius: 10px;
+  background: rgba(20, 21, 27, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-2);
+  cursor: default;
+}
+
+.calib-bar span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 尺寸读数：不参与拉伸，跟在提示文字后面 */
+#calibSize {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------- 全屏（沉浸）状态
+   窗口全屏时视频铺满整个客户区，标题栏和底部控制条改成浮层：
+   平时淡出，鼠标移上去就出现。设置入口因此永远不会被画面盖住。 */
+
+#app.immersive #titlebar,
+#app.immersive #controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#app.immersive #titlebar {
+  top: 0;
+}
+
+#app.immersive #controls {
+  bottom: 0;
+  transform: none;
+}
+
+#app.immersive #titlebar:hover,
+#app.immersive #titlebar.show,
+#app.immersive #controls:hover {
+  opacity: 1;
+}
+
+/* 地址栏浮在标题栏下方，避免全屏时把视频挤下去 */
+#app.immersive #urlbar {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  z-index: 41;
+}
+
+/* 全屏时右下角的缩放手柄只会碍事 */
+#app.immersive #grip {
+  display: none;
+}
+
+/* 纯视频模式的界面隐藏，且不能被悬停重新唤出。 */
+#app.video-only { border: 0; border-radius: 0; }
+#app.video-only #titlebar,
+#app.video-only #urlbar,
+#app.video-only #controls,
+#app.video-only #grip,
+#app.video-only #calib { display: none !important; }
+#app.video-only #stage { position: absolute; inset: 0; }
+#app.video-only #toast { bottom: 18px; }
+.mini.temporary { color: var(--accent); }
+
+/* ---------------------------------------------------------------- 小窗口
+   浮窗最小能缩到 240×150：先让出品牌字，再让出时间，按钮永远留着。 */
+
+@media (max-width: 460px) {
+  .brand .name {
+    display: none;
+  }
+
+  .vtitle:not(:empty) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .sel {
+    max-width: 96px;
+  }
+}
+
+@media (max-width: 330px) {
+  .time,
+  .tb-sep {
+    display: none;
+  }
+
+  #controls {
+    gap: 6px;
+  }
+
+  .calib-bar {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+/* 系统里关了动画的用户：不做位移和淡入 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+}

@@ -112,6 +112,10 @@ struct UiState {
     vision_rows: Vec<(String, bool, String)>,
     /// 合成小地图模式（用页面画一张假地图验证整条链路）
     synth: bool,
+    // ---- 界面自检
+    probe: Option<serde_json::Value>,
+    last_seek: Option<f64>,
+    ui_rows: Vec<(String, bool, String)>,
     store: Option<Store>,
 }
 
@@ -307,6 +311,23 @@ fn run_settings_test() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// 把 chrome 页需要的 CSS/JS 在编译期拼进同一个 HTML。
+///
+/// 为什么不用 `file://` 加载同级文件：wry 的 IPC 脚本对 `file://` 页面不注入，
+/// `window.ipc.postMessage` 就成了 undefined，页面看着正常但**一句话也传不回来**。
+fn chrome_page() -> String {
+    let mut html = include_str!("../web/chrome.html").to_string();
+    html = html.replace(
+        "<link rel=\"stylesheet\" href=\"style.css\" />",
+        &format!("<style>{}</style>", include_str!("../web/style.css")),
+    );
+    html = html.replace(
+        "<script src=\"app.js\"></script>",
+        &format!("<script>{}</script>", include_str!("../web/app.js")),
+    );
+    html
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--runtime") {
@@ -360,7 +381,8 @@ fn main() {
     });
 
     gifa_shell::create(ShellConfig {
-        chrome_html: include_str!("../web/chrome.html").to_string(),
+        chrome_url: None,
+        chrome_html: chrome_page(),
         stage_html: OFFLINE_HTML.to_string(),
         stage_url: Some(url),
         user_data_dir: Some(data_root.join("webview2")),
@@ -476,6 +498,9 @@ fn on_tick() {
         }
         if std::env::args().any(|a| a == "--vision-synth") {
             synth_test_step(&mut ui);
+        }
+        if std::env::args().any(|a| a == "--ui-test") {
+            ui_test_step(&mut ui);
         }
 
         if std::env::args().any(|a| a == "--calib-hold") {
@@ -921,6 +946,126 @@ fn dispatch_action(ui: &mut UiState, action: Action, phase: Option<&str>) {
             ui.logs.push(format!("鼠标穿透：{next}"));
         }
     }
+}
+
+// ---------------------------------------------------------------- 界面自检
+
+/// M6 自检：几何尺寸、控件状态、进度拖动、自动隐藏、URL 条推舞台。
+fn ui_test_step(ui: &mut UiState) {
+    if ui.im_started.is_none() {
+        ui.im_started = Some(Instant::now());
+        return;
+    }
+    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    match ui.im_phase {
+        0 if el > 1.0 => {
+            gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
+            ui.im_phase = 1;
+        }
+        1 if el > 1.4 => {
+            let p = ui.probe.clone().unwrap_or_default();
+            let num = |k: &str| p.get(k).and_then(|x| x.as_f64()).unwrap_or(-1.0);
+            let tb = num("titlebar");
+            let ft = num("footer");
+            ui.ui_rows.push((
+                "几何：标题栏 30 / 底栏 34".into(),
+                (tb - 30.0).abs() <= 2.0 && (ft - 34.0).abs() <= 2.0,
+                format!("titlebar={tb} footer={ft}"),
+            ));
+            let layouts = num("layouts");
+            let parts = num("parts");
+            let playing = p.get("playing").and_then(|x| x.as_bool()).unwrap_or(false);
+            ui.ui_rows.push((
+                "控件：布局下拉 / 分P / 播放态".into(),
+                layouts >= 1.0 && playing,
+                format!("layouts={layouts} parts={parts} playing={playing} speed={:?}", p.get("speed")),
+            ));
+            // 进度条拖到 50%：应发出 seek 且时间约等于一半
+            let dur = ui.state.as_ref().map(|s| s.duration).unwrap_or(0.0);
+            let js = "(function(){const el=document.getElementById('progress');const r=el.getBoundingClientRect();                       const x=r.left+r.width*0.5,y=r.top+r.height/2;                       const opt={bubbles:true,clientX:x,clientY:y,pointerId:1};                       el.dispatchEvent(new PointerEvent('pointerdown',opt));                       el.dispatchEvent(new PointerEvent('pointerup',opt));})()";
+            gifa_shell::eval_chrome(js);
+            ui.im_phase = 2;
+            ui.im_before = Some((dur as i32, 0, 0, 0));
+        }
+        2 if el > 2.0 => {
+            let dur = ui.im_before.map(|b| b.0 as f64).unwrap_or(0.0);
+            let got = ui.last_seek;
+            let half = dur * 0.5;
+            let ok = got.is_some_and(|v| (v - half).abs() < (dur * 0.08).max(2.0));
+            ui.ui_rows.push((
+                "进度条拖动 → 发出 seek（50%）".into(),
+                ok,
+                format!("seek={got:?} 期望≈{half:.1}（时长 {dur:.1}）"),
+            ));
+            ui.im_phase = 3;
+        }
+        3 if el > 5.0 => {
+            // 自动隐藏：静止 2.6s 后 body 应去掉 .ui
+            gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
+            ui.im_phase = 4;
+        }
+        4 if el > 5.4 => {
+            let p = ui.probe.clone().unwrap_or_default();
+            let has_ui = p.get("hasUi").and_then(|x| x.as_bool()).unwrap_or(true);
+            ui.ui_rows.push((
+                "自动隐藏（静止 2.6s 后收起）".into(),
+                !has_ui,
+                if has_ui {
+                    "仍是 .ui（鼠标可能停在标题栏上）".into()
+                } else {
+                    "已收起".to_string()
+                },
+            ));
+            // URL 条展开 → 舞台下移
+            // 走真实按钮路径（不是直接改 class）
+            gifa_shell::eval_chrome("document.getElementById('btnLink').click()");
+            ui.im_phase = 45;
+        }
+        45 if el > 5.8 => {
+            gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
+            ui.im_phase = 5;
+        }
+        5 if el > 6.4 => {
+            let stage_y = gifa_shell::snapshot().map(|s| s.stage.y).unwrap_or(0);
+            let titlebar = 30;
+            let bar_shown = ui
+                .probe
+                .as_ref()
+                .and_then(|p| p.get("urlbar"))
+                .and_then(|x| x.as_bool())
+                .unwrap_or(false);
+            ui.ui_rows.push((
+                "URL 条展开后舞台下移".into(),
+                stage_y > titlebar && bar_shown,
+                format!("stage.y={stage_y}（标题栏 {titlebar}）URL 条可见={bar_shown}"),
+            ));
+            gifa_shell::eval_chrome("document.getElementById('urlbar').classList.add('hidden')");
+            report_ui(ui);
+            ui.im_phase = 6;
+            ui.im_started = None;
+        }
+        _ => {}
+    }
+}
+
+fn report_ui(ui: &UiState) {
+    println!();
+    println!("============ 浮窗界面自检（M6） ============");
+    for (i, (name, ok, detail)) in ui.ui_rows.iter().enumerate() {
+        println!("[{}] {:<28} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+    }
+    let pass = ui.ui_rows.iter().filter(|(_, ok, _)| *ok).count();
+    println!("------------------------------------------");
+    println!("RESULT {pass}/{}", ui.ui_rows.len());
+    println!("==========================================");
+    println!();
+    if std::env::args().any(|a| a == "--ui-hold") {
+        return;
+    }
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(600));
+        gifa_shell::close();
+    });
 }
 
 // ---------------------------------------------------------------- 识别管线
@@ -1799,6 +1944,27 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
                 }
             }
         }
+        "debug" => {
+            if std::env::var_os("GIFA_DEBUG").is_some() {
+                println!("[ui-debug] {v}");
+            }
+        }
+        "probe" => ui.probe = Some(v.clone()),
+        "seek" => {
+            let value = v.get("value").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            ui.last_seek = Some(value);
+            gifa_shell::player_command(PlayerCommand::Seek { value });
+        }
+        "rate" => {
+            let value = v.get("value").and_then(|x| x.as_f64()).unwrap_or(1.0);
+            gifa_shell::player_command(PlayerCommand::Rate { value });
+        }
+        "mute" => {
+            let on = v.get("on").and_then(|x| x.as_bool()).unwrap_or(false);
+            gifa_shell::player_command(PlayerCommand::Mute { value: on });
+        }
+        "min" => gifa_shell::minimize(),
+        "settings" => ui.toast = "设置面板在启动器里（尚未接入）".into(),
         "clean" => {
             let on = v.get("on").and_then(|x| x.as_bool()).unwrap_or(false);
             gifa_shell::player_command(PlayerCommand::Clean { on });
@@ -1863,6 +2029,8 @@ fn ui_payload(ui: &UiState) -> String {
         "uname": ui.login.uname,
         "account": ui.login.describe(),
         "toast": ui.toast,
+        "showUrlbar": false,
+        "immersive": ui.immersion,
         "activeLayout": ui.layouts.active_layout_id,
         "layouts": ui.layouts.layouts.iter()
             .map(|l| serde_json::json!({"id": l.id, "name": l.name, "builtIn": l.built_in}))

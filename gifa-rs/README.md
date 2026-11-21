@@ -13,7 +13,8 @@ gifa-rs/
 │  ├─ OVERLAY.md                # 两路角度、补间、过期、放置模式
 │  ├─ CALIBRATION.md            # ROI 归一化、标定交互、布局 CRUD
 │  ├─ SETTINGS.md               # 数据目录、原子写、防抖、旧版迁移
-│  └─ VISION.md                 # 识别骨架：截屏、采样窗、占位检测、门控
+│  ├─ VISION.md                 # 识别骨架：截屏、采样窗、占位检测、门控
+│  └─ FLOAT-UI.md               # 浮窗界面移植：桥接、交互、自检
 ├─ crates/
 │  ├─ gifa-core/                # 纯领域：设置 / 方位布局 / 快捷键解析 / 播放状态机
 │  │  ├─ src/settings.rs        #   与原版 settings.json 同构 + 深合并 + 钳位
@@ -108,6 +109,9 @@ cargo run -p gifa-demo -- --open BV1xx411c7mD --calib-test
 
 # 设置与迁移自检（吃一份原版 settings.json）
 cargo run -p gifa-demo -- --settings-test
+
+# 浮窗界面自检（几何/控件/进度拖动/自动隐藏/URL 条）
+cargo run -p gifa-demo -- --open BV1xx411c7mD --ui-test
 
 # 识别链路自检：真实截屏 / 合成地图端到端
 cargo run -p gifa-demo -- --open BV1xx411c7mD --vision-test
@@ -269,6 +273,17 @@ GDI 截屏 → 采样窗（`r×2.4`）→ 占位检测（青素质心/白像素�
 `--vision-synth` 合成地图 3/3（页面画青三角+白扇，从真实屏幕抓回来，箭头 90°、视角 180°）。
 
 **这不是 M8 交付**：真实算法（自适应阈值/连通块/72 格剖面/最小二乘/α-β 滤波）与黄金帧基线仍未做。
+
+## M6：浮窗界面移植（2026-11-22）
+
+原版 `renderer/index.html` + 742 行 `style.css` **逐行照搬**，`app.js` 改成我们的 IPC 桥：
+标题栏（标题/布局/分P/换链接/设置/最小化/关闭）、控制条（播放/时间/进度拖拽/倍速/静音）、
+链接栏、toast、2.6s 自动隐藏、16:9 舞台与 webview 尺寸同步。
+
+自检 5/5：几何 30/34、控件状态、进度拖动 seek、自动隐藏、URL 条推舞台。截图 `docs/m6-ui.png`。
+
+**四个隐蔽的坑**：`file://` 页面拿不到 IPC（wry 不注入，改用编译期内联）；
+自动隐藏条件写反；`#urlbar` 默认可见把舞台顶下去；Rust 每帧推 `showUrlbar:false` 覆盖页面开关。
 
 ## 库分层（#2 骨架）
 
