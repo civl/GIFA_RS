@@ -10,7 +10,8 @@ gifa-rs/
 │  ├─ HOTKEYS.md                # 热键两套机制、冲突回滚、UIPI 约束
 │  ├─ GAMEPAD.md                # XInput 轮询、八方向状态机、圆盘窗口
 │  ├─ IMMERSION.md              # 沉浸、比例贴合、鼠标避让
-│  └─ OVERLAY.md                # 两路角度、补间、过期、放置模式
+│  ├─ OVERLAY.md                # 两路角度、补间、过期、放置模式
+│  └─ CALIBRATION.md            # ROI 归一化、标定交互、布局 CRUD
 ├─ crates/
 │  ├─ gifa-core/                # 纯领域：设置 / 方位布局 / 快捷键解析 / 播放状态机
 │  │  ├─ src/settings.rs        #   与原版 settings.json 同构 + 深合并 + 钳位
@@ -99,6 +100,9 @@ cargo run -p gifa-demo -- --open BV1xx411c7mD --immersion-test
 
 # 方位叠加层自检（--overlay-hold 持续喂角度便于截图）
 cargo run -p gifa-demo -- --open BV1xx411c7mD --overlay-test
+
+# 布局标定自检（--calib-hold 保持标定界面便于截图）
+cargo run -p gifa-demo -- --open BV1xx411c7mD --calib-test
 
 # 纯函数单测
 cargo test
@@ -223,6 +227,19 @@ Rust ◄──{t:"state", paused, currentTime, duration, bvid, part, …}── 
 自检 6/6：尺寸 246 / 两路独立 / 补间走中间帧 / 过期 / clear / 放置。截图 `docs` 下 `m9-overlay.png`。
 
 **抓到的 bug**：`setTarget('view')` 先于 `touchView()` 时首帧 `at=0` 被判"已过期"，绿弧永远画不出来。
+
+## M10：布局标定（2026-11-21）
+
+内置两套博主预设 + 自定义命名布局，七个操作带完整校验（去重、范围、内置只读、revision 过期）。
+
+标定链路：页面报 `video-rect` → **去黑边**（`object-fit: contain` 时元素里可能有黑边）→
+按"混用分母"归一化（`cx/r` 除以宽、`cy` 除以高）→ 写进布局。
+内置预设只读，对着它标定会新建"自定义 N"。
+
+自检 4/4：video-rect / 标定层命中 / 生成合法布局 / 布局切换。截图 `docs` 下 `m10-calib.png`。
+
+**两个 bug**：`#calib` 没写 `top` 导致高度 0（区域 0×0，圆环点不到）；
+`openCalib()` 先量尺寸再加 `.active`，`display:none` 时量到 0×0。
 
 ## 库分层（#2 骨架）
 

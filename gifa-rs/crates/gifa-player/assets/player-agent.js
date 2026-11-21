@@ -293,6 +293,35 @@
     }
   }
 
+  /** 上报 <video> 在页面里的实际位置与缩放方式。
+   *  标定界面画在 chrome 层（物理像素），而 ROI 要按**视频像素**存，
+   *  中间这层换算必须知道：元素在哪、多大、是 contain 还是 cover。 */
+  function reportVideoRect() {
+    const v = video && video.isConnected ? video : pickVideo();
+    if (!v || !v.videoWidth) {
+      return send({ t: 'video-rect', ok: false, error: v ? 'no-frame' : 'no-video' });
+    }
+    const r = v.getBoundingClientRect();
+    let fit = 'contain';
+    try {
+      fit = getComputedStyle(v).objectFit || 'contain';
+    } catch (e) { /* 保持默认 */ }
+    send({
+      t: 'video-rect',
+      ok: true,
+      rect: {
+        x: r.left,
+        y: r.top,
+        w: r.width,
+        h: r.height,
+        vw: v.videoWidth,
+        vh: v.videoHeight,
+        fit,
+        dpr: window.devicePixelRatio || 1,
+      },
+    });
+  }
+
   // ------------------------------------------------------------ 指令入口
 
   function clamp(n, lo, hi) {
@@ -340,6 +369,7 @@
     },
     clean(m) { setClean(!!m.on); },
     'fetch-view'(m) { fetchView(m); },
+    'video-rect'() { reportVideoRect(); },
     'fetch-nav'() { fetchNav(); },
     presentation(m) { setVideoOnly(!!m.videoOnly); },
     ping() {

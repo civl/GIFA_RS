@@ -60,6 +60,26 @@
   #pill #status { overflow: hidden; text-overflow: ellipsis; }
   #pill.toast { border-color: rgba(61,108,246,.75); }
 
+  /* 标定层：盖住舞台（只在标定时参与命中测试） */
+  #calib { position: fixed; left: 0; right: 0; bottom: 34px; display: none;
+           cursor: crosshair; z-index: 30; }
+  #calib.active { display: block; }
+  #ring { position: fixed; box-sizing: border-box; border: 1.5px dashed #f0b427;
+          border-radius: 50%; transform: translate(-50%, -50%);
+          box-shadow: 0 0 0 1px rgba(0,0,0,.55) inset, 0 0 0 1px rgba(0,0,0,.55);
+          pointer-events: none; }
+  #ring::before, #ring::after { content: ''; position: absolute; background: #f0b427; opacity: .9; }
+  #ring::before { left: 50%; top: -9px; width: 1.5px; height: 8px; transform: translateX(-50%); }
+  #ring::after { top: 50%; left: -9px; height: 1.5px; width: 8px; transform: translateY(-50%); }
+  #calibBar { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+              display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+              background: rgba(16,16,16,.9); border: 1px solid rgba(255,255,255,.18);
+              border-radius: 10px; color: #dfe3ea; font-size: 12px; white-space: nowrap; }
+  #calibBar button { height: 26px; padding: 0 12px; border: 0; border-radius: 5px;
+                     background: #2f3542; color: #e6e6e6; cursor: pointer; }
+  #calibBar button.primary { background: #3b6cf6; color: #fff; }
+  #calibInfo { color: #9aa0aa; font-variant-numeric: tabular-nums; }
+
   /* 右下角缩放手柄 */
   #grip { position: fixed; right: 0; bottom: 34px; width: 18px; height: 18px; cursor: nwse-resize; }
   #grip::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px;
@@ -73,9 +93,11 @@
     <span class="title" id="vtitle">未载入</span>
     <span class="meta" id="vmeta">—</span>
     <select id="partSelect" class="hidden" title="分 P"></select>
+    <select id="layoutSelect" class="hidden" title="小地图布局"></select>
     <span class="spacer"></span>
     <span class="account" id="account">未登录</span>
     <button id="btnLogin" title="扫码登录 B 站">登录</button>
+    <button id="btnCalib" title="标定视频里的小地图位置">标定</button>
     <button id="btnClean" title="隐藏顶栏/推荐/评论">纯净</button>
     <button id="btnUrl" title="换视频">换视频</button>
     <button id="btnClose" title="关闭浮窗">关闭</button>
@@ -98,6 +120,15 @@
     <span id="rate">1.0×</span>
   </div>
 
+  <div id="calib">
+    <div id="ring"></div>
+    <div id="calibBar">
+      <span id="calibInfo">拖圆环套住小地图，滚轮调大小</span>
+      <button id="calibCancel">取消</button>
+      <button id="calibOk" class="primary">完成</button>
+    </div>
+  </div>
+
   <div id="grip"></div>
 
 <script>
@@ -109,15 +140,134 @@
   };
 
   const $ = (id) => document.getElementById(id);
+
+  // ---------------- 小地图标定
+  const calibEl = $('calib');
+  const ringEl = $('ring');
+  const calib = { active: false, cx: 0, cy: 0, r: 80, drag: false };
+
+  function paintCalib() {
+    if (!calib.active) return;
+    ringEl.style.left = calib.cx + 'px';
+    ringEl.style.top = calib.cy + 'px';
+    ringEl.style.width = calib.r * 2 + 'px';
+    ringEl.style.height = calib.r * 2 + 'px';
+    $('calibInfo').textContent =
+      `圆环 ${Math.round(calib.r)}px · 拖圆环套住小地图，滚轮调大小`;
+  }
+
+  function openCalib() {
+    // 标定层要正好盖住舞台：top 由标题栏/URL 条高度决定（CSS 里没法写死）
+    calibEl.style.top = stageTopCss() + 'px';
+    // 注意顺序：先显示再量。display:none 时 getBoundingClientRect 全是 0，
+    // 圆环会被摆到左上角、半径退化到最小值 —— 第一版就是这么错的。
+    calib.active = true;
+    calibEl.classList.add('active');
+    const box = calibEl.getBoundingClientRect();
+    calib.cx = box.left + box.width / 2;
+    calib.cy = box.top + box.height / 2;
+    calib.r = Math.max(40, Math.min(box.width, box.height) * 0.18);
+    paintCalib();
+    reportLayout();
+  }
+
+  function closeCalib(send) {
+    if (!calib.active) return;
+    calib.active = false;
+    calibEl.classList.remove('active');
+    reportLayout();
+    if (send) {
+      const k = dpr();
+      // 舞台相对坐标（物理像素）：y 减掉标题栏/URL 条
+      const top = stageTopCss();
+      post({
+        t: 'calib-done',
+        cx: Math.round(calib.cx * k),
+        cy: Math.round((calib.cy - top) * k),
+        r: Math.round(calib.r * k),
+      });
+    }
+  }
+
+  calibEl.addEventListener('mousedown', (e) => {
+    calib.drag = true;
+    calib.cx = e.clientX;
+    calib.cy = e.clientY;
+    paintCalib();
+    e.preventDefault();
+  });
+  addEventListener('mousemove', (e) => {
+    if (!calib.drag) return;
+    calib.cx = e.clientX;
+    calib.cy = e.clientY;
+    paintCalib();
+  });
+  addEventListener('mouseup', () => { calib.drag = false; });
+  calibEl.addEventListener('wheel', (e) => {
+    if (!calib.active) return;
+    e.preventDefault();
+    calib.r = Math.max(20, Math.min(400, calib.r + (e.deltaY > 0 ? 6 : -6)));
+    paintCalib();
+  }, { passive: false });
+
+  $('calibOk').addEventListener('click', () => closeCalib(true));
+  $('calibCancel').addEventListener('click', () => closeCalib(false));
+
+  // 自检用：没有真实鼠标时直接摆圆环
+  window.gifaCalib = (active, cx, cy, r) => {
+    if (!active) { closeCalib(false); return; }
+    if (!calib.active) openCalib();
+    if (typeof cx === 'number') calib.cx = cx;
+    if (typeof cy === 'number') calib.cy = cy;
+    if (typeof r === 'number') calib.r = r;
+    paintCalib();
+    reportLayout();
+  };
+  window.gifaCalibDone = () => closeCalib(true);
+
+  // ---------------- 布局下拉
+  let layoutsKey = '';
+  function renderLayouts(s) {
+    const sel = $('layoutSelect');
+    const list = s.layouts || [];
+    const key = list.map((l) => l.id + '=' + l.name).join('|') + '#' + (s.activeLayout || '');
+    if (key !== layoutsKey) {
+      layoutsKey = key;
+      sel.innerHTML = '';
+      for (const l of list) {
+        const o = document.createElement('option');
+        o.value = l.id;
+        o.textContent = l.name;
+        sel.appendChild(o);
+      }
+      sel.value = s.activeLayout || '';
+    }
+    sel.classList.toggle('hidden', list.length <= 1);
+  }
+  $('layoutSelect').addEventListener('change', (e) => {
+    post({ t: 'layout-select', id: e.target.value });
+  });
   const barEl = $('bar'), urlEl = $('urlbar'), footEl = $('foot'), pillEl = $('pill'), gripEl = $('grip');
 
+  // 舞台顶边（标定层从这儿开始，不含标题栏/URL 条）
+  function stageTopCss() {
+    return (urlEl.classList.contains('hidden') ? 0 : urlEl.getBoundingClientRect().height) +
+      barEl.getBoundingClientRect().height;
+  }
+
   function reportLayout() {
+    const overlay = [rectPx(pillEl), rectPx(gripEl)];
+    // 标定时把整块舞台也纳入"窗口存在的区域"，圆环才看得见、拖得动
+    if (calib.active) {
+      calibEl.style.top = stageTopCss() + 'px';
+      overlay.push(rectPx(calibEl));
+    }
     post({
       t: 'layout',
       titlebar: Math.round(barEl.getBoundingClientRect().height * dpr()),
       footer: Math.round(footEl.getBoundingClientRect().height * dpr()),
       urlbar: urlEl.classList.contains('hidden') ? null : rectPx(urlEl),
-      overlay: [rectPx(pillEl), rectPx(gripEl)],
+      overlay,
     });
   }
 
@@ -192,6 +342,7 @@
 
     if (s.toast && s.toast !== lastToast) showToast(s.toast);
     renderParts(s);
+    renderLayouts(s);
   };
 
   // ---- 交互
@@ -225,6 +376,7 @@
   });
 
   $('btnLogin').addEventListener('click', () => post({ t: 'login' }));
+  $('btnCalib').addEventListener('click', () => post({ t: 'calib' }));
 
   $('btnUrl').addEventListener('click', () => {
     urlEl.classList.toggle('hidden');

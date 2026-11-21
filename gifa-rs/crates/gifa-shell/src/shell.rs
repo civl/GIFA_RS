@@ -988,6 +988,14 @@ pub fn is_bilibili_url(url: &str) -> bool {
         || host.ends_with(".bili2233.cn")
 }
 
+/// 屏幕坐标处的命中归属（自检用：判定点击会落到 chrome 还是舞台）
+pub fn classify_at(x: i32, y: i32) -> crate::probe::Hit {
+    match (float_hwnd(), chrome_hwnd()) {
+        (Some(f), Some(c)) => crate::probe::classify(x, y, f, c),
+        _ => crate::probe::Hit::Other,
+    }
+}
+
 /// 最近一次播放状态。
 pub fn player_state() -> Option<gifa_player::PlayerState> {
     with_shell(|s| s.player.clone()).flatten()

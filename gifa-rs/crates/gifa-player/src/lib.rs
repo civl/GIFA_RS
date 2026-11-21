@@ -101,6 +101,24 @@ impl VideoInfo {
     }
 }
 
+/// `<video>` 在页面里的实际位置与缩放方式（标定要用它把屏幕坐标换算成视频像素）
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct VideoRect {
+    /// CSS 像素，相对舞台 webview 视口
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    /// 视频原始分辨率
+    pub vw: i32,
+    pub vh: i32,
+    /// `contain` / `cover` / `fill`
+    pub fit: String,
+    /// 设备像素比：CSS 像素 × dpr = 物理像素
+    pub dpr: f64,
+}
+
 /// 登录态（`x/web-interface/nav`）
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
@@ -146,6 +164,14 @@ pub enum PlayerMsg {
         ok: bool,
         #[serde(default)]
         info: Option<VideoInfo>,
+        #[serde(default)]
+        error: String,
+    },
+    /// `video-rect` 的结果
+    VideoRect {
+        ok: bool,
+        #[serde(default)]
+        rect: Option<VideoRect>,
         #[serde(default)]
         error: String,
     },
@@ -217,6 +243,8 @@ pub enum PlayerCommand {
     FetchView { id: String },
     /// 取登录态
     FetchNav,
+    /// 取 `<video>` 的实际位置（标定用）
+    VideoRect,
     Ping,
 }
 

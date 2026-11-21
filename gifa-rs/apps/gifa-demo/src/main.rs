@@ -98,6 +98,10 @@ struct UiState {
     ov_mid_seen: bool,
     /// 沉浸自检里能否移动光标（锁屏/无交互会话时不能）
     im_can_move: bool,
+    // ---- 布局标定
+    layouts: gifa_core::Layouts,
+    video_rect: Option<gifa_player::VideoRect>,
+    calib_rows: Vec<(String, bool, String)>,
     store: Option<Store>,
 }
 
@@ -159,6 +163,7 @@ fn main() {
 
     UI.with(|ui| {
         let mut ui = ui.borrow_mut();
+        ui.layouts = store.s.bearing.layouts.clone();
         ui.store = Some(store);
         ui.pending_short = gifa_player::is_short_link(&text) && gifa_player::extract_id(&text).is_none();
     });
@@ -257,6 +262,16 @@ fn on_tick() {
         }
         if std::env::args().any(|a| a == "--overlay-test") {
             overlay_test_step(&mut ui);
+        }
+        if std::env::args().any(|a| a == "--calib-hold") {
+            // 保持标定界面，便于截图/人工看
+            if ui.calib_rows.is_empty() && ui.video_rect.is_none() {
+                gifa_shell::player_command(PlayerCommand::VideoRect);
+                gifa_shell::eval_chrome("window.gifaCalib && window.gifaCalib(true)");
+            }
+        }
+        if std::env::args().any(|a| a == "--calib-test") {
+            calib_test_step(&mut ui);
         }
 
         // 3) 登录窗开着时轮询登录态（扫码成功后自动收尾）
@@ -375,6 +390,13 @@ fn handle_player(ui: &mut UiState, m: PlayerMsg) {
                 }
             } else if !ok {
                 ui.logs.push(format!("取登录态失败：{error}"));
+            }
+        }
+        PlayerMsg::VideoRect { ok, rect, error } => {
+            if ok {
+                ui.video_rect = rect;
+            } else {
+                ui.logs.push(format!("取视频矩形失败：{error}"));
             }
         }
         PlayerMsg::Fullscreen => ui.logs.push("页面请求全屏".into()),
@@ -684,6 +706,173 @@ fn dispatch_action(ui: &mut UiState, action: Action, phase: Option<&str>) {
             ui.logs.push(format!("鼠标穿透：{next}"));
         }
     }
+}
+
+// ---------------------------------------------------------------- 布局标定
+
+/// 圆环（舞台相对物理像素）→ 去掉黑边 → 归一化 ROI → 写进当前布局。
+///
+/// 内置预设不允许就地改（原版语义），所以对着内置布局标定会**新建**一个自定义布局。
+fn apply_calibration(ui: &mut UiState, cx: f64, cy: f64, r: f64) {
+    let Some(vr) = ui.video_rect.clone() else {
+        ui.toast = "还没拿到视频位置，请稍后再标定".into();
+        return;
+    };
+    let k = if vr.dpr > 0.0 { vr.dpr } else { 1.0 };
+    let elem = (vr.x * k, vr.y * k, vr.w * k, vr.h * k);
+    let content = gifa_core::content_rect(elem, vr.vw, vr.vh, &vr.fit);
+    let Some(roi) = gifa_core::roi_from_pixels((cx, cy, r), content) else {
+        ui.toast = "圆环不在画面内，请重新套准".into();
+        return;
+    };
+
+    let active_id = ui.layouts.active_layout_id.clone();
+    let is_builtin = ui
+        .layouts
+        .layouts
+        .iter()
+        .find(|l| l.id == active_id)
+        .map(|l| l.built_in)
+        .unwrap_or(true);
+
+    let result = if is_builtin {
+        // 内置预设只读：新建一个
+        let name = format!("自定义 {}", ui.layouts.layouts.iter().filter(|l| !l.built_in).count() + 1);
+        let id = format!("custom-{}", ui.layouts.layouts.len());
+        ui.layouts
+            .create(id, &name, roi)
+            .map(|_| format!("已新建布局「{name}」"))
+    } else {
+        ui.layouts
+            .calibrate(&active_id, roi)
+            .map(|_| format!("已更新布局「{}」", active_id))
+    };
+
+    match result {
+        Ok(msg) => {
+            ui.toast = msg.clone();
+            ui.logs.push(format!(
+                "标定 ROI cx={:.4} cy={:.4} r={:.4}（视频 {}×{}，fit={}）",
+                roi.cx, roi.cy, roi.r, vr.vw, vr.vh, vr.fit
+            ));
+            persist_layouts(ui);
+        }
+        Err(e) => {
+            ui.toast = format!("标定失败：{}", e.code());
+        }
+    }
+}
+
+fn persist_layouts(ui: &mut UiState) {
+    if let Some(store) = ui.store.as_mut() {
+        store.s.bearing.layouts = ui.layouts.clone();
+        store.save();
+    }
+}
+
+// ---------------------------------------------------------------- 标定自检
+
+/// 没有真实鼠标也能验：用页面提供的测试钩子摆圆环 → 完成 → 校验 ROI 与区域。
+fn calib_test_step(ui: &mut UiState) {
+    if ui.im_started.is_none() {
+        ui.im_started = Some(Instant::now());
+        return;
+    }
+    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    match ui.im_phase {
+        0 if el > 0.6 => {
+            // 先要一次视频矩形，再开标定
+            gifa_shell::player_command(PlayerCommand::VideoRect);
+            gifa_shell::eval_chrome("window.gifaCalib && window.gifaCalib(true)");
+            ui.im_phase = 1;
+        }
+        1 if el > 1.4 => {
+            let vr = ui.video_rect.clone();
+            let ok_rect = vr.as_ref().map(|r| r.vw > 0 && r.w > 0.0).unwrap_or(false);
+            ui.calib_rows.push((
+                "拿到 <video> 实际位置".into(),
+                ok_rect,
+                format!(
+                    "{:?}",
+                    vr.as_ref().map(|r| (r.x, r.y, r.w, r.h, r.vw, r.vh, r.fit.as_str(), r.dpr))
+                ),
+            ));
+            // 标定层应该把舞台纳进"窗口区域"→ 舞台中心的命中归属变成 Chrome
+            if let Some(s) = gifa_shell::snapshot() {
+                let hx = s.float_rect.x + s.client.0 / 2;
+                let hy = s.float_rect.y + s.stage.y + s.stage.h / 2;
+                let hit = gifa_shell::classify_at(hx, hy);
+                let bar_hit = gifa_shell::classify_at(s.float_rect.x + 100, s.float_rect.y + 10);
+                if std::env::var_os("GIFA_DEBUG").is_some() {
+                    println!(
+                        "[calib] stage_pt=({hx},{hy})->{hit:?} bar_pt->{bar_hit:?} stage={:?}",
+                        (s.stage.x, s.stage.y, s.stage.w, s.stage.h)
+                    );
+                }
+                ui.calib_rows.push((
+                    "标定层可命中（舞台区域归 chrome）".into(),
+                    hit == gifa_shell::Hit::Chrome,
+                    format!("{hit:?}"),
+                ));
+                // 摆一个已知圆环：舞台中心、半径 90（页面用视口坐标）
+                let cx = s.client.0 as f64 / 2.0;
+                let cy = s.stage.y as f64 + s.stage.h as f64 / 2.0;
+                let js = format!("window.gifaCalib && window.gifaCalib(true, {cx}, {cy}, 90)");
+                gifa_shell::eval_chrome(&js);
+            }
+            ui.im_phase = 2;
+        }
+        2 if el > 2.2 => {
+            gifa_shell::eval_chrome("window.gifaCalibDone && window.gifaCalibDone()");
+            ui.im_phase = 3;
+        }
+        3 if el > 3.0 => {
+            let custom = ui.layouts.layouts.iter().find(|l| !l.built_in).cloned();
+            let ok = custom.as_ref().map(|l| l.roi.is_valid()).unwrap_or(false);
+            ui.calib_rows.push((
+                "标定后生成合法自定义布局".into(),
+                ok,
+                format!(
+                    "{:?}",
+                    custom.as_ref().map(|l| (l.name.clone(), l.roi.cx, l.roi.cy, l.roi.r))
+                ),
+            ));
+            // 切回内置预设，再切回自定义
+            let before = ui.layouts.active_layout_id.clone();
+            let switched = ui
+                .layouts
+                .select(gifa_core::bearing::BUILTIN_ID)
+                .is_ok()
+                && ui.layouts.active_layout_id == gifa_core::bearing::BUILTIN_ID;
+            let back = ui.layouts.select(&before).is_ok();
+            ui.calib_rows.push((
+                "布局切换（内置 ↔ 自定义）".into(),
+                switched && back,
+                format!("当前 {}", ui.layouts.active_layout_id),
+            ));
+            report_calib(ui);
+            ui.im_phase = 4;
+            ui.im_started = None;
+        }
+        _ => {}
+    }
+}
+
+fn report_calib(ui: &UiState) {
+    println!();
+    println!("============ 布局标定自检 ============");
+    for (i, (name, ok, detail)) in ui.calib_rows.iter().enumerate() {
+        println!("[{}] {:<28} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+    }
+    let pass = ui.calib_rows.iter().filter(|(_, ok, _)| *ok).count();
+    println!("--------------------------------------");
+    println!("RESULT {pass}/{}", ui.calib_rows.len());
+    println!("======================================");
+    println!();
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(600));
+        gifa_shell::close();
+    });
 }
 
 // ---------------------------------------------------------------- 沉浸
@@ -1118,6 +1307,24 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
             let on = v.get("on").and_then(|x| x.as_bool()).unwrap_or(false);
             gifa_shell::player_command(PlayerCommand::Clean { on });
         }
+        "calib" => {
+            ui.calib_rows.clear();
+            gifa_shell::player_command(PlayerCommand::VideoRect);
+            gifa_shell::eval_chrome("window.gifaCalib && window.gifaCalib(true)");
+        }
+        "calib-done" => {
+            let cx = v.get("cx").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let cy = v.get("cy").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            let r = v.get("r").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            apply_calibration(ui, cx, cy, r);
+        }
+        "layout-select" => {
+            let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("");
+            if ui.layouts.select(id).is_ok() {
+                ui.logs.push(format!("切换布局 → {id}"));
+                persist_layouts(ui);
+            }
+        }
         "refresh-nav" => gifa_shell::player_command(PlayerCommand::FetchNav),
         "close" => gifa_shell::close(),
         _ => {}
@@ -1160,6 +1367,10 @@ fn ui_payload(ui: &UiState) -> String {
         "uname": ui.login.uname,
         "account": ui.login.describe(),
         "toast": ui.toast,
+        "activeLayout": ui.layouts.active_layout_id,
+        "layouts": ui.layouts.layouts.iter()
+            .map(|l| serde_json::json!({"id": l.id, "name": l.name, "builtIn": l.built_in}))
+            .collect::<Vec<_>>(),
         "log": ui.logs.last().cloned().unwrap_or_default(),
     })
     .to_string()

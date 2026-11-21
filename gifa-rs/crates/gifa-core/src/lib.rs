@@ -10,7 +10,7 @@ pub mod settings;
 pub mod state;
 
 pub use action::Action;
-pub use bearing::{Layout, LayoutError, Layouts, Roi};
+pub use bearing::{content_rect, roi_from_pixels, Layout, LayoutError, Layouts, Roi};
 pub use hotkey::{plan_swap, Accelerator, Mod, ParseError, SwapPlan};
 pub use settings::{Bounds, Settings};
 pub use state::{toggle_opacity, HoldSpeed};

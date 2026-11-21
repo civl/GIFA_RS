@@ -40,6 +40,64 @@ impl Roi {
     }
 }
 
+/// 窗口像素 → 归一化 ROI。
+///
+/// 归一是**混用**的（照搬原版）：`cx`、`r` 除以视频**宽**，`cy` 除以视频**高**。
+/// `video` 与 `ring` 必须用同一坐标系（这里都用浮窗客户区像素）。
+pub fn roi_from_pixels(
+    ring: (f64, f64, f64),
+    video: (f64, f64, f64, f64),
+) -> Option<Roi> {
+    let (cx, cy, r) = ring;
+    let (vx, vy, vw, vh) = video;
+    if !(vw > 1.0 && vh > 1.0 && r > 0.0) {
+        return None;
+    }
+    let roi = Roi {
+        cx: (cx - vx) / vw,
+        cy: (cy - vy) / vh,
+        r: r / vw,
+    };
+    roi.is_valid().then_some(roi)
+}
+
+/// `object-fit: contain`（或 cover）下，视频**画面**在元素里的实际矩形。
+///
+/// 标定圆环套的是"看到的画面"，而 ROI 要相对**视频帧**存，
+/// 所以必须先去掉黑边（contain）或裁掉溢出（cover）。
+pub fn content_rect(
+    elem: (f64, f64, f64, f64),
+    vw: i32,
+    vh: i32,
+    fit: &str,
+) -> (f64, f64, f64, f64) {
+    let (ex, ey, ew, eh) = elem;
+    if vw <= 0 || vh <= 0 || ew <= 0.0 || eh <= 0.0 {
+        return elem;
+    }
+    let content_aspect = vw as f64 / vh as f64;
+    let elem_aspect = ew / eh;
+    if fit.eq_ignore_ascii_case("fill") || (content_aspect - elem_aspect).abs() < 1e-6 {
+        return elem;
+    }
+    let wider = content_aspect > elem_aspect; // 画面比元素更宽 → 上下留黑边
+    match fit.eq_ignore_ascii_case("cover") {
+        true => {
+            // cover：画面被裁切，元素就是可见区域（ROI 仍相对整个画面，这里直接返回元素）
+            elem
+        }
+        false => {
+            if wider {
+                let h = ew / content_aspect;
+                (ex, ey + (eh - h) / 2.0, ew, h)
+            } else {
+                let w = eh * content_aspect;
+                (ex + (ew - w) / 2.0, ey, w, eh)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Layout {
@@ -427,6 +485,59 @@ mod tests {
         );
         let custom: Vec<_> = l.layouts.iter().filter(|x| !x.built_in).collect();
         assert_eq!(custom.len(), 1);
+    }
+
+    #[test]
+    fn roi_from_pixels_uses_mixed_normalization() {
+        // 视频占客户区 (0,70) 起、1280×720；圆环中心 (282,266)、半径 276
+        let roi = roi_from_pixels((282.0, 266.0, 276.0), (0.0, 70.0, 1280.0, 720.0)).unwrap();
+        assert!((roi.cx - 282.0 / 1280.0).abs() < 1e-9, "cx 按宽归一");
+        assert!((roi.cy - 196.0 / 720.0).abs() < 1e-9, "cy 先减偏移再按**高**归一");
+        assert!((roi.r - 276.0 / 1280.0).abs() < 1e-9, "r 按宽归一");
+        assert!(roi.is_valid());
+    }
+
+    #[test]
+    fn roi_from_pixels_rejects_out_of_range() {
+        // 圆环完全在视频外
+        assert!(roi_from_pixels((5000.0, 5000.0, 50.0), (0.0, 0.0, 1280.0, 720.0)).is_none());
+        // 半径 > 视频宽的一半
+        assert!(roi_from_pixels((640.0, 360.0, 700.0), (0.0, 0.0, 1280.0, 720.0)).is_none());
+        // 尺寸非法
+        assert!(roi_from_pixels((10.0, 10.0, 5.0), (0.0, 0.0, 0.0, 0.0)).is_none());
+    }
+
+    #[test]
+    fn content_rect_strips_letterbox() {
+        // 元素 800×600（4:3），视频 16:9 → 上下留黑边
+        let (x, y, w, h) = content_rect((0.0, 0.0, 800.0, 600.0), 1920, 1080, "contain");
+        assert_eq!((x, w), (0.0, 800.0));
+        assert!((h - 450.0).abs() < 1e-9);
+        assert!((y - 75.0).abs() < 1e-9);
+
+        // 元素 800×300（很宽），视频 4:3 → 左右留黑边
+        let (x, y, w, h) = content_rect((0.0, 0.0, 800.0, 300.0), 640, 480, "contain");
+        assert!((w - 400.0).abs() < 1e-9);
+        assert!((x - 200.0).abs() < 1e-9);
+        assert_eq!((y, h), (0.0, 300.0));
+    }
+
+    #[test]
+    fn content_rect_passthrough_when_matching_or_fill() {
+        let e = (10.0, 20.0, 1280.0, 720.0);
+        assert_eq!(content_rect(e, 1920, 1080, "contain"), e, "比例一致不改");
+        assert_eq!(content_rect(e, 640, 480, "fill"), e, "fill 不改");
+        assert_eq!(content_rect(e, 640, 480, "cover"), e, "cover 返回元素本身");
+    }
+
+    #[test]
+    fn roi_roundtrip_pixels() {
+        let roi = Roi::new(0.22, 0.33, 0.14).unwrap();
+        let (x, y, r) = roi.to_pixels(1280, 720);
+        let back = roi_from_pixels((x, y, r), (0.0, 0.0, 1280.0, 720.0)).unwrap();
+        assert!((back.cx - roi.cx).abs() < 1e-9);
+        assert!((back.cy - roi.cy).abs() < 1e-9);
+        assert!((back.r - roi.r).abs() < 1e-9);
     }
 
     #[test]
