@@ -6,6 +6,7 @@ members = [
   "crates/gifa-vision",
   "crates/gifa-input",
   "crates/gifa-shell",
+    "crates/gifa-store",
   "apps/shell-demo",
   "apps/gifa-demo",
   "spikes/dual-webview",

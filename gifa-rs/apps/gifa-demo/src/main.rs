@@ -12,7 +12,6 @@
 //!   cargo run -p gifa-demo -- --runtime                         # 只查 WebView2 基线
 
 use std::cell::RefCell;
-use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
 
@@ -106,26 +105,195 @@ struct UiState {
 }
 
 /// 极简设置存储（M11 会挪进 `gifa-app` 并做原子写/迁移）
+/// 设置层：正式实现搬到了 `gifa-store`（数据目录/原子写/防抖/旧版迁移）。
+/// demo 里只保留一个字段访问器，方便沿用旧的 `store.s.xxx` 写法。
 struct Store {
-    path: PathBuf,
-    s: Settings,
+    inner: gifa_store::SettingsStore,
 }
 
 impl Store {
-    fn load(path: PathBuf) -> Self {
-        let s = std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|t| Settings::from_json(&t).ok())
-            .unwrap_or_default();
-        Self { path, s }
+    fn open(dir: &std::path::Path) -> Self {
+        Self {
+            inner: gifa_store::SettingsStore::load(dir.join(gifa_store::FILE_NAME)),
+        }
     }
 
-    fn save(&self) {
-        if let Some(dir) = self.path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        let _ = std::fs::write(&self.path, self.s.to_json_pretty());
+    fn save(&mut self) {
+        // 立即落盘（demo 的改动都是低频的；真实应用走 save_if_due 的 250ms 防抖）
+        let _ = self.inner.flush();
     }
+}
+
+impl std::ops::Deref for Store {
+    type Target = Settings;
+    fn deref(&self) -> &Settings {
+        self.inner.settings()
+    }
+}
+
+impl std::ops::DerefMut for Store {
+    fn deref_mut(&mut self) -> &mut Settings {
+        self.inner.settings_mut()
+    }
+}
+
+/// M11 自检：数据目录 / 原子写 / 防抖 / 旧版配置迁移
+fn run_settings_test() {
+    use gifa_store::{resolve_data_dir, Mode};
+
+    let mut rows: Vec<(String, bool, String)> = Vec::new();
+    let base = std::env::current_dir()
+        .unwrap_or_default()
+        .join("data-settings-test");
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("建测试目录");
+
+    // 1) 数据目录：dev / installed / portable 三种
+    let exe = base.join("exe");
+    std::fs::create_dir_all(&exe).unwrap();
+    let appdata = base.join("appdata");
+    let dev = resolve_data_dir(&exe, &appdata, false);
+    let portable = resolve_data_dir(&exe, &appdata, true);
+    std::fs::write(exe.join("installed.flag"), b"").unwrap();
+    let installed = resolve_data_dir(&exe, &appdata, true);
+    std::fs::remove_file(exe.join("installed.flag")).unwrap();
+    let ok_dir = dev.mode == Mode::Dev
+        && portable.mode == Mode::Portable
+        && installed.mode == Mode::Installed
+        && portable.path == exe.join("data")
+        && installed.path == appdata;
+    rows.push((
+        "数据目录三种模式".into(),
+        ok_dir,
+        format!("dev={:?} portable={:?} installed={:?}", dev.mode, portable.mode, installed.mode),
+    ));
+
+    // 2) 丢一份**原版 Electron** 的 settings.json 进去
+    let data = base.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let legacy = r#"{
+  "bounds": { "x": 120, "y": 90, "width": 1024, "height": 640 },
+  "pinned": true,
+  "opacity": 0.9,
+  "volume": 66,
+  "hotkeys": { "togglePlay": "Alt+J", "seekFwd": "Mouse5", "holdSpeed": "F7" },
+  "gamepad": { "enabled": true, "map": { "e": "seekFwd" } },
+  "lastText": "BV1xx411c7mD",
+  "lastPart": 3,
+  "lastTitle": "上次看的那个",
+  "lastWatchedAt": 1700000000000,
+  "bearing": {
+    "enabled": true,
+    "rois": [ {"cx": 0.0875, "cy": 0.122, "r": 0.046},
+              {"cx": 0.147, "cy": 0.246, "r": 0.144} ],
+    "roiBy": { "BV1xx411c7mD": [ {"cx": 0.2, "cy": 0.3, "r": 0.12} ] }
+  },
+  "futureField": { "keep": true }
+}"#;
+    std::fs::write(data.join("settings.json"), legacy).unwrap();
+    let mut store = gifa_store::SettingsStore::load(data.join("settings.json"));
+    let s = store.settings().clone();
+    let ok_legacy = s.bounds.x == Some(120)
+        && s.bounds.y == Some(90)
+        && s.bounds.width == 1024
+        && s.bounds.height == 640
+        && s.pinned
+        && (s.opacity - 0.9).abs() < 1e-9
+        && (s.volume - 66.0).abs() < 1e-9
+        && s.hotkeys.get("togglePlay").map(|v| v == "Alt+J").unwrap_or(false)
+        && s.last_text == "BV1xx411c7mD"
+        && s.last_part == 3;
+    rows.push((
+        "原版 settings.json 字段直通".into(),
+        ok_legacy,
+        format!(
+            "bounds=({:?},{:?},{},{}) hotkey={:?} last={} P{}",
+            s.bounds.x, s.bounds.y, s.bounds.width, s.bounds.height,
+            s.hotkeys.get("togglePlay"), s.last_text, s.last_part
+        ),
+    ));
+
+    // 3) bearing.rois / roiBy → 命名布局（种子数据被跳过）
+    let custom: Vec<_> = s.bearing.layouts.layouts.iter().filter(|l| !l.built_in).collect();
+    let ok_migrate = custom.len() >= 2
+        && !custom.iter().any(|l| (l.roi.cx - 0.0875).abs() < 1e-6)
+        && store.migrated.iter().any(|m| m.contains("bearing"));
+    rows.push((
+        "bearing.rois → 自定义布局".into(),
+        ok_migrate,
+        format!("{} 个自定义（种子已跳过）", custom.len()),
+    ));
+
+    // 4) 原子写 + 版本号 + 未知字段保留
+    store.settings_mut().last_part = 4;
+    let saved = store.flush().is_ok();
+    let text = std::fs::read_to_string(data.join("settings.json")).unwrap_or_default();
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+    let tmp_left = std::fs::read_dir(&data)
+        .map(|d| d.filter_map(|e| e.ok()).any(|e| e.file_name().to_string_lossy().ends_with(".tmp")))
+        .unwrap_or(true);
+    let ok_write = saved
+        && v.get("configVersion").and_then(|x| x.as_u64()) == Some(gifa_store::CONFIG_VERSION as u64)
+        && v.get("futureField").is_some()
+        && v.get("lastPart").and_then(|x| x.as_u64()) == Some(4)
+        && !tmp_left;
+    rows.push((
+        "原子写 + 版本号 + 未知字段保留".into(),
+        ok_write,
+        format!(
+            "configVersion={:?} futureField={} 残留tmp={}",
+            v.get("configVersion").and_then(|x| x.as_u64()),
+            v.get("futureField").is_some(),
+            tmp_left
+        ),
+    ));
+
+    // 5) 250ms 防抖
+    let mut st2 = gifa_store::SettingsStore::load(data.join("settings.json"));
+    st2.settings_mut().volume = 11.0;
+    let t0 = std::time::Instant::now();
+    let early = st2.save_if_due(t0 + std::time::Duration::from_millis(150));
+    let late = st2.save_if_due(t0 + std::time::Duration::from_millis(300));
+    rows.push((
+        "250ms 防抖".into(),
+        !early && late,
+        format!("150ms={early} 300ms={late}"),
+    ));
+
+    // 6) 旧数据目录文件搬迁（不覆盖已有）
+    let old = base.join("old");
+    std::fs::create_dir_all(&old).unwrap();
+    std::fs::write(old.join("bearing-dump.png"), b"PNG").unwrap();
+    let moved = gifa_store::migrate_legacy_data(&old, &data);
+    rows.push((
+        "旧数据目录搬迁（不覆盖）".into(),
+        moved.contains(&"bearing-dump.png".to_string())
+            && !moved.contains(&"settings.json".to_string()),
+        format!("搬了 {moved:?}"),
+    ));
+
+    // 7) 迁移是幂等的：再载一次不该重复生成布局
+    let before = store.settings().bearing.layouts.layouts.len();
+    let again = gifa_store::SettingsStore::load(data.join("settings.json"));
+    let ok_idem = again.settings().bearing.layouts.layouts.len() == before;
+    rows.push((
+        "重复载入不重复迁移".into(),
+        ok_idem,
+        format!("布局数 {} → {}", before, again.settings().bearing.layouts.layouts.len()),
+    ));
+
+    println!();
+    println!("============ 设置与迁移自检 ============");
+    for (i, (name, ok, detail)) in rows.iter().enumerate() {
+        println!("[{}] {:<28} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+    }
+    let pass = rows.iter().filter(|(_, ok, _)| *ok).count();
+    println!("----------------------------------------");
+    println!("RESULT {pass}/{}", rows.len());
+    println!("========================================");
+    println!();
+
+    let _ = std::fs::remove_dir_all(&base);
 }
 
 fn main() {
@@ -134,20 +302,24 @@ fn main() {
         report_runtime();
         return;
     }
+    if args.iter().any(|a| a == "--settings-test") {
+        run_settings_test();
+        return;
+    }
     let check = args.iter().any(|a| a == "--check");
     let auto_login = args.iter().any(|a| a == "--login");
     let gamepad = args.iter().any(|a| a == "--gamepad");
 
     // ---- 设置 + 「上次看到」
     let data_root = std::env::current_dir().unwrap_or_default().join("data");
-    let store = Store::load(data_root.join("settings.json"));
+    let store = Store::open(&data_root);
 
     let text = arg_value(&args, "--open")
         .or_else(|| arg_value(&args, "--url"))
         .unwrap_or_else(|| {
-            let last = store.s.last_text.trim();
+            let last = store.last_text.trim();
             if !last.is_empty() {
-                println!("[gifa] 继续上次观看：{} P{}", last, store.s.last_part);
+                println!("[gifa] 继续上次观看：{} P{}", last, store.last_part);
                 last.to_string()
             } else {
                 DEFAULT_TEXT.to_string()
@@ -163,7 +335,7 @@ fn main() {
 
     UI.with(|ui| {
         let mut ui = ui.borrow_mut();
-        ui.layouts = store.s.bearing.layouts.clone();
+        ui.layouts = store.bearing.layouts.clone();
         ui.store = Some(store);
         ui.pending_short = gifa_player::is_short_link(&text) && gifa_player::extract_id(&text).is_none();
     });
@@ -205,6 +377,13 @@ fn main() {
     }
     gifa_shell::start_ticks(250);
     gifa_shell::run();
+
+    // 退出前必须 flush：否则 250ms 防抖窗口里的改动会丢
+    UI.with(|ui| {
+        if let Some(store) = ui.borrow_mut().store.as_mut() {
+            store.save();
+        }
+    });
 }
 
 fn arg_value(args: &[String], flag: &str) -> Option<String> {
@@ -433,16 +612,16 @@ fn remember_watched(ui: &mut UiState) {
     }
     ui.saved = key;
     if let Some(store) = ui.store.as_mut() {
-        store.s.last_text = text;
-        store.s.last_part = s.part;
-        store.s.last_video_id = s.bvid.clone();
-        store.s.last_title = if title.is_empty() {
-            store.s.last_title.clone()
+        store.last_text = text;
+        store.last_part = s.part;
+        store.last_video_id = s.bvid.clone();
+        store.last_title = if title.is_empty() {
+            store.last_title.clone()
         } else {
             title
         };
-        store.s.last_page_count = ui.info.as_ref().map(|i| i.pages.len() as i32).unwrap_or(0);
-        store.s.last_watched_at = std::time::SystemTime::now()
+        store.last_page_count = ui.info.as_ref().map(|i| i.pages.len() as i32).unwrap_or(0);
+        store.last_watched_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
             .unwrap_or(0);
@@ -691,7 +870,7 @@ fn dispatch_action(ui: &mut UiState, action: Action, phase: Option<&str>) {
         }
         Action::ToggleVisible => gifa_shell::hide(),
         Action::HoldSpeed => {
-            let hold = ui.store.as_ref().map(|s| s.s.hold_playback_rate).unwrap_or(2.0);
+            let hold = ui.store.as_ref().map(|s| s.hold_playback_rate).unwrap_or(2.0);
             let v = if phase == Some("down") { hold } else { ui.rate_normal };
             gifa_shell::player_command(PlayerCommand::Rate { value: v });
         }
@@ -765,7 +944,7 @@ fn apply_calibration(ui: &mut UiState, cx: f64, cy: f64, r: f64) {
 
 fn persist_layouts(ui: &mut UiState) {
     if let Some(store) = ui.store.as_mut() {
-        store.s.bearing.layouts = ui.layouts.clone();
+        store.bearing.layouts = ui.layouts.clone();
         store.save();
     }
 }

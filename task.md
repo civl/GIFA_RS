@@ -601,15 +601,20 @@ gifa-rs/
   2. `openCalib()` 先量尺寸再加 `.active`，`display:none` 时量到 0×0 → 圆环跑到左上角、半径退化成 40
 - **已知限制**：ROI 只落盘未喂识别（识别在二期）；自动定心的 UI 入口等识别接上再开
 
-### M11 设置与迁移 `3d` [P0]
+### M11 设置与迁移 `3d` [P0] ✅ 完成（7/7 自检 + 10 个单测）
 
-- [ ] `Settings` 结构与原版**字段同名同义**（§13-A），serde `default` + 未知字段保留
-- [ ] 合并策略：`mergeHotkeys` / `mergeGamepadSettings` / `bearing` 嵌套合并（缺字段用默认，非法值丢弃）
-- [ ] 原子写：`tmp` + `ReplaceFileW`；写入 **250ms** 防抖节流（原版 `persist()` → `setTimeout(flushSettings, 250)`）
-- [ ] 退出/提权重启前 flush
-- [ ] 迁移：直接读取**原版 Electron `settings.json`**，字段平滑接管（同名字段直通、`bearing.rois` 走 §M10 的 legacy 迁移）→ 用户可无痛从旧版切换
-- [ ] 版本号与降级保护（未来加字段）
-- **验收**：把原版 `settings.json` 丢进新数据目录，浮窗位置/快捷键/布局/上次看到全部生效
+- [x] `Settings` 与原版**字段同名同义**（§13-A），serde `default` + 未知字段保留（`flatten extra`）
+- [x] 合并策略：`hotkeys` / `gamepad` / `bearing` 深合并；缺字段用默认、非法值丢弃
+- [x] 原子写：`.tmp` + `ReplaceFileW`（失败退化 rename），保留原文件 ACL
+- [x] **250ms 防抖**（原版 `persist()` → `setTimeout(flushSettings, 250)`）；退出前 `flush()`
+- [x] 迁移：直接读原版 Electron `settings.json`（bounds/hotkeys/gamepad/lastText 全部直通）；
+      `bearing.rois` + `roiBy` → `legacy-N` 布局，跳过 2 个 SEED 脏数据
+- [x] 数据目录：Dev / Installed(`installed.flag`) / Portable(探写) / Fallback 四态
+- [x] 数据文件搬迁：`settings.json` / `bearing-dump.png` / `bearing-frame.png`，**不覆盖已有**
+- [x] 版本号 `configVersion` + 降级保护（高版本先备份成 `settings.json.v{N}.bak`）
+- **锚点**：`main.js` 的 `settingsApi`/`loadSettings`/`migrateLegacyData`
+- **验收**：`cargo run -p gifa-demo -- --settings-test` → **7/7**
+- **已知限制**：demo 仍用 `cwd/data`；登录态不在搬迁范围（需重新扫码）
 
 ### M12 打包与分发 `5d` [P0]
 

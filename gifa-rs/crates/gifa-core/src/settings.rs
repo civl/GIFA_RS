@@ -118,6 +118,9 @@ pub struct BearingSettings {
     pub radius: i32,
     pub x: Option<i32>,
     pub y: Option<i32>,
+    /// 旧版字段（`rois` / `roiBy`）原样留在这里，供迁移读取
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
 }
 
 impl Default for BearingSettings {
@@ -128,6 +131,7 @@ impl Default for BearingSettings {
             radius: 110,
             x: None,
             y: None,
+            extra: serde_json::Map::new(),
         }
     }
 }

@@ -568,6 +568,7 @@ dependencies = [
  "gifa-input",
  "gifa-player",
  "gifa-shell",
+ "gifa-store",
  "serde_json",
 ]
 
@@ -597,6 +598,15 @@ dependencies = [
  "serde_json",
  "windows",
  "wry",
+]
+
+[[package]]
+name = "gifa-store"
+version = "0.1.0"
+dependencies = [
+ "gifa-core",
+ "serde_json",
+ "windows",
 ]
 
 [[package]]

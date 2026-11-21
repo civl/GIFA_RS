@@ -11,7 +11,8 @@ gifa-rs/
 │  ├─ GAMEPAD.md                # XInput 轮询、八方向状态机、圆盘窗口
 │  ├─ IMMERSION.md              # 沉浸、比例贴合、鼠标避让
 │  ├─ OVERLAY.md                # 两路角度、补间、过期、放置模式
-│  └─ CALIBRATION.md            # ROI 归一化、标定交互、布局 CRUD
+│  ├─ CALIBRATION.md            # ROI 归一化、标定交互、布局 CRUD
+│  └─ SETTINGS.md               # 数据目录、原子写、防抖、旧版迁移
 ├─ crates/
 │  ├─ gifa-core/                # 纯领域：设置 / 方位布局 / 快捷键解析 / 播放状态机
 │  │  ├─ src/settings.rs        #   与原版 settings.json 同构 + 深合并 + 钳位
@@ -103,6 +104,9 @@ cargo run -p gifa-demo -- --open BV1xx411c7mD --overlay-test
 
 # 布局标定自检（--calib-hold 保持标定界面便于截图）
 cargo run -p gifa-demo -- --open BV1xx411c7mD --calib-test
+
+# 设置与迁移自检（吃一份原版 settings.json）
+cargo run -p gifa-demo -- --settings-test
 
 # 纯函数单测
 cargo test
@@ -240,6 +244,16 @@ Rust ◄──{t:"state", paused, currentTime, duration, bvid, part, …}── 
 
 **两个 bug**：`#calib` 没写 `top` 导致高度 0（区域 0×0，圆环点不到）；
 `openCalib()` 先量尺寸再加 `.active`，`display:none` 时量到 0×0。
+
+## M11：设置与迁移（2026-11-22）
+
+新增 `gifa-store`：数据目录四态（Dev/Installed/Portable/Fallback）、`.tmp` + `ReplaceFileW` 原子写、
+250ms 防抖、退出前 flush、`configVersion` 与降级备份。
+
+迁移直接吃原版 Electron 的 `settings.json`：同名字段直通，`bearing.rois`/`roiBy` 转成 `legacy-N`
+布局（跳过两个 SEED 脏数据），旧目录的标定图按需搬迁且不覆盖。
+
+自检 7/7 + 10 个单测。
 
 ## 库分层（#2 骨架）
 

@@ -1,0 +1,14 @@
+[package]
+name = "gifa-store"
+version = "0.1.0"
+description = "设置持久化：数据目录解析、原子写、250ms 防抖、旧版 Electron 配置迁移"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+gifa-core = { path = "../gifa-core" }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
