@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GIFA chrome 层</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden;
+               font: 12px/1.4 "Microsoft YaHei", system-ui, sans-serif; user-select: none; }
+  /* 顶部标题栏：30px，必须与 BAR_H 一致 */
+  #bar { position: fixed; left: 0; top: 0; right: 0; height: 30px; box-sizing: border-box;
+         background: #1b1d24; color: #e6e6e6; display: flex; align-items: center; gap: 10px;
+         padding: 0 10px; border-bottom: 1px solid #2b2f3a; }
+  #bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; flex: none; }
+  #bar b { font-weight: 600; }
+  #bar .hint { color: #7c8494; margin-left: auto; }
+
+  /* 底部控制条：34px，必须与 FOOT_H 一致 */
+  #foot { position: fixed; left: 0; bottom: 0; right: 0; height: 34px; box-sizing: border-box;
+          background: #1b1d24; color: #9aa0aa; display: flex; align-items: center; gap: 12px;
+          padding: 0 10px; border-top: 1px solid #2b2f3a; }
+  #foot .bar-track { flex: 1; height: 4px; border-radius: 2px; background: #333a47; position: relative; }
+  #foot .bar-track i { position: absolute; left: 0; top: 0; bottom: 0; width: 38%; border-radius: 2px;
+                       background: linear-gradient(90deg, #c4121d, #ff5a48); }
+
+  /* 悬浮 pill：故意压在舞台正中间上方，用来验证「透明叠加 + 区域可点击」 */
+  #pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: 48px;
+          width: 520px; height: 38px; box-sizing: border-box; border-radius: 19px;
+          background: rgba(16, 16, 16, 0.85); border: 1px solid rgba(255, 255, 255, 0.18);
+          color: #dfe3ea; display: flex; align-items: center; padding: 0 14px; gap: 8px;
+          backdrop-filter: blur(4px); }
+  #pill .u { color: #8b93a3; }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <span class="dot"></span>
+    <b>GIFA chrome 层</b>
+    <span>标题栏 30px · 只在这条区域里存在</span>
+    <span class="hint">其余区域已被 SetWindowRgn 挖空</span>
+  </div>
+
+  <div id="pill">
+    <span class="u">URL</span>
+    <span>粘贴 B 站链接 · 半透明叠加在舞台之上</span>
+  </div>
+
+  <div id="foot">
+    <span>▶</span>
+    <span>00:12 / 08:40</span>
+    <div class="bar-track"><i></i></div>
+    <span>1.0×</span>
+    <span>音量</span>
+  </div>
+
+<script>
+  // 把 chrome 侧的状态回传给 Rust（spike 用 println 打印）
+  const post = (m) => { try { window.ipc.postMessage(m); } catch (_) {} };
+  post('chrome-ready');
+  document.addEventListener('mousedown', (e) => post('chrome-click ' + e.clientX + ',' + e.clientY));
+</script>
+</body>
+</html>

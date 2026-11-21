@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/gifa-core",
+  "crates/gifa-player",
+  "crates/gifa-vision",
+  "crates/gifa-input",
+  "crates/gifa-shell",
+  "apps/shell-demo",
+  "apps/gifa-demo",
+  "spikes/dual-webview",
+]
+
+[workspace.package]
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+# dev 用 opt-level=1：WebView2 的 COM 调用在 dev 下也不至于慢到影响时序判断
+[profile.dev]
+opt-level = 1

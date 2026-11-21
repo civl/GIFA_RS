@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GIFA chrome 层</title>
+<style>
+  :root { --bar: #1b1d24; --line: #2b2f3a; --fg: #e6e6e6; --dim: #8b93a3; --accent: #3b6cf6; }
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden;
+               font: 12px/1.4 "Microsoft YaHei", system-ui, sans-serif; user-select: none; }
+
+  /* 标题栏 30px */
+  #bar { position: fixed; left: 0; top: 0; right: 0; height: 30px; box-sizing: border-box;
+         background: var(--bar); color: var(--fg); display: flex; align-items: center; gap: 8px;
+         padding: 0 8px; border-bottom: 1px solid var(--line); }
+  #bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex: none; }
+  #bar .dot.on { background: #3ddc84; }
+  #bar .title { font-weight: 600; max-width: 32%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bar .meta { color: var(--dim); white-space: nowrap; }
+  #bar .spacer { flex: 1; }
+  #bar .account { color: var(--dim); max-width: 22%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bar button { height: 22px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--line);
+                background: #242833; color: var(--fg); font-size: 12px; cursor: pointer; }
+  #bar button:hover { background: #2f3542; }
+  #bar button.on { background: #24406e; border-color: #3b6cf6; }
+  #bar select { height: 22px; max-width: 160px; border-radius: 4px; border: 1px solid var(--line);
+                background: #242833; color: var(--fg); font-size: 12px; outline: none; }
+  #bar select.hidden { display: none; }
+
+  /* URL 条 40px */
+  #urlbar { position: fixed; left: 0; right: 0; top: 30px; height: 40px; box-sizing: border-box;
+            background: var(--bar); border-bottom: 1px solid var(--line);
+            display: flex; align-items: center; gap: 6px; padding: 6px 8px; }
+  #urlbar.hidden { display: none; }
+  #urlbar input { flex: 1; height: 26px; border-radius: 5px; border: 1px solid var(--line);
+                  background: rgba(255,255,255,.05); color: var(--fg); padding: 0 9px;
+                  font-size: 12px; outline: none; }
+  #urlbar button { height: 26px; padding: 0 12px; border: 0; border-radius: 5px;
+                   background: var(--accent); color: #fff; cursor: pointer; }
+
+  /* 控制条 34px */
+  #foot { position: fixed; left: 0; bottom: 0; right: 0; height: 34px; box-sizing: border-box;
+          background: var(--bar); color: var(--dim); display: flex; align-items: center; gap: 10px;
+          padding: 0 10px; border-top: 1px solid var(--line); }
+  #foot button { width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent;
+                 color: var(--fg); font-size: 14px; cursor: pointer; }
+  #foot button:hover { background: #2f3542; }
+  #progress { flex: 1; height: 4px; border-radius: 2px; background: #333a47; position: relative; cursor: pointer; }
+  #progress i { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; border-radius: 2px;
+                background: linear-gradient(90deg, #c4121d, #ff5a48); }
+  #time { font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; }
+  #rate { min-width: 34px; text-align: center; }
+
+  /* 悬浮 pill（状态 / 临时提示共用这一个矩形，避免多开一块区域） */
+  #pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: 48px;
+          width: 600px; height: 38px; box-sizing: border-box; border-radius: 19px;
+          background: rgba(16,16,16,.85); border: 1px solid rgba(255,255,255,.18);
+          color: #dfe3ea; display: flex; align-items: center; padding: 0 14px; gap: 8px;
+          overflow: hidden; white-space: nowrap; }
+  #pill .k { color: var(--dim); }
+  #pill #status { overflow: hidden; text-overflow: ellipsis; }
+  #pill.toast { border-color: rgba(61,108,246,.75); }
+
+  /* 右下角缩放手柄 */
+  #grip { position: fixed; right: 0; bottom: 34px; width: 18px; height: 18px; cursor: nwse-resize; }
+  #grip::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px;
+                 border-right: 2px solid rgba(255,255,255,.55);
+                 border-bottom: 2px solid rgba(255,255,255,.55); border-radius: 0 0 3px 0; }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <span class="dot" id="accDot"></span>
+    <span class="title" id="vtitle">未载入</span>
+    <span class="meta" id="vmeta">—</span>
+    <select id="partSelect" class="hidden" title="分 P"></select>
+    <span class="spacer"></span>
+    <span class="account" id="account">未登录</span>
+    <button id="btnLogin" title="扫码登录 B 站">登录</button>
+    <button id="btnClean" title="隐藏顶栏/推荐/评论">纯净</button>
+    <button id="btnUrl" title="换视频">换视频</button>
+    <button id="btnClose" title="关闭浮窗">关闭</button>
+  </div>
+
+  <div id="urlbar">
+    <input id="urlInput" placeholder="粘贴 B 站链接 / BV 号 / b23.tv 短链，回车或点载入" spellcheck="false">
+    <button id="btnLoad">载入</button>
+  </div>
+
+  <div id="pill">
+    <span class="k" id="pillKey">状态</span>
+    <span id="status">等待页面…</span>
+  </div>
+
+  <div id="foot">
+    <button id="btnPlay" title="播放 / 暂停">▶</button>
+    <span id="time">00:00 / 00:00</span>
+    <div id="progress"><i></i></div>
+    <span id="rate">1.0×</span>
+  </div>
+
+  <div id="grip"></div>
+
+<script>
+  const post = (m) => { try { window.ipc.postMessage(JSON.stringify(m)); } catch (_) {} };
+  const dpr = () => window.devicePixelRatio || 1;
+  const rectPx = (el) => {
+    const r = el.getBoundingClientRect(), k = dpr();
+    return { x: Math.round(r.x * k), y: Math.round(r.y * k), w: Math.round(r.width * k), h: Math.round(r.height * k) };
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const barEl = $('bar'), urlEl = $('urlbar'), footEl = $('foot'), pillEl = $('pill'), gripEl = $('grip');
+
+  function reportLayout() {
+    post({
+      t: 'layout',
+      titlebar: Math.round(barEl.getBoundingClientRect().height * dpr()),
+      footer: Math.round(footEl.getBoundingClientRect().height * dpr()),
+      urlbar: urlEl.classList.contains('hidden') ? null : rectPx(urlEl),
+      overlay: [rectPx(pillEl), rectPx(gripEl)],
+    });
+  }
+
+  const fmt = (s) => {
+    if (!isFinite(s) || s <= 0) return '00:00';
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  };
+
+  // ---- 临时提示：复用 pill，不额外占窗口区域
+  let toastUntil = 0, lastToast = '';
+  function showToast(text) {
+    lastToast = text;
+    toastUntil = Date.now() + 4000;
+    pillEl.classList.add('toast');
+    $('pillKey').textContent = '提示';
+    $('status').textContent = text;
+    setTimeout(paintStatus, 4100);
+  }
+
+  let statusText = '等待页面…';
+  function paintStatus() {
+    if (Date.now() < toastUntil) return;
+    pillEl.classList.remove('toast');
+    $('pillKey').textContent = '状态';
+    $('status').textContent = statusText;
+  }
+
+  // ---- 分 P 下拉：只在 pages 变化时重建，避免打字/滚动被重置
+  let pagesKey = '';
+  function renderParts(s) {
+    const sel = $('partSelect');
+    const pages = s.pages || [];
+    const key = pages.length + ':' + pages.map((p) => p.page + '=' + p.part).join('|');
+    if (key !== pagesKey) {
+      pagesKey = key;
+      sel.innerHTML = '';
+      for (const p of pages) {
+        const o = document.createElement('option');
+        o.value = String(p.page);
+        o.textContent = 'P' + p.page + ' ' + (p.part || '');
+        sel.appendChild(o);
+      }
+    }
+    sel.classList.toggle('hidden', pages.length <= 1);
+    if (document.activeElement !== sel) sel.value = String(s.part || 1);
+  }
+
+  // ---- Rust 每 250ms 推一次状态
+  window.gifaState = (s) => {
+    document.title = s.title || 'GIFA';
+    $('vtitle').textContent = s.title || '未载入';
+    $('vmeta').textContent = s.bvid
+      ? (s.bvid + ' · P' + s.part + ' · ' + (s.videoW || 0) + '×' + (s.videoH || 0))
+      : '—';
+    $('account').textContent = s.account || '未登录';
+    $('accDot').classList.toggle('on', !!s.loggedIn);
+    $('btnLogin').classList.toggle('on', !!s.loggedIn);
+    $('btnPlay').textContent = s.paused ? '▶' : '⏸';
+    $('time').textContent = fmt(s.time) + ' / ' + fmt(s.dur);
+    $('rate').textContent = (s.rate || 1).toFixed(2).replace(/0$/, '') + '×';
+    $('progress').firstElementChild.style.width =
+      (s.dur > 0 ? Math.min(100, s.time / s.dur * 100) : 0) + '%';
+
+    const st = [];
+    st.push(s.hasVideo ? (s.paused ? '已暂停' : '播放中') : '等待 <video>');
+    if (s.dur > 0) st.push(fmt(s.dur));
+    if (s.owner) st.push('UP ' + s.owner);
+    if (s.muted) st.push('静音');
+    statusText = st.join(' · ');
+    paintStatus();
+
+    if (s.toast && s.toast !== lastToast) showToast(s.toast);
+    renderParts(s);
+  };
+
+  // ---- 交互
+  barEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || e.target.closest('button,select')) return;
+    post({ t: 'drag' });
+  });
+  gripEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    post({ t: 'resize' });
+  });
+
+  $('btnPlay').addEventListener('click', () => post({ t: 'toggle' }));
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && document.activeElement !== $('urlInput')) {
+      e.preventDefault();
+      post({ t: 'toggle' });
+    }
+  });
+
+  $('partSelect').addEventListener('change', (e) => {
+    post({ t: 'part', p: Number(e.target.value) });
+  });
+
+  let clean = false;
+  $('btnClean').addEventListener('click', () => {
+    clean = !clean;
+    $('btnClean').classList.toggle('on', clean);
+    post({ t: 'clean', on: clean });
+  });
+
+  $('btnLogin').addEventListener('click', () => post({ t: 'login' }));
+
+  $('btnUrl').addEventListener('click', () => {
+    urlEl.classList.toggle('hidden');
+    reportLayout();
+    if (!urlEl.classList.contains('hidden')) $('urlInput').focus();
+  });
+
+  $('progress').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    post({ t: 'seek-ratio', ratio });
+  });
+
+  function load() {
+    const text = $('urlInput').value.trim();
+    if (!text) return;
+    post({ t: 'load', text });
+    urlEl.classList.add('hidden');
+    reportLayout();
+  }
+  $('btnLoad').addEventListener('click', load);
+  $('urlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+
+  $('btnClose').addEventListener('click', () => post({ t: 'close' }));
+
+  addEventListener('resize', reportLayout);
+  reportLayout();
+</script>
+</body>
+</html>

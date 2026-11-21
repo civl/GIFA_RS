@@ -1,0 +1,26 @@
+[package]
+name = "gifa-shell"
+version = "0.1.0"
+description = "GIFA 外壳：舞台窗 + 顶层 chrome 玻璃窗 + 区域联动（对应 task.md §4 gifa-shell）"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+gifa-player = { path = "../gifa-player" }
+wry = "0.57"
+raw-window-handle = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Com",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_Controls",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }

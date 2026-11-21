@@ -1,0 +1,11 @@
+[package]
+name = "gifa-core"
+version = "0.1.0"
+description = "GIFA 的纯领域模型：设置 / 方位布局 / 快捷键解析 / 播放状态机（无 OS 依赖，可跑 CI）"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

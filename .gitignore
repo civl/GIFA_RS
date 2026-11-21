@@ -1,0 +1,12 @@
+# Rust 构建产物
+gifa-rs/target/
+
+# 运行数据（WebView2 profile、settings.json）
+gifa-rs/apps/*/data/
+data/
+
+# 原版参考仓库（单独 clone，不属于本仓库内容）
+reference/
+
+# 临时文件
+*.log

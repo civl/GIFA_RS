@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GIFA 舞台层（B 站页面占位）</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
+               background: #ff0000; /* 纯红：便于像素采样判定「舞台是否原样透出」 */
+               font: 14px/1.5 "Microsoft YaHei", system-ui, sans-serif; user-select: none; }
+  .tag { position: absolute; color: #fff; background: rgba(0,0,0,.35); border-radius: 6px;
+         padding: 6px 10px; }
+  #who { left: 12px; top: 12px; }
+  #clicks { right: 12px; top: 12px; }
+  #cta { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+         background: #fff; color: #c00; font-weight: 700; padding: 10px 18px; border-radius: 10px;
+         box-shadow: 0 6px 18px rgba(0,0,0,.25); cursor: pointer; }
+</style>
+</head>
+<body>
+  <div id="who" class="tag">舞台层 · 真实场景里这里是 www.bilibili.com/video/BV…</div>
+  <div id="clicks" class="tag">clicks: 0</div>
+  <div id="cta">这个区域必须能点到（点我计数）</div>
+
+<script>
+  const post = (m) => { try { window.ipc.postMessage(m); } catch (_) {} };
+  let n = 0;
+  const label = document.getElementById('clicks');
+  document.addEventListener('mousedown', (e) => {
+    n += 1;
+    label.textContent = 'clicks: ' + n;
+    post('stage-click ' + n + ' @' + e.clientX + ',' + e.clientY);
+  });
+  post('stage-ready');
+
+  // 调试：把几个可疑点上的元素报回 Rust，用来确认"白框/边缘异物"到底是谁画的
+  setTimeout(() => {
+    for (const [x, y] of [[30, 15], [6, 6], [760, 280], [500, 520]]) {
+      const el = document.elementFromPoint(x, y);
+      const bg = el ? getComputedStyle(el).backgroundColor : 'n/a';
+      post(`probe (${x},${y}) -> <${el ? el.tagName : 'null'}>#${el ? el.id : ''}.${el ? el.className : ''} bg=${bg}`);
+    }
+    post('viewport ' + window.innerWidth + 'x' + window.innerHeight + ' dpr=' + window.devicePixelRatio);
+  }, 1800);
+</script>
+</body>
+</html>

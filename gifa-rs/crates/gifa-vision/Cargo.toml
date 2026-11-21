@@ -1,0 +1,9 @@
+[package]
+name = "gifa-vision"
+version = "0.1.0"
+description = "小地图方位识别（二期启用）：帧源抽象 + 青色箭头/白色视锥的纯算法"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

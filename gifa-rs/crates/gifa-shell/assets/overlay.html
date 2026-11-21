@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GIFA overlay</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden;
+               user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; }
+  /* 放置模式下整窗可拖（Rust 侧把点击穿透关掉，WM_NCHITTEST 返回 HTCAPTION） */
+  body.placing { cursor: move; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script>
+/* 方位标记叠加层：画两个**互相独立**的量
+ *   · 红箭头  行进方向（青色三角解出来的）
+ *   · 绿弧    镜头视角（白色扇形解出来的）
+ *
+ * 原版的关键结论：站着不动把镜头转 180°，人没动、视角转了。
+ * 所以两路各有自己的补间状态，绝不能合成一个角度。
+ *
+ * 坐标：两者都是罗盘角（0°=北、顺时针），画到 canvas 上要 -90°。
+ */
+(function () {
+  'use strict';
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+
+  const RED = '#ff2f2f';
+  const RED_DEEP = '#c4121d';
+  const RED_TIP = '#ff5a48';
+  const RED_SOFT = 'rgba(255,47,47,0.72)';
+  const WHITE = 'rgba(255,255,255,0.96)';
+  const GREEN = '#35d96b';
+  const GREEN_LIGHT = '#93f7b4';
+  const GREEN_DEEP = '#1fae52';
+  const GREEN_EDGE = 'rgba(4,36,17,0.8)';
+  const SHADOW = 'rgba(0,0,0,0.5)';
+  const VIEW_STALE_MS = 1500;
+
+  let placing = false;
+  /** 上一帧是否真的画了绿弧（诊断） */
+  let lastDrewArc = false;
+
+  // 两路各一套补间状态
+  const tween = {
+    arrow: { target: null, shown: null, raf: 0 },
+    view: { target: null, shown: null, raf: 0, conf: 0, width: 0, at: 0 },
+  };
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const shortAngle = (a, b) => ((a - b + 540) % 360) - 180;
+  const radius = (w, h) => (Math.min(w, h) / 2) * 0.86;
+
+  function report() {
+    try {
+      const stale = tween.view.shown === null || Date.now() - tween.view.at >= VIEW_STALE_MS;
+      window.ipc.postMessage(JSON.stringify({
+        t: 'drawn',
+        arrow: tween.arrow.shown,
+        view: tween.view.shown,
+        stale,
+        arc: lastDrewArc,
+        at: tween.view.at,
+        now: Date.now(),
+      }));
+    } catch (_) { /* 页面独立运行时忽略 */ }
+  }
+
+  /** 每帧追 45%，3~4 帧收敛；>90° 大跳直接就位（否则会看到绕一圈） */
+  function setTarget(key, deg) {
+    if (typeof deg !== 'number' || !isFinite(deg)) return;
+    const t = tween[key];
+    t.target = deg;
+    if (t.shown === null || Math.abs(shortAngle(deg, t.shown)) > 90) {
+      t.shown = deg;
+      draw();
+      return;
+    }
+    if (!t.raf) t.raf = requestAnimationFrame(() => step(key));
+  }
+
+  function step(key) {
+    const t = tween[key];
+    t.raf = 0;
+    if (t.shown === null || t.target === null) return;
+    const d = shortAngle(t.target, t.shown);
+    if (Math.abs(d) < 0.25) {
+      t.shown = t.target;
+      draw();
+      return;
+    }
+    t.shown = (t.shown + d * 0.45 + 360) % 360;
+    draw();
+    t.raf = requestAnimationFrame(() => step(key));
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px';
+    cv.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  // ---------------- 放置模式的虚线环 + 十字
+  function drawRing(cx, cy, r) {
+    ctx.save();
+    ctx.setLineDash([6, 7]);
+    ctx.strokeStyle = RED_SOFT;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(cx - 9, cy);
+    ctx.lineTo(cx + 9, cy);
+    ctx.moveTo(cx, cy - 9);
+    ctx.lineTo(cx, cy + 9);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * 绿弧：带圆头的月牙，正中向外顶一个小尖。
+   * 半张角夹在 18°~34°：太长糊成一圈，太短看不出朝向。
+   */
+  function drawViewArc(cx, cy, r, deg, conf, width) {
+    const dpr = window.devicePixelRatio || 1;
+    const half = Math.max(18, Math.min(34, (width > 0 ? width : 60) * 0.45));
+    const halfRad = (half * Math.PI) / 180;
+    const mid = ((deg - 90) * Math.PI) / 180;
+
+    const lw = Math.max(4.5, r * 0.085);
+    const edge = clamp(r * 0.013, 1.25, 2.5);
+    const alpha = 0.5 + 0.5 * clamp(conf, 0, 1);
+
+    const tickH = Math.max(0, Math.min(lw * 0.85, r * 0.15 - lw / 2 - edge));
+    const tickHalf = (lw * 1.5) / r;
+
+    const thick = (t) => {
+      const k = clamp((Math.abs(t) / halfRad - 0.4) / 0.6, 0, 1);
+      return lw * (1 - 0.55 * k * k * (3 - 2 * k));
+    };
+    const outerR = (t) => {
+      const u = Math.max(0, 1 - Math.abs(t) / tickHalf);
+      return r + thick(t) / 2 + tickH * u * u;
+    };
+    const innerR = (t) => r - thick(t) / 2;
+
+    // 弧身每 2° 一点；小尖单独加密，且尖顶必须落在采样点上
+    const n = Math.ceil(half);
+    const ts = [];
+    for (let i = 0; i <= n; i += 1) ts.push(-halfRad + (2 * halfRad * i) / n);
+    for (let i = -8; i <= 8; i += 1) ts.push((tickHalf * i) / 8);
+    ts.sort((p, q) => p - q);
+
+    const capR = thick(halfRad) / 2;
+    const a0 = mid - halfRad;
+    const a1 = mid + halfRad;
+
+    ctx.beginPath();
+    for (let i = 0; i < ts.length; i += 1) {
+      const ro = outerR(ts[i]);
+      const x = cx + Math.cos(mid + ts[i]) * ro;
+      const y = cy + Math.sin(mid + ts[i]) * ro;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.arc(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, capR, a1, a1 + Math.PI);
+    for (let i = ts.length - 1; i >= 0; i -= 1) {
+      const ri = innerR(ts[i]);
+      ctx.lineTo(cx + Math.cos(mid + ts[i]) * ri, cy + Math.sin(mid + ts[i]) * ri);
+    }
+    ctx.arc(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r, capR, a0 + Math.PI, a0 + Math.PI * 2);
+    ctx.closePath();
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineJoin = 'round';
+
+    ctx.shadowColor = SHADOW;
+    ctx.shadowBlur = clamp(r * 0.05, 3, 10) * dpr;
+    ctx.strokeStyle = GREEN_EDGE;
+    ctx.lineWidth = edge * 2;
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+
+    const g = ctx.createRadialGradient(cx, cy, r - lw / 2, cx, cy, r + lw / 2 + tickH);
+    g.addColorStop(0, GREEN_LIGHT);
+    g.addColorStop(0.45, GREEN);
+    g.addColorStop(1, GREEN_DEEP);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 红箭头：一整块闭合轮廓（细尾→渐宽箭杆→后掠箭头），带白描边与暗投影 */
+  function drawArrow(cx, cy, r, deg) {
+    const dpr = window.devicePixelRatio || 1;
+    const a = ((deg - 90) * Math.PI) / 180;
+
+    const tipX = r * 0.9;
+    const tailX = r * 0.4;
+    const headL = Math.max(13, r * 0.24);
+    const headW = headL * 0.56;
+    const barbX = tipX - headL;
+    const neckX = tipX - headL * 0.74;
+    const neckW = Math.max(2.6, headL * 0.2);
+    const tailW = neckW * 0.45;
+    const outline = clamp(r * 0.02, 1.5, 3.5);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a);
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(tailX, -tailW);
+    ctx.lineTo(neckX, -neckW);
+    ctx.lineTo(barbX, -headW);
+    ctx.lineTo(tipX, 0);
+    ctx.lineTo(barbX, headW);
+    ctx.lineTo(neckX, neckW);
+    ctx.lineTo(tailX, tailW);
+    ctx.closePath();
+
+    // 白描边管深色地形，投影管雪地：两层缺一层都会在某种地形上丢轮廓
+    ctx.shadowColor = SHADOW;
+    ctx.shadowBlur = clamp(r * 0.06, 3, 12) * dpr;
+    ctx.shadowOffsetY = dpr;
+    ctx.strokeStyle = WHITE;
+    ctx.lineWidth = outline * 2;
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    const g = ctx.createLinearGradient(tailX, 0, tipX, 0);
+    g.addColorStop(0, RED_DEEP);
+    g.addColorStop(0.55, RED);
+    g.addColorStop(1, RED_TIP);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,0.17)';
+    ctx.fillRect(tailX - outline, -headW - outline, tipX - tailX + outline * 2, headW + outline);
+    ctx.restore();
+  }
+
+  function draw() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    ctx.clearRect(0, 0, w, h);
+    const cx = w / 2;
+    const cy = h / 2;
+    const r = radius(w, h);
+
+    if (placing) drawRing(cx, cy, r);
+
+    // 绿弧画在箭头下面：重叠时箭头要压在上面
+    const v = tween.view;
+    lastDrewArc = v.shown !== null && Date.now() - v.at < VIEW_STALE_MS;
+    if (lastDrewArc) {
+      drawViewArc(cx, cy, r, v.shown, v.conf, v.width);
+    }
+    if (tween.arrow.shown !== null) {
+      drawArrow(cx, cy, r, tween.arrow.shown);
+    }
+    report();
+  }
+
+  let viewExpire = 0;
+  function touchView() {
+    tween.view.at = Date.now();
+    clearTimeout(viewExpire);
+    viewExpire = setTimeout(draw, VIEW_STALE_MS + 50);
+  }
+
+  // ---------------- 对 Rust 暴露的接口
+  window.gifaOverlay = (s) => {
+    if (!s || typeof s !== 'object') return;
+
+    if (s.clear) {
+      cancelAnimationFrame(tween.arrow.raf);
+      cancelAnimationFrame(tween.view.raf);
+      clearTimeout(viewExpire);
+      Object.assign(tween.arrow, { target: null, shown: null, raf: 0 });
+      Object.assign(tween.view, { target: null, shown: null, raf: 0, at: 0 });
+      draw();
+      return;
+    }
+    if (s.clearAngle) {
+      cancelAnimationFrame(tween.arrow.raf);
+      Object.assign(tween.arrow, { target: null, shown: null, raf: 0 });
+      draw();
+    }
+
+    // hold = 这一帧判据是"疑似反向"：保持原角度不动，不要跟着转
+    if (!s.hold && typeof s.arrow === 'number') {
+      setTarget('arrow', s.arrow);
+    }
+    // 视角可能是 null（这帧没识别到扇形）：**不续期**，让绿弧自然过期
+    if (typeof s.view === 'number') {
+      tween.view.conf = s.viewConf || 0;
+      tween.view.width = s.viewWidth || 0;
+      // 先续期再设目标：setTarget 首帧会同步 draw()，
+      // 若 at 还是 0 就会被"过期"判定挡掉，绿弧永远画不出来
+      touchView();
+      setTarget('view', s.view);
+    }
+  };
+
+  window.gifaPlace = (on) => {
+    placing = !!on;
+    document.body.classList.toggle('placing', placing);
+    draw();
+  };
+
+  window.addEventListener('resize', resize);
+  resize();
+})();
+</script>
+</body>
+</html>

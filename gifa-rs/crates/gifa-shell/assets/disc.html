@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GIFA disc</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden;
+               user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script>
+/* 八方向圆盘：按住 L3 弹出，右摇杆选动作。
+ *
+ * 扇区下标即角度：0 = 正东（屏幕坐标 y 向下），顺时针递增，
+ * 与 gifa-input 的 DIRECTIONS 同序：['e','se','s','sw','w','nw','n','ne']
+ *
+ * 视觉：玻璃底 + 金色高亮 + 中心提示。
+ * 只画在窗口区域内，窗口本身是 WS_EX_TRANSPARENT + 逐像素透明，点击全部穿透。
+ */
+(function () {
+  'use strict';
+
+  const SECTORS = ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'];
+  const STEP = Math.PI / 4;
+  const HALF = STEP / 2;
+
+  const INK = 'rgba(238,242,236,0.92)';
+  const INK_DIM = 'rgba(238,242,236,0.5)';
+  const GOLD = '240,180,41';
+  const GLASS = 'rgba(14,18,15,0.72)';
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+
+  let state = { highlight: '', labels: {}, hold: false, hint: '推杆选择' };
+
+  /** 扇区里的字：先按 15px 试，放不下就一档档缩到 9px */
+  function fitFont(text, maxWidth) {
+    for (let size = 15; size >= 9; size -= 1) {
+      ctx.font = `600 ${size}px "Microsoft YaHei", system-ui, sans-serif`;
+      if (ctx.measureText(text).width <= maxWidth) return size;
+    }
+    ctx.font = '600 9px "Microsoft YaHei", system-ui, sans-serif';
+    return 9;
+  }
+
+  function wedge(mid, inner, outer) {
+    ctx.beginPath();
+    ctx.arc(0, 0, outer, mid - HALF, mid + HALF);
+    ctx.arc(0, 0, inner, mid + HALF, mid - HALF, true);
+    ctx.closePath();
+  }
+
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const outer = Math.min(cx, cy) * 0.9;
+    const inner = outer * 0.34;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // 玻璃底
+    ctx.beginPath();
+    ctx.arc(0, 0, outer, 0, Math.PI * 2);
+    ctx.fillStyle = GLASS;
+    ctx.fill();
+
+    for (let i = 0; i < SECTORS.length; i += 1) {
+      const dir = SECTORS[i];
+      const mid = i * STEP;
+      const active = state.highlight === dir;
+      wedge(mid, inner, outer - (active ? 0 : 2));
+      if (active) {
+        const glow = ctx.createRadialGradient(0, 0, inner, 0, 0, outer);
+        glow.addColorStop(0, `rgba(${GOLD},0.42)`);
+        glow.addColorStop(1, `rgba(${GOLD},0.16)`);
+        ctx.fillStyle = glow;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${GOLD},0.95)`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    // 扇区文字
+    for (let i = 0; i < SECTORS.length; i += 1) {
+      const dir = SECTORS[i];
+      const mid = i * STEP;
+      const active = state.highlight === dir;
+      const text = (state.labels && state.labels[dir]) || dir;
+      const r = (inner + outer) / 2;
+      const size = fitFont(text, (outer - inner) * 0.82);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = active ? '#fff8e6' : INK_DIM;
+      ctx.fillText(text, Math.cos(mid) * r, Math.sin(mid) * r + (size >= 12 ? 0 : 1));
+    }
+
+    // 中心圆 + 提示
+    ctx.beginPath();
+    ctx.arc(0, 0, inner * 0.82, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(8,11,9,0.86)';
+    ctx.fill();
+    ctx.strokeStyle = state.highlight ? `rgba(${GOLD},0.8)` : 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '600 12px "Microsoft YaHei", system-ui, sans-serif';
+    ctx.fillStyle = state.highlight ? INK : INK_DIM;
+    const hint = state.highlight ? (state.hold ? '回中恢复' : '松杆触发') : (state.hint || '推杆选择');
+    ctx.fillText(hint, 0, 0);
+
+    ctx.restore();
+  }
+
+  window.gifaDisc = (s) => {
+    if (!s || typeof s !== 'object') return;
+    state = {
+      highlight: s.highlight || '',
+      labels: s.labels || {},
+      hold: !!s.hold,
+      hint: s.hint || '推杆选择',
+    };
+    draw();
+  };
+
+  window.addEventListener('resize', draw);
+  draw();
+})();
+</script>
+</body>
+</html>

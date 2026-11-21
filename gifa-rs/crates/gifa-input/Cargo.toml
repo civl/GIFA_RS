@@ -1,0 +1,18 @@
+[package]
+name = "gifa-input"
+version = "0.1.0"
+description = "输入设备：手柄八方向圆盘的锁存状态机（纯逻辑，可测）"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+gifa-core = { path = "../gifa-core" }
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GIFA chrome 层</title>
+<style>
+  :root { --bar: #1b1d24; --line: #2b2f3a; --fg: #e6e6e6; --dim: #8b93a3; }
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden;
+               font: 12px/1.4 "Microsoft YaHei", system-ui, sans-serif; user-select: none; }
+
+  /* 顶部标题栏：高度必须与上报的 titlebar 一致 */
+  #bar { position: fixed; left: 0; top: 0; right: 0; height: 30px; box-sizing: border-box;
+         background: var(--bar); color: var(--fg); display: flex; align-items: center; gap: 8px;
+         padding: 0 8px; border-bottom: 1px solid var(--line); cursor: default; }
+  #bar .dot { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; flex: none; }
+  #bar .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bar .spacer { flex: 1; }
+  #bar button { height: 22px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--line);
+                background: #242833; color: var(--fg); font-size: 12px; cursor: pointer; }
+  #bar button:hover { background: #2f3542; }
+
+  /* URL 条：展开时把舞台往下推 */
+  #urlbar { position: fixed; left: 0; right: 0; top: 30px; height: 40px; box-sizing: border-box;
+            background: var(--bar); border-bottom: 1px solid var(--line);
+            display: flex; align-items: center; gap: 6px; padding: 6px 8px; }
+  #urlbar.hidden { display: none; }
+  #urlbar input { flex: 1; height: 26px; border-radius: 5px; border: 1px solid var(--line);
+                  background: rgba(255,255,255,.05); color: var(--fg); padding: 0 9px;
+                  font-size: 12px; outline: none; }
+  #urlbar button { height: 26px; padding: 0 12px; border: 0; border-radius: 5px;
+                   background: #3b6cf6; color: #fff; cursor: pointer; }
+
+  /* 底部控制条 */
+  #foot { position: fixed; left: 0; bottom: 0; right: 0; height: 34px; box-sizing: border-box;
+          background: var(--bar); color: var(--dim); display: flex; align-items: center; gap: 10px;
+          padding: 0 10px; border-top: 1px solid var(--line); }
+  #foot .track { flex: 1; height: 4px; border-radius: 2px; background: #333a47; position: relative; }
+  #foot .track i { position: absolute; left: 0; top: 0; bottom: 0; width: 38%; border-radius: 2px;
+                   background: linear-gradient(90deg, #c4121d, #ff5a48); }
+  #status { color: #6f7787; font-variant-numeric: tabular-nums; }
+
+  /* 悬浮 pill：半透明压在舞台之上（验证逐像素透明） */
+  #pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: 48px;
+          width: 520px; height: 38px; box-sizing: border-box; border-radius: 19px;
+          background: rgba(16,16,16,.85); border: 1px solid rgba(255,255,255,.18);
+          color: #dfe3ea; display: flex; align-items: center; padding: 0 14px; gap: 8px; }
+  #pill .u { color: var(--dim); }
+
+  /* 右下角缩放手柄：与舞台重叠 18×18（原版 #grip 的做法） */
+  #grip { position: fixed; right: 0; bottom: 34px; width: 18px; height: 18px;
+          cursor: nwse-resize; background: transparent; }
+  #grip::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px;
+                 border-right: 2px solid rgba(255,255,255,.55);
+                 border-bottom: 2px solid rgba(255,255,255,.55); border-radius: 0 0 3px 0; }
+
+  /* 拖动中的视觉提示 */
+  body.dragging { cursor: move; }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <span class="dot"></span>
+    <span class="title">原神跟跑助手 · 外壳骨架</span>
+    <span class="spacer"></span>
+    <button id="btnUrl" title="换视频">换视频</button>
+    <button id="btnOpacity" title="切换不透明度">透明</button>
+    <button id="btnClose" title="关闭浮窗">关闭</button>
+  </div>
+
+  <div id="urlbar" class="hidden">
+    <input id="urlInput" placeholder="粘贴 B 站链接 / BV 号，回车载入" spellcheck="false">
+    <button id="btnLoad">载入</button>
+  </div>
+
+  <div id="pill">
+    <span class="u">URL</span>
+    <span>半透明叠加在舞台之上</span>
+    <span class="spacer"></span>
+    <span id="status">—</span>
+  </div>
+
+  <div id="foot">
+    <span>▶</span>
+    <span>00:12 / 08:40</span>
+    <div class="track"><i></i></div>
+    <span>1.0×</span>
+    <span>音量</span>
+  </div>
+
+  <div id="grip"></div>
+
+<script>
+  const post = (m) => { try { window.ipc.postMessage(JSON.stringify(m)); } catch (_) {} };
+  const dpr = () => window.devicePixelRatio || 1;
+  const rectPx = (el) => {
+    const r = el.getBoundingClientRect(), k = dpr();
+    return { x: Math.round(r.x * k), y: Math.round(r.y * k), w: Math.round(r.width * k), h: Math.round(r.height * k) };
+  };
+
+  const barEl = document.getElementById('bar');
+  const urlEl = document.getElementById('urlbar');
+  const footEl = document.getElementById('foot');
+  const pillEl = document.getElementById('pill');
+  const gripEl = document.getElementById('grip');
+
+  function reportLayout() {
+    post({
+      t: 'layout',
+      titlebar: Math.round(barEl.getBoundingClientRect().height * dpr()),
+      footer: Math.round(footEl.getBoundingClientRect().height * dpr()),
+      urlbar: urlEl.classList.contains('hidden') ? null : rectPx(urlEl),
+      overlay: [rectPx(pillEl), rectPx(gripEl)],
+    });
+  }
+
+  // Rust 侧把联动结果推回来，显示在 pill 里
+  window.gifaSet = (s) => {
+    document.getElementById('status').textContent =
+      `${s.w}×${s.h} · 舞台 ${s.stageW}×${s.stageH} · 区域 ${s.regions}`;
+  };
+
+  // ---- 拖动：标题栏按下（按钮除外）→ 让 Rust 走系统移动循环
+  barEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('button')) return;
+    post({ t: 'drag' });
+  });
+
+  // ---- 缩放：右下角 grip
+  gripEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    post({ t: 'resize' });
+  });
+
+  // ---- URL 条开关：改布局后必须重新上报，否则区域和舞台都不对
+  document.getElementById('btnUrl').addEventListener('click', () => {
+    urlEl.classList.toggle('hidden');
+    reportLayout();
+    if (!urlEl.classList.contains('hidden')) document.getElementById('urlInput').focus();
+  });
+
+  // ---- 不透明度：0.65 / 1.0 往返
+  let dim = false;
+  document.getElementById('btnOpacity').addEventListener('click', () => {
+    dim = !dim;
+    post({ t: 'opacity', v: dim ? 0.65 : 1.0 });
+  });
+
+  document.getElementById('btnClose').addEventListener('click', () => post({ t: 'close' }));
+
+  document.getElementById('btnLoad').addEventListener('click', () => {
+    urlEl.classList.add('hidden');
+    reportLayout();
+  });
+  document.getElementById('urlInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { urlEl.classList.add('hidden'); reportLayout(); }
+  });
+
+  // 窗口尺寸/DPI 变化时页面布局跟着变，必须重新上报
+  addEventListener('resize', reportLayout);
+  addEventListener('DOMContentLoaded', reportLayout);
+  reportLayout();
+</script>
+</body>
+</html>
