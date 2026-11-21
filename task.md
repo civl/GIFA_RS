@@ -534,16 +534,21 @@ gifa-rs/
   1. `presentation` 的 `video_only` 序列化成蛇形，agent 读 `videoOnly` 拿到 undefined → 纯视频模式静默失效
   2. 沉浸时舞台没占满客户区，视频被塞进 1.5:1 的区域出现黑边
 
-### M8 视觉原生化（二期）`19d` [P4]
+### M8 视觉原生化（二期）`19d` [P4] — 🟡 骨架已通，算法未做
 
-一期**不做**。详见 §7。拆两段，顺序不可颠倒（先有对拍基线，再动算法）。
+> **2026-11-22 补充**：按用户要求先把**链路**打通（不是二期交付）。
+> 已做：GDI 截屏 → 采样窗 → 占位检测 → 叠加层，附合成地图端到端对拍。
+> 未做：真实算法、DXGI 帧通道、黄金帧基线。详见 `gifa-rs/docs/VISION.md`。
 
-**M8a 帧通道 + 对拍工具链 `4d`**
-
-- [ ] `trait FrameSource` 定义 + `WebviewFrameSource` 实现（页面 `drawImage` → 自定义协议收 RGBA，§7.3 方案 A）
-- [ ] `gifa-vision-bench`：读帧序列 + ROI → 输出 `frame_id,angle,conf,cyans,view,valid` CSV
-- [ ] 用**一期页面 JS**（原版识别代码，一行不改）跑出基线 CSV，固化到仓库外素材目录
-- [ ] CI 判据脚本（§7.5 的四条门槛）
+**骨架（已通，非二期验收）**
+- [x] `gifa_vision::screen::capture_screen`：GDI BitBlt 截一块矩形（BGRA→RGBA）
+- [x] `SampleBox::from_roi`：ROI → 采样窗（边长 `r×2.4`，与原版采样窗同规则）
+- [x] `detect_simple`：青素质心 → 箭头角、白像素质心 → 视角角；**小地图存在性门控**（`cyan_frac≥0.0015`）
+- [x] `pipeline::start`：100ms 定时线程，采样窗由 UI 线程动态喂入（窗口移动/切布局不用重启）
+- [x] 应用接线：视频矩形 → 去黑边 → 当前布局 ROI → 屏幕坐标 → 叠加层
+- [x] 自检：`--vision-test`（真实截屏 4/4）、`--vision-synth`（合成地图 3/3，箭头 90°/视角 180°）
+- [x] 修 bug：GDI `DeleteObject` 后读 bits 的 use-after-free（单测直接 ACCESS_VIOLATION）
+- ⚠️ 明确未做：自适应阈值/最大连通块/72 格剖面/三点枚举/极坐标格/最小二乘/α-β 滤波
 
 **M8b 算法移植 `15d`** ⚠️ 二期最高风险
 

@@ -12,7 +12,8 @@ gifa-rs/
 │  ├─ IMMERSION.md              # 沉浸、比例贴合、鼠标避让
 │  ├─ OVERLAY.md                # 两路角度、补间、过期、放置模式
 │  ├─ CALIBRATION.md            # ROI 归一化、标定交互、布局 CRUD
-│  └─ SETTINGS.md               # 数据目录、原子写、防抖、旧版迁移
+│  ├─ SETTINGS.md               # 数据目录、原子写、防抖、旧版迁移
+│  └─ VISION.md                 # 识别骨架：截屏、采样窗、占位检测、门控
 ├─ crates/
 │  ├─ gifa-core/                # 纯领域：设置 / 方位布局 / 快捷键解析 / 播放状态机
 │  │  ├─ src/settings.rs        #   与原版 settings.json 同构 + 深合并 + 钳位
@@ -107,6 +108,10 @@ cargo run -p gifa-demo -- --open BV1xx411c7mD --calib-test
 
 # 设置与迁移自检（吃一份原版 settings.json）
 cargo run -p gifa-demo -- --settings-test
+
+# 识别链路自检：真实截屏 / 合成地图端到端
+cargo run -p gifa-demo -- --open BV1xx411c7mD --vision-test
+cargo run -p gifa-demo -- --vision-synth
 
 # 纯函数单测
 cargo test
@@ -254,6 +259,16 @@ Rust ◄──{t:"state", paused, currentTime, duration, bvid, part, …}── 
 布局（跳过两个 SEED 脏数据），旧目录的标定图按需搬迁且不覆盖。
 
 自检 7/7 + 10 个单测。
+
+## M8 骨架：识别链路（2026-11-22）
+
+GDI 截屏 → 采样窗（`r×2.4`）→ 占位检测（青素质心/白像素质心 + 小地图存在性门控）
+→ 叠加层。采样窗由 UI 线程动态喂入，窗口移动/切布局不用重启线程。
+
+自检：`--vision-test` 真实截屏 4/4（20 帧/2.5s，截帧 11.6ms、检测 0.1ms）；
+`--vision-synth` 合成地图 3/3（页面画青三角+白扇，从真实屏幕抓回来，箭头 90°、视角 180°）。
+
+**这不是 M8 交付**：真实算法（自适应阈值/连通块/72 格剖面/最小二乘/α-β 滤波）与黄金帧基线仍未做。
 
 ## 库分层（#2 骨架）
 

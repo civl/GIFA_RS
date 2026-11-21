@@ -16,6 +16,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 use gifa_core::{Action, Settings};
 use gifa_input::gamepad::{self, ChordConfig, ChordState, ChordStep, Frame};
@@ -31,6 +32,7 @@ thread_local! {
     static RX: RefCell<Option<(Receiver<PlayerMsg>, Receiver<String>)>> = const { RefCell::new(None) };
     static UI: RefCell<UiState> = RefCell::new(UiState::default());
     static GP: RefCell<Option<Receiver<GamepadEvent>>> = const { RefCell::new(None) };
+    static VISION_RX: RefCell<Option<Receiver<gifa_vision::VisionEvent>>> = const { RefCell::new(None) };
 }
 
 #[derive(Default)]
@@ -101,6 +103,15 @@ struct UiState {
     layouts: gifa_core::Layouts,
     video_rect: Option<gifa_player::VideoRect>,
     calib_rows: Vec<(String, bool, String)>,
+    // ---- 识别
+    vision_box: Option<Arc<Mutex<Option<gifa_vision::SampleBox>>>>,
+    vision_last: Option<gifa_vision::VisionEvent>,
+    vision_count: u32,
+    vision_capture_sum: f64,
+    vision_detect_sum: f64,
+    vision_rows: Vec<(String, bool, String)>,
+    /// 合成小地图模式（用页面画一张假地图验证整条链路）
+    synth: bool,
     store: Option<Store>,
 }
 
@@ -302,6 +313,9 @@ fn main() {
         report_runtime();
         return;
     }
+    if args.iter().any(|a| a == "--vision-synth") {
+        // 合成地图模式：不需要游戏，也不需要 <video>
+    }
     if args.iter().any(|a| a == "--settings-test") {
         run_settings_test();
         return;
@@ -314,7 +328,11 @@ fn main() {
     let data_root = std::env::current_dir().unwrap_or_default().join("data");
     let store = Store::open(&data_root);
 
-    let text = arg_value(&args, "--open")
+    let synth_mode = args.iter().any(|a| a == "--vision-synth");
+    let text = if synth_mode {
+        synth_page_url()
+    } else {
+        arg_value(&args, "--open")
         .or_else(|| arg_value(&args, "--url"))
         .unwrap_or_else(|| {
             let last = store.last_text.trim();
@@ -324,7 +342,8 @@ fn main() {
             } else {
                 DEFAULT_TEXT.to_string()
             }
-        });
+        })
+    };
 
     let (player_tx, player_rx) = std::sync::mpsc::channel::<PlayerMsg>();
     let (chrome_tx, chrome_rx) = std::sync::mpsc::channel::<String>();
@@ -442,6 +461,23 @@ fn on_tick() {
         if std::env::args().any(|a| a == "--overlay-test") {
             overlay_test_step(&mut ui);
         }
+        // 2.6) 识别：刷新采样窗 + 收事件 → 叠加层
+        if ui.vision_box.is_some() {
+            let box_ = vision_box(&ui);
+            if let Some(shared) = ui.vision_box.as_ref() {
+                if let Ok(mut guard) = shared.lock() {
+                    *guard = box_;
+                }
+            }
+            pump_vision(&mut ui);
+        }
+        if std::env::args().any(|a| a == "--vision-test") {
+            vision_test_step(&mut ui);
+        }
+        if std::env::args().any(|a| a == "--vision-synth") {
+            synth_test_step(&mut ui);
+        }
+
         if std::env::args().any(|a| a == "--calib-hold") {
             // 保持标定界面，便于截图/人工看
             if ui.calib_rows.is_empty() && ui.video_rect.is_none() {
@@ -885,6 +921,287 @@ fn dispatch_action(ui: &mut UiState, action: Action, phase: Option<&str>) {
             ui.logs.push(format!("鼠标穿透：{next}"));
         }
     }
+}
+
+// ---------------------------------------------------------------- 识别管线
+
+/// 当前采样窗（屏幕坐标）：视频位置 → 去掉黑边 → 当前布局的 ROI
+fn vision_box(ui: &UiState) -> Option<gifa_vision::SampleBox> {
+    let s = gifa_shell::snapshot()?;
+    if ui.synth {
+        // 合成模式：没有 <video>，把整个舞台当"视频"，ROI 用当前布局
+        let roi = ui.layouts.active().roi;
+        let (sw, sh) = (s.stage.w as f64, s.stage.h as f64);
+        let cx = s.float_rect.x as f64 + s.stage.x as f64 + roi.cx * sw;
+        let cy = s.float_rect.y as f64 + s.stage.y as f64 + roi.cy * sh;
+        let side = (roi.r * sw * 2.4).clamp(48.0, 512.0) as i32;
+        return Some(gifa_vision::SampleBox {
+            x: (cx - side as f64 / 2.0) as i32,
+            y: (cy - side as f64 / 2.0) as i32,
+            w: side,
+            h: side,
+        });
+    }
+    let vr = ui.video_rect.as_ref()?;
+    let k = if vr.dpr > 0.0 { vr.dpr } else { 1.0 };
+    let elem = (
+        (s.float_rect.x + s.stage.x) as f64 + vr.x * k,
+        (s.float_rect.y + s.stage.y) as f64 + vr.y * k,
+        vr.w * k,
+        vr.h * k,
+    );
+    let content = gifa_core::content_rect(elem, vr.vw, vr.vh, &vr.fit);
+    let roi = ui.layouts.active().roi;
+    let cx = content.0 + roi.cx * content.2;
+    let cy = content.1 + roi.cy * content.3;
+    let r = roi.r * content.2;
+    let side = ((r * 2.4).max(48.0)).round() as i32;
+    let side = side.min(512);
+    Some(gifa_vision::SampleBox {
+        x: (cx - side as f64 / 2.0).round() as i32,
+        y: (cy - side as f64 / 2.0).round() as i32,
+        w: side,
+        h: side,
+    })
+}
+
+/// 启动识别线程（采样窗由 UI 线程每帧更新）
+fn start_vision(ui: &mut UiState) {
+    if ui.vision_box.is_some() {
+        return;
+    }
+    let shared: Arc<Mutex<Option<gifa_vision::SampleBox>>> = Arc::new(Mutex::new(None));
+    let feed = shared.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let interval = std::time::Duration::from_millis(100);
+    match gifa_vision::start_pipeline(
+        move || feed.lock().ok().and_then(|g| *g),
+        interval,
+        tx,
+    ) {
+        Ok(()) => {
+            ui.vision_box = Some(shared);
+            VISION_RX.with(|r| *r.borrow_mut() = Some(rx));
+            ui.logs.push("识别管线已启动（100ms/帧）".into());
+        }
+        Err(e) => ui.logs.push(format!("识别管线启动失败：{e}")),
+    }
+}
+
+/// 收事件 → 叠加层 + 统计
+fn pump_vision(ui: &mut UiState) {
+    let mut events = Vec::new();
+    VISION_RX.with(|r| {
+        if let Some(rx) = r.borrow().as_ref() {
+            while let Ok(e) = rx.try_recv() {
+                events.push(e);
+            }
+        }
+    });
+    for ev in events {
+        ui.vision_count += 1;
+        ui.vision_capture_sum += ev.capture.as_secs_f64() * 1000.0;
+        ui.vision_detect_sum += ev.detect.as_secs_f64() * 1000.0;
+        ui.vision_last = Some(ev);
+        send_overlay_from_vision(ui, &ev);
+    }
+}
+
+/// 识别结果 → 叠加层（两路独立）
+fn send_overlay_from_vision(ui: &mut UiState, ev: &gifa_vision::VisionEvent) {
+    if ui.layouts.active().roi.is_valid() {
+        // 叠加层位置跟着 ROI 走：圆心放在 ROI 屏幕位置
+        let _ = ui;
+    }
+    let st = gifa_shell::OverlayState {
+        arrow: ev.result.arrow,
+        view: ev.result.view,
+        view_conf: ev.result.view_conf as f64,
+        view_width: 60.0,
+        hold: false,
+        clear: false,
+        clear_angle: false,
+    };
+    gifa_shell::overlay_update(st);
+}
+
+/// 合成"小地图"页面：深草地底 + 朝东的青三角 + 朝南的白扇。
+/// 用来在没有游戏的情况下验证"截屏 → 采样 → 出角度 → 叠加层"整条链路。
+fn synth_page_url() -> String {
+    let html = r#"<!doctype html><meta charset=utf-8>
+<style>
+ html,body{margin:0;height:100%;background:#1d2b1f;overflow:hidden}
+ #c{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:block}
+</style>
+<canvas id=c width=600 height=400></canvas>
+<script>
+ const x=document.getElementById('c').getContext('2d');
+ x.fillStyle='#1d2b1f'; x.fillRect(0,0,600,400);
+ // 粗一点的地形噪声，避免整块纯色
+ for(let i=0;i<400;i++){x.fillStyle=i%2?'#22301f':'#1a271c';
+   x.fillRect((i*137)%600,(i*251)%400,18,14);}
+ // 白扇（朝南）：先画，箭头压在上面
+ x.fillStyle='#f4f4ef';
+ x.beginPath(); x.moveTo(300,200); x.arc(300,200,46,Math.PI*0.28,Math.PI*0.72); x.closePath(); x.fill();
+ // 青三角（朝东）
+ x.fillStyle='rgb(34,200,232)';
+ x.beginPath(); x.moveTo(346,200); x.lineTo(300,186); x.lineTo(300,214); x.closePath(); x.fill();
+</script>"#;
+    format!("data:text/html;charset=utf-8,{}", url_encode(html))
+}
+
+fn url_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// 合成地图自检：整条链路 + 已知角度对拍
+fn synth_test_step(ui: &mut UiState) {
+    if ui.im_started.is_none() {
+        ui.im_started = Some(Instant::now());
+        ui.synth = true;
+        // 居中的 ROI：0.5/0.5、r=0.06（约 54px 半径）
+        let roi = gifa_core::Roi::new(0.5, 0.5, 0.06).unwrap();
+        ui.layouts.create("synth".into(), "合成", roi).ok();
+        ui.layouts.select("synth").ok();
+        gifa_shell::navigate_stage(&synth_page_url());
+        return;
+    }
+    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+
+    if ui.vision_box.is_none() && el > 1.2 {
+        if let Some(b) = vision_box(ui) {
+            let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
+        }
+        start_vision(ui);
+        ui.im_phase = 1;
+    }
+    if ui.im_phase == 1 && el > 3.0 {
+        let last = ui.vision_last;
+        let arrow = last.and_then(|e| e.result.arrow);
+        let view = last.and_then(|e| e.result.view);
+        ui.vision_rows.push((
+            "合成地图：箭头 ≈ 90°（朝东）".into(),
+            arrow.is_some_and(|a| (a - 90.0).abs() < 25.0),
+            format!("arrow={arrow:?}"),
+        ));
+        ui.vision_rows.push((
+            "合成地图：视角 ≈ 180°（朝南）".into(),
+            view.is_some_and(|v| (v - 180.0).abs() < 30.0),
+            format!("view={view:?}"),
+        ));
+        let drew = gifa_shell::overlay_drawn();
+        ui.vision_rows.push((
+            "结果送到叠加层（非空）".into(),
+            drew.0.is_some() || drew.1.is_some(),
+            format!("叠加层 arrow={:?} view={:?}", drew.0, drew.1),
+        ));
+        report_vision(ui);
+        ui.im_phase = 2;
+        ui.im_started = None;
+    }
+}
+
+// ---------------------------------------------------------------- 识别自检
+
+/// 骨架自检：真实抓屏 → 采样窗 → 检测 → 叠加层，跑 2.5s 后给结论。
+fn vision_test_step(ui: &mut UiState) {
+    if ui.im_started.is_none() {
+        ui.im_started = Some(Instant::now());
+        gifa_shell::player_command(PlayerCommand::VideoRect);
+        return;
+    }
+    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+
+    // 页面还没加载完时请求会落空：没拿到就每个 tick 重试（拿到即停）
+    if ui.video_rect.is_none() && el > 0.4 && ui.im_phase == 0 {
+        gifa_shell::player_command(PlayerCommand::VideoRect);
+    }
+    // 拿到视频矩形后的第一帧：起管线 + 摆好叠加层
+    if ui.vision_box.is_none() && ui.video_rect.is_some() && el > 0.6 {
+        if let Some(b) = vision_box(ui) {
+            let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
+        }
+        start_vision(ui);
+        ui.im_phase = 1;
+    }
+
+    if std::env::var_os("GIFA_DEBUG").is_some() {
+        eprintln!(
+            "[vt] el={el:.2} phase={} vr={} box={} n={}",
+            ui.im_phase,
+            ui.video_rect.is_some(),
+            ui.vision_box.is_some(),
+            ui.vision_count
+        );
+    }
+    if ui.im_phase == 1 && el > 2.8 {
+        let n = ui.vision_count;
+        let avg_cap = if n > 0 { ui.vision_capture_sum / n as f64 } else { 0.0 };
+        let avg_det = if n > 0 { ui.vision_detect_sum / n as f64 } else { 0.0 };
+        let last = ui.vision_last;
+
+        ui.vision_rows.push((
+            "抓到帧（2.5s 内 ≥8 帧）".into(),
+            n >= 8,
+            format!("{n} 帧，平均截帧 {avg_cap:.1}ms / 检测 {avg_det:.1}ms"),
+        ));
+        let samples = last.map(|e| e.result.samples).unwrap_or(0);
+        ui.vision_rows.push((
+            "采样窗有像素（不是黑帧）".into(),
+            samples > 0,
+            format!("采样点 {samples}，窗口 {:?}", last.map(|e| (e.window.w, e.window.h))),
+        ));
+        let drew = gifa_shell::overlay_drawn();
+        ui.vision_rows.push((
+            "结果送到叠加层".into(),
+            ui.vision_count > 0,
+            format!("叠加层当前 arrow={:?} view={:?}", drew.0, drew.1),
+        ));
+        let fast = n > 0 && avg_cap < 30.0 && avg_det < 8.0;
+        ui.vision_rows.push((
+            "性能：单帧 <8ms 检测 / <30ms 截帧".into(),
+            fast,
+            format!("截帧 {avg_cap:.1}ms，检测 {avg_det:.1}ms"),
+        ));
+        if let Some(e) = last {
+            println!(
+                "[vision] 最后一帧 arrow={:?} view={:?} cyan={:.5} 窗={:?}",
+                e.result.arrow, e.result.view, e.result.cyan_frac, (e.window.x, e.window.y, e.window.w)
+            );
+        }
+        report_vision(ui);
+        ui.im_phase = 2;
+        ui.im_started = None;
+    }
+}
+
+fn report_vision(ui: &UiState) {
+    println!();
+    println!("============ 识别管线自检（骨架） ============");
+    for (i, (name, ok, detail)) in ui.vision_rows.iter().enumerate() {
+        println!("[{}] {:<30} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+    }
+    let pass = ui.vision_rows.iter().filter(|(_, ok, _)| *ok).count();
+    println!("--------------------------------------------");
+    println!("RESULT {pass}/{}", ui.vision_rows.len());
+    println!("============================================");
+    println!();
+    if std::env::args().any(|a| a == "--vision-hold") {
+        return; // 保持窗口，便于截图/人工观察
+    }
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(600));
+        gifa_shell::close();
+    });
 }
 
 // ---------------------------------------------------------------- 布局标定

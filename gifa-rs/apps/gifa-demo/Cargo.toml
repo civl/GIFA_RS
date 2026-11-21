@@ -11,5 +11,6 @@ gifa-core = { path = "../../crates/gifa-core" }
 gifa-input = { path = "../../crates/gifa-input" }
 gifa-player = { path = "../../crates/gifa-player" }
 gifa-store = { path = "../../crates/gifa-store" }
+gifa-vision = { path = "../../crates/gifa-vision" }
 gifa-shell = { path = "../../crates/gifa-shell" }
 serde_json = "1"

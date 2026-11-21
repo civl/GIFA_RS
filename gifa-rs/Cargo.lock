@@ -569,6 +569,7 @@ dependencies = [
  "gifa-player",
  "gifa-shell",
  "gifa-store",
+ "gifa-vision",
  "serde_json",
 ]
 
@@ -612,6 +613,9 @@ dependencies = [
 [[package]]
 name = "gifa-vision"
 version = "0.1.0"
+dependencies = [
+ "windows",
+]
 
 [[package]]
 name = "gio"

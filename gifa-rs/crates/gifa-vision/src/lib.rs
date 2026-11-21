@@ -9,10 +9,16 @@
 //! `webview-preload.js`，凭理解先写一版反而会把对拍基线搞乱。
 
 pub mod color;
+pub mod detect;
+pub mod pipeline;
 pub mod frame;
 pub mod result;
+pub mod screen;
 
+pub use detect::{detect_simple, Detect, Origin, SampleBox};
 pub use frame::{Frame, FrameSource, Roi};
+pub use pipeline::{start as start_pipeline, VisionEvent};
+pub use screen::capture_screen;
 pub use result::{Arrow, Bearing, Cone};
 
 /// 二期移植的参数（照抄原版常量，集中放这里便于对拍时逐个核对）
