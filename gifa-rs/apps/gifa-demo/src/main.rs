@@ -134,6 +134,8 @@ struct UiState {
     capturing: bool,
     /// 自检用：输入态上报时见过的值（复位后仍能断言）
     typing_seen: bool,
+    /// 上次记进历史的 (bvid, 分P)：用来发现"换了视频/换了 P"
+    history_key: Option<(String, i32)>,
     /// 数据目录（startup.log 写在这下面）
     data_root: Option<std::path::PathBuf>,
     /// 启动时刻（用来跳过启动期间的 bounds 抖动）
@@ -827,6 +829,7 @@ fn resolve(text: &str) -> String {
 
 fn on_tick() {
     let mut close_after_check = false;
+    let mut fav_before_n = 0usize;
 
     UI.with(|ui| {
         let mut ui = ui.borrow_mut();
@@ -859,6 +862,32 @@ fn on_tick() {
         if std::env::args().any(|a| a == "--overlay-test") {
             overlay_test_step(&mut ui);
         }
+        /* 自动记历史：视频怎么打开的都要记（--open / 续播 / 自动连播都绕过 load 消息） */
+        let auto_hist = ui
+            .state
+            .as_ref()
+            .filter(|st| !st.bvid.is_empty())
+            .map(|st| (st.bvid.clone(), st.part.max(1), st.title.clone()));
+        if let Some((bvid, part, title)) = auto_hist {
+            {
+                let key = (bvid, part);
+                if ui.history_key.as_ref() != Some(&key) {
+                    ui.history_key = Some(key.clone());
+                    if let Some(store) = ui.store.as_mut() {
+                        /* 直接 push：它自带去重 + 挪到最前。
+                         * 顺带把 load 消息记的那条（当时还没有标题）补成现在的标题。 */
+                        store.push_history(gifa_core::RecentEntry::new(
+                            &key.0,
+                            title,
+                            key.1.max(1),
+                            now_ms(),
+                        ));
+                        store.save();
+                    }
+                }
+            }
+        }
+
         /* 记住窗口位置/尺寸：用户拖动或拉边之后写回设置，下次启动原样恢复。
          * 沉浸模式会临时改 bounds（按视频比例收窗口），那不算用户的意图，跳过。 */
         // 启动后前 2 秒的 bounds 变化是程序自己摆的（比例纠正/mode 恢复），别记
@@ -1096,20 +1125,39 @@ fn on_tick() {
         /* --fav-test：走真实链路验证收藏 —— 页面 post({t:'favorite-toggle'}) → Rust 落盘
          * → 状态回推 → 页面星标变实心。 */
         if std::env::args().any(|a| a == "--fav-test") {
-            if ui.ticks == 14 {
-                gifa_shell::eval_chrome(
-                    "post({t:'favorite-toggle', text:'BV1xx411c7mD', title:'字幕君交流场所', part:1})",
-                );
-            }
-            if ui.ticks == 22 {
-                let n = ui.store.as_ref().map(|s| s.favorites.len()).unwrap_or(0);
-                let on = ui
-                    .store
-                    .as_ref()
-                    .map(|s| s.is_favorite("BV1xx411c7mD", 1))
-                    .unwrap_or(false);
-                println!("[fav-test] favorites={n} 命中={on} → {}", if on { "PASS" } else { "FAIL" });
-                println!("RESULT {}/1", usize::from(on));
+            /* 等页面真的报上 bvid 再点（不同机器/网络下就绪时间差很多，
+             * 固定 tick 会偶发"点了但还没开始播放"）。 */
+            match ui.im_phase {
+                0 if ui.ticks >= 10
+                    && ui
+                        .state
+                        .as_ref()
+                        .map(|s| !s.bvid.is_empty())
+                        .unwrap_or(false) =>
+                {
+                    /* 先清空收藏再点：这个自检要能反复跑，不能依赖上一次留下的状态
+                     * （之前就被"上一次的收藏还在"搞出过交替 PASS/FAIL）。 */
+                    if let Some(store) = ui.store.as_mut() {
+                        store.favorites.clear();
+                        store.save();
+                    }
+                    fav_before_n = 0;
+                    // 点真实的星标按钮（不开 URL 条、输入框为空）—— 用户报的就是这个场景
+                    gifa_shell::eval_chrome("document.getElementById('btnStar').click()");
+                    ui.im_phase = 1;
+                    ui.im_started = Some(Instant::now());
+                }
+                1 if ui.im_started.is_some_and(|t| t.elapsed().as_millis() > 800) => {
+                    let n = ui.store.as_ref().map(|s| s.favorites.len()).unwrap_or(0);
+                    let ok = n != fav_before_n; // 星标是开关：条数必须变
+                    println!(
+                        "[fav-test] 点击前 {fav_before_n} 条 → 点击后 {n} 条 → {}",
+                        if ok { "PASS" } else { "FAIL" }
+                    );
+                    println!("RESULT {}/1", usize::from(ok));
+                    ui.im_phase = 2;
+                }
+                _ => {}
             }
         }
 
@@ -3652,7 +3700,8 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
                 .as_ref()
                 .map(|s| s.title.clone())
                 .unwrap_or_default();
-            let part = ui.store.as_ref().map(|s| s.last_part).unwrap_or(1);
+            // 分 P 要取**当前正在播的**，不能用 last_part（那是上次保存的值，可能还没跟上）
+            let part = ui.state.as_ref().map(|s| s.part).unwrap_or(1).max(1);
             let entry = gifa_core::RecentEntry::new(text, title, part, now_ms());
             if let Some(store) = ui.store.as_mut() {
                 let on = store.toggle_favorite(entry);

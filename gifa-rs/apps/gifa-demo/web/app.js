@@ -277,9 +277,13 @@ $('hkClose').addEventListener('click', () => {
 });
 
 /* ---------------- 历史 / 收藏 ---------------- */
+/* 收藏的目标：**优先当前正在播放的视频**（星标的提示就是"收藏当前视频"）；
+ * 没在播放时才退回输入框里那串。 */
 function currentTarget() {
+  const playing = (state.v.bvid || '').trim();
+  const typed = ($('urlInput').value || '').trim();
   return {
-    text: ($('urlInput').value || '').trim() || (state.v.bvid || ''),
+    text: playing || typed,
     title: state.v.title || '',
     part: state.v.part || 1,
   };
@@ -340,6 +344,7 @@ function applyState(s) {
   v.muted = !!s.muted;
   v.hasVideo = !!s.hasVideo;
   v.pages = Array.isArray(s.pages) ? s.pages : [];
+  v.bvid = s.bvid || '';
   if (Array.isArray(s.history)) historyList = s.history;
   if (Array.isArray(s.favorites)) favoritesList = s.favorites;
   if (urlListMode) renderUrlList();

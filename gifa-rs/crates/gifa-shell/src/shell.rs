@@ -2124,10 +2124,20 @@ fn on_chrome_message(body: &str) {
         let _ = tx.send(body.to_string());
     }
 
+    /* 解析失败有两种情况：
+     *   · `t` 不是外壳认的（load / typing / bind …）—— 那是应用层的东西，静默放过
+     *   · `t` 是外壳的但字段不对 —— 这才是真的错，要报出来 */
     let msg: ChromeMsg = match serde_json::from_str(body) {
         Ok(m) => m,
         Err(e) => {
-            crate::shell_log!("外壳未处理的消息 {body:?}: {e}");
+            let ours = ["layout", "drag", "resize", "opacity", "close"];
+            let t = serde_json::from_str::<serde_json::Value>(body)
+                .ok()
+                .and_then(|v| v.get("t").and_then(|x| x.as_str()).map(str::to_string))
+                .unwrap_or_default();
+            if ours.contains(&t.as_str()) {
+                crate::shell_log!("外壳消息格式不对 {body:?}: {e}");
+            }
             return;
         }
     };
