@@ -115,6 +115,11 @@ struct UiState {
     /// 浮窗被盖住过（只用日志，不参与逻辑）
     covered_logged: bool,
     covered_detail: String,
+    /// 视觉冒烟：跑 N 秒后出结论（M13）
+    bearing_since: Option<Instant>,
+    bearing_secs: f64,
+    bearing_angles: std::collections::BTreeSet<i64>,
+    bearing_rows: Vec<(String, bool, String)>,
     /// 实战模式：热键管理器 + 日志文件
     hotkeys: Option<gifa_input::hotkey::Hotkeys>,
     live_log: Option<std::fs::File>,
@@ -336,6 +341,7 @@ fn chrome_page() -> String {
 }
 
 fn main() {
+    let boot = Instant::now();
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version") {
         println!("GIFA {}（构建 {}）", env!("CARGO_PKG_VERSION"), env!("GIFA_MANIFEST_LEVEL"));
@@ -454,6 +460,14 @@ fn main() {
             gifa_shell::eval_chrome("document.getElementById('btnLogin').click()");
         });
     }
+    if let Some(secs) = arg_value(&args, "--bearing") {
+        let secs = secs.parse::<f64>().unwrap_or(30.0).clamp(3.0, 120.0);
+        UI.with(|ui| {
+            let mut ui = ui.borrow_mut();
+            ui.bearing_secs = secs;
+            ui.logs.push(format!("视觉冒烟 {secs}s"));
+        });
+    }
     if live {
         UI.with(|ui| {
             let mut ui = ui.borrow_mut();
@@ -461,6 +475,7 @@ fn main() {
         });
     }
 
+    println!("[perf] 窗口就绪 {}ms", boot.elapsed().as_millis());
     gifa_shell::start_ticks(250);
     gifa_shell::run();
 
@@ -573,6 +588,9 @@ fn on_tick() {
         }
         if std::env::args().any(|a| a == "--live") {
             live_step(&mut ui);
+        }
+        if ui.bearing_secs > 0.0 {
+            bearing_step(&mut ui);
         }
         if std::env::args().any(|a| a == "--drag-test-live") {
             drag_test_step(&mut ui);
@@ -1106,6 +1124,108 @@ fn live_report(ui: &mut UiState) {
             if fg_full { "（疑似独占全屏）" } else { "" }
         ),
     );
+}
+
+// ---------------------------------------------------------------- 视觉冒烟（M13）
+
+/// 跑 N 秒识别，出四条结论并写 `data/startup.log`。
+/// 一期只做冒烟：有角度上报、没有异常、性能达标；golden-frame 全量对拍属二期。
+fn bearing_step(ui: &mut UiState) {
+    if ui.bearing_since.is_none() {
+        ui.bearing_since = Some(Instant::now());
+        gifa_shell::player_command(PlayerCommand::VideoRect);
+        return;
+    }
+    let el = ui.bearing_since.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+
+    if ui.vision_box.is_none() && ui.video_rect.is_some() && el > 0.8 {
+        if let Some(b) = vision_box(ui) {
+            let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
+        }
+        start_vision(ui);
+    }
+    if ui.vision_box.is_none() && ui.video_rect.is_none() && el < 9.0 {
+        gifa_shell::player_command(PlayerCommand::VideoRect);
+    }
+
+    if let Some(ev) = ui.vision_last {
+        if let Some(a) = ev.result.arrow {
+            ui.bearing_angles.insert(a.round() as i64);
+        }
+        if let Some(v) = ev.result.view {
+            ui.bearing_angles.insert(1000 + v.round() as i64);
+        }
+    }
+
+    if el < ui.bearing_secs {
+        return;
+    }
+
+    let frames = ui.vision_count;
+    let cap = if frames > 0 { ui.vision_capture_sum / frames as f64 } else { 0.0 };
+    let det = if frames > 0 { ui.vision_detect_sum / frames as f64 } else { 0.0 };
+    let angles = ui.bearing_angles.len();
+    let cyan = ui.vision_last.map(|e| e.result.cyan_frac).unwrap_or(0.0);
+
+    ui.bearing_rows.push((
+        "抓到帧".into(),
+        frames as f64 >= ui.bearing_secs * 3.0,
+        format!("{frames} 帧（{:.1}s）", ui.bearing_secs),
+    ));
+    ui.bearing_rows.push((
+        "截帧 <30ms / 检测 <8ms".into(),
+        cap < 30.0 && det < 8.0,
+        format!("截帧 {cap:.1}ms / 检测 {det:.1}ms"),
+    ));
+    // 有小地图才有角度；没有小地图时门控必须静默（这也是一种"行为正确"）
+    let has_map = cyan > 0.0015;
+    ui.bearing_rows.push((
+        if has_map { "有角度上报".into() } else { "无小地图时门控静默".into() },
+        if has_map { angles > 0 } else { angles == 0 },
+        format!("cyan={cyan:.4} 角度样本={angles}"),
+    ));
+    ui.bearing_rows.push((
+        "无遮挡暂停".into(),
+        !ui.covered_logged,
+        if ui.covered_logged {
+            "浮窗曾被盖住（识别暂停过）".to_string()
+        } else {
+            "全程未被遮挡".to_string()
+        },
+    ));
+
+    println!();
+    println!("============ 视觉冒烟 ============");
+    for (i, (name, ok, detail)) in ui.bearing_rows.iter().enumerate() {
+        println!("[{}] {:<22} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+    }
+    let pass = ui.bearing_rows.iter().filter(|(_, ok, _)| *ok).count();
+    println!("----------------------------------");
+    println!("RESULT {pass}/{}", ui.bearing_rows.len());
+    println!("==================================");
+
+    // startup.log：给脚本读
+    let dir = std::env::current_dir().unwrap_or_default().join("data");
+    let _ = std::fs::create_dir_all(&dir);
+    let mut text = String::new();
+    for (i, (name, ok, detail)) in ui.bearing_rows.iter().enumerate() {
+        text.push_str(&format!(
+            "[{}] {} {}  {}\n",
+            i + 1,
+            if *ok { "PASS" } else { "FAIL" },
+            name,
+            detail
+        ));
+    }
+    text.push_str(&format!("RESULT {pass}/{}\n", ui.bearing_rows.len()));
+    let _ = std::fs::write(dir.join("startup.log"), text);
+    println!();
+
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(400));
+        gifa_shell::close();
+    });
+    ui.bearing_secs = 0.0;
 }
 
 // ---------------------------------------------------------------- 实战模式

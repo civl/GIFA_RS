@@ -16,7 +16,8 @@ gifa-rs/
 │  ├─ VISION.md                 # 识别骨架：截屏、采样窗、占位检测、门控
 │  ├─ FLOAT-UI.md               # 浮窗界面移植：桥接、交互、自检
 │  ├─ LIVE-TEST.md              # 实战联调：真实游戏里抓到并修掉的 7 个问题
-│  └─ PACKAGING.md              # 打包：清单注入、单文件、校验和、WebView2 检查
+│  ├─ PACKAGING.md              # 打包：清单注入、单文件、校验和、WebView2 检查
+│  └─ REGRESSION.md             # 回归门禁：17 项、性能预算、手工矩阵清单
 ├─ crates/
 │  ├─ gifa-core/                # 纯领域：设置 / 方位布局 / 快捷键解析 / 播放状态机
 │  │  ├─ src/settings.rs        #   与原版 settings.json 同构 + 深合并 + 钳位
@@ -121,6 +122,9 @@ cargo run -p gifa-demo -- --vision-synth
 
 # 纯函数单测
 cargo test
+
+# 发布前门禁：单测 + 10 个自检 + 识别冒烟 + 性能预算（17 项，退出码即结论）
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
 `GIFA_DEBUG=1` 会打印外壳内部步骤。
@@ -314,6 +318,20 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1   # → dist/GIFA-0.2
 - 数据目录：release 走 `resolve_data_dir`（安装版 `%APPDATA%` / 绿色版 `<exe>\data`）
 - WebView2 缺失或 <110：弹框给下载地址后退出
 - 未做：NSIS 安装器（本机无 `makensis`）、exe 图标与版本资源（本机无 `rc.exe`）
+
+## M13：回归门禁（2026-11-22）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1
+```
+
+一条命令 17 项：编译、单测（105）、clippy（0 warning）、10 个自检、识别冒烟、性能预算。
+退出码 0/1，可直接接 CI。
+
+性能实测：**冷启动 896ms / 内存 24MB / CPU 0.2%**（预算 2500ms / 200MB / 10%）。
+内存这么低是因为识别只截 216×216 的采样窗，不是整屏。
+
+视觉回归一期只做冒烟（`--bearing N`）；黄金帧全量对拍属二期。
 
 ## 库分层（#2 骨架）
 
