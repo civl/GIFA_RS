@@ -24,6 +24,8 @@ use crate::screen;
 #[derive(Debug, Clone, Copy)]
 pub struct VisionEvent {
     pub seq: u64,
+    /// 采集时刻（毫秒，用于 α-β 滤波的 dt）
+    pub at_ms: f64,
     /// 截帧耗时
     pub capture: Duration,
     /// 检测耗时
@@ -98,9 +100,14 @@ where
                 }
                 let t2 = Instant::now();
                 seq += 1;
+                let at_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as f64)
+                    .unwrap_or(0.0);
                 if tx
                     .send(VisionEvent {
                         seq,
+                        at_ms,
                         capture: t1 - t0,
                         detect: t2 - t1,
                         window: win,

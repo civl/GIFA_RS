@@ -115,6 +115,10 @@ struct UiState {
     /// 浮窗被盖住过（只用日志，不参与逻辑）
     covered_logged: bool,
     covered_detail: String,
+    /// α-β 滤波（行进方向）
+    ab: gifa_vision::AbFilter,
+    /// 视角状态机
+    view: gifa_vision::ViewState,
     /// 叠加层当前圆心（跟着采样窗走）
     overlay_center: Option<(i32, i32)>,
     /// `--seek <秒>`：视频就绪后跳转一次
@@ -530,7 +534,7 @@ fn main() {
                         println!("[vision] 逐帧 CSV → {}", path.display());
                         let _ = &mut ui.vision_csv.as_mut().map(|f| {
                             use std::io::Write;
-                            let _ = writeln!(f, "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs");
+                            let _ = writeln!(f, "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF");
                         });
                     }
                     Err(e) => println!("[vision] CSV 创建失败：{e}"),
@@ -1794,12 +1798,14 @@ fn pump_vision(ui: &mut UiState) {
         }
     });
     for ev in events {
+        // 时序层：先过滤，再上屏 + 记账
+        let (arrow_out, view_deg, _view_conf, _view_w) = filter_event(ui, &ev);
         if let Some(f) = ui.vision_csv.as_mut() {
             use std::io::Write;
-            // seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs
+            // seq,cyan,arrow(raw),arrowConf,view(raw),viewConf,capMs,detMs,arrowF,viewF
             let _ = writeln!(
                 f,
-                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2}",
+                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2},{:?},{:?}",
                 ev.seq,
                 ev.result.cyan_frac,
                 ev.result.arrow,
@@ -1807,34 +1813,56 @@ fn pump_vision(ui: &mut UiState) {
                 ev.result.view,
                 ev.result.view_conf,
                 ev.capture.as_secs_f64() * 1000.0,
-                ev.detect.as_secs_f64() * 1000.0
+                ev.detect.as_secs_f64() * 1000.0,
+                arrow_out,
+                view_deg
             );
         }
         ui.vision_count += 1;
         ui.vision_capture_sum += ev.capture.as_secs_f64() * 1000.0;
         ui.vision_detect_sum += ev.detect.as_secs_f64() * 1000.0;
         ui.vision_last = Some(ev);
-        send_overlay_from_vision(ui, &ev);
+        let (arrow_out, view_deg, view_conf, view_w) = filter_event(ui, &ev);
+        send_overlay(arrow_out, view_deg, view_conf, view_w);
     }
 }
 
 /// 识别结果 → 叠加层（两路独立）
-fn send_overlay_from_vision(ui: &mut UiState, ev: &gifa_vision::VisionEvent) {
-    if ui.layouts.active().roi.is_valid() {
-        // 叠加层位置跟着 ROI 走：圆心放在 ROI 屏幕位置
-        let _ = ui;
-    }
+/// 一帧原始结果 → 时序层过滤后的（箭头, 视角, 视角置信度, 张角）
+fn filter_event(
+    ui: &mut UiState,
+    ev: &gifa_vision::VisionEvent,
+) -> (Option<f64>, Option<f64>, f64, f64) {
+    let cone = ev.result.view.map(|v| gifa_vision::ConeObs {
+        deg: v,
+        valid: true,
+        conf: ev.result.view_conf as f64,
+        width: 90.0,
+    });
+    let view_out = ui.view.update(cone, ev.at_ms, ev.result.map_present);
+    let (view_deg, view_conf, _src, view_w) = gifa_vision::view_payload(view_out, 90.0);
+
+    // 箭头：门限挡下的帧不上报（叠加层保持上一次的角度）
+    let arrow_out = ev.result.arrow.and_then(|a| {
+        ui.ab
+            .smooth(a, ev.result.arrow_conf as f64, ev.at_ms, view_deg.unwrap_or(-1.0), view_conf)
+    });
+    (arrow_out, view_deg, view_conf, view_w)
+}
+
+fn send_overlay(arrow: Option<f64>, view: Option<f64>, view_conf: f64, view_w: f64) {
     let st = gifa_shell::OverlayState {
-        arrow: ev.result.arrow,
-        view: ev.result.view,
-        view_conf: ev.result.view_conf as f64,
-        view_width: 60.0,
+        arrow,
+        view,
+        view_conf,
+        view_width: if view_w > 0.0 { view_w } else { 60.0 },
         hold: false,
         clear: false,
         clear_angle: false,
     };
     gifa_shell::overlay_update(st);
 }
+
 
 /// 合成"小地图"页面：深草地底 + 朝东的青三角 + 朝南的白扇。
 /// 用来在没有游戏的情况下验证"截屏 → 采样 → 出角度 → 叠加层"整条链路。

@@ -1,0 +1,3600 @@
+{
+ "steps": [
+  {
+   "now": 90,
+   "obs": 355.0079985163193,
+   "conf": 0.9595132812879779,
+   "coneDeg": 354.116362286293,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 201,
+   "obs": 352.5909014902056,
+   "conf": 0.8847105501649694,
+   "coneDeg": 346.82512640413483,
+   "coneConf": 0.7897248507220589,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 309,
+   "obs": 353.5463295780462,
+   "conf": 0.9787438705281224,
+   "coneDeg": 357.3835891209038,
+   "coneConf": 0.5960269054621521,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 418,
+   "obs": 352.6089110736755,
+   "conf": 0.6198866545967494,
+   "coneDeg": 358.6107175947657,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 520,
+   "obs": 344.3919141672998,
+   "conf": 0.8078429443197891,
+   "coneDeg": 335.9511541016286,
+   "coneConf": 0.8458286577476721,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 622,
+   "obs": 343.7764359947239,
+   "conf": 0.8502679380123197,
+   "coneDeg": 345.96379450242114,
+   "coneConf": 0.4128745949391449,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 749,
+   "obs": 348.0586201872346,
+   "conf": 0.6992978564578337,
+   "coneDeg": 348.22560051833864,
+   "coneConf": 0.8329955061508798,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 856,
+   "obs": 344.20731473183423,
+   "conf": 0.7844543557927139,
+   "coneDeg": 341.00821173447366,
+   "coneConf": 0.9479499284056829,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 975,
+   "obs": 337.99137830105406,
+   "conf": 0.71120208512554,
+   "coneDeg": 344.8226094769366,
+   "coneConf": 0.4232695922775356,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1069,
+   "obs": 339.08002204636114,
+   "conf": 0.7911244681433599,
+   "coneDeg": 335.5780523441681,
+   "coneConf": 0.9090016096618496,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1191,
+   "obs": 337.35408888951747,
+   "conf": 0.7877244840696744,
+   "coneDeg": 338.826949275757,
+   "coneConf": 0.9442006600890775,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1296,
+   "obs": 337.17827032743446,
+   "conf": 0.8278504491266447,
+   "coneDeg": 331.84567007651685,
+   "coneConf": 0.7051711793302491,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1421,
+   "obs": 336.3842607241553,
+   "conf": 0.8787467976633336,
+   "coneDeg": 328.3012934830741,
+   "coneConf": 0.4974595465458602,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1546,
+   "obs": 334.714849109695,
+   "conf": 0.5907298633690761,
+   "coneDeg": 340.2542927018959,
+   "coneConf": 0.6915962717709123,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1644,
+   "obs": 336.47894847753446,
+   "conf": 0.855488660886299,
+   "coneDeg": 348.2471584492008,
+   "coneConf": 0.30258818308417407,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1760,
+   "obs": 330.1675625767484,
+   "conf": 0.7800106663559588,
+   "coneDeg": 342.22895950736233,
+   "coneConf": 0.5131606149285008,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1863,
+   "obs": 335.78069021990086,
+   "conf": 0.8761325994101663,
+   "coneDeg": 336.06584077516254,
+   "coneConf": 0.5407495946485432,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 1992,
+   "obs": 340.6151670649683,
+   "conf": 0.7657162038878809,
+   "coneDeg": 338.38745880787906,
+   "coneConf": 0.5482440306684571,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 2119,
+   "obs": 340.2634449217617,
+   "conf": 0.28973282042186077,
+   "coneDeg": 332.32385752078244,
+   "coneConf": 0.3912107398480202,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 2233,
+   "obs": 340.11444960234553,
+   "conf": 0.7567547515166819,
+   "coneDeg": 337.6176782286767,
+   "coneConf": 0.7441213083090543,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 2327,
+   "obs": 338.59450404895335,
+   "conf": 0.5505506605493256,
+   "coneDeg": 345.5916009204443,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 2426,
+   "obs": 342.23825443052647,
+   "conf": 0.20133311026760684,
+   "coneDeg": 336.03379837191517,
+   "coneConf": 0.8391857676997747,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 2524,
+   "obs": 337.80692182453504,
+   "conf": 0.7208777877550754,
+   "coneDeg": 341.77990017500224,
+   "coneConf": 0.3828758371721198,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 2617,
+   "obs": 337.92073980088355,
+   "conf": 0.5840608078716465,
+   "coneDeg": 343.9862279095654,
+   "coneConf": 0.4871847543835604,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 2728,
+   "obs": 337.80540246768055,
+   "conf": 0.8846827482303332,
+   "coneDeg": 339.36780437719256,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 2857,
+   "obs": 330.840241123885,
+   "conf": 0.9403912908142413,
+   "coneDeg": 329.83905719030633,
+   "coneConf": 0.7137281357575506,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 2963,
+   "obs": 329.46079823106083,
+   "conf": 0.8804241623334643,
+   "coneDeg": 324.42443271084323,
+   "coneConf": 0.5937307101659781,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3068,
+   "obs": 333.9925958800577,
+   "conf": 0.9944593624082533,
+   "coneDeg": 329.6953845163098,
+   "coneConf": 0.52696752201928,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3185,
+   "obs": 332.57335870609927,
+   "conf": 0.9249854659370579,
+   "coneDeg": 337.37306848666003,
+   "coneConf": 0.7977935442230183,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3312,
+   "obs": 329.04487476359236,
+   "conf": 0.855375447358325,
+   "coneDeg": 339.30250372209184,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 3406,
+   "obs": 334.87439074084955,
+   "conf": 0.6318977858479828,
+   "coneDeg": 337.75025660771644,
+   "coneConf": 0.9308799437784776,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3501,
+   "obs": 328.56338962809264,
+   "conf": 0.7006428037538759,
+   "coneDeg": 329.00235182023664,
+   "coneConf": 0.784873124697449,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3614,
+   "obs": 328.2011171302761,
+   "conf": 0.6283165288689352,
+   "coneDeg": 319.16830299495916,
+   "coneConf": 0.6640479984609522,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3718,
+   "obs": 322.24015059723524,
+   "conf": 0.3894806086526906,
+   "coneDeg": 319.5900109665446,
+   "coneConf": 0.9248875185672396,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3840,
+   "obs": 326.4607341702705,
+   "conf": 0.9436440232893555,
+   "coneDeg": 337.0548150579109,
+   "coneConf": 0.37126768496149865,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 3936,
+   "obs": 324.24368641927003,
+   "conf": 0.6782245390182884,
+   "coneDeg": 320.92112826996527,
+   "coneConf": 0.8918400358156859,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4043,
+   "obs": 320.6242698467395,
+   "conf": 0.757058562083882,
+   "coneDeg": 320.19495757021843,
+   "coneConf": 0.44161384036802076,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4164,
+   "obs": 327.3765845206515,
+   "conf": 0.701922387083043,
+   "coneDeg": 321.12140750678327,
+   "coneConf": 0.9233949996352651,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4284,
+   "obs": 319.8428075878983,
+   "conf": 0.7626837394462628,
+   "coneDeg": 316.33580327134973,
+   "coneConf": 0.8172782321966434,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4391,
+   "obs": 326.6116600920476,
+   "conf": 0.9162275564545365,
+   "coneDeg": 334.8507512530432,
+   "coneConf": 0.4538892629216167,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4497,
+   "obs": 322.9078112453941,
+   "conf": 0.6810067684461845,
+   "coneDeg": 319.6291370567935,
+   "coneConf": 0.33137701007802434,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4603,
+   "obs": 324.4422202476867,
+   "conf": 0.6472180804231247,
+   "coneDeg": 331.4930610976867,
+   "coneConf": 0.8761557727763791,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4730,
+   "obs": 322.47341556788285,
+   "conf": 0.7726027529040824,
+   "coneDeg": 330.11871159684824,
+   "coneConf": 0.8473974180983839,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4845,
+   "obs": 324.8297117505758,
+   "conf": 0.8438723832820245,
+   "coneDeg": 314.86717516110923,
+   "coneConf": 0.6852735693765044,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 4955,
+   "obs": 317.6423637039593,
+   "conf": 0.8537596871619485,
+   "coneDeg": 316.2011848278813,
+   "coneConf": 0.30294779317987797,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5075,
+   "obs": 316.5396585086221,
+   "conf": 0.8436942795742524,
+   "coneDeg": 320.43780559451284,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 5171,
+   "obs": 141.4188796334015,
+   "conf": 0.8322470109984854,
+   "coneDeg": 322.55175852276216,
+   "coneConf": 0.5554442188365953,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5269,
+   "obs": 320.26832743065177,
+   "conf": 0.5560148883974215,
+   "coneDeg": 313.1379381267211,
+   "coneConf": 0.969517642042953,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5377,
+   "obs": 329.8180564257359,
+   "conf": 0.6025679794611801,
+   "coneDeg": 331.32086173056655,
+   "coneConf": 0.3000905068591448,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5485,
+   "obs": 152.32032658423316,
+   "conf": 0.7418534315055827,
+   "coneDeg": 338.31303633477387,
+   "coneConf": 0.7919418283952264,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5582,
+   "obs": 337.08409190878376,
+   "conf": 0.6383771076422132,
+   "coneDeg": 333.8615682529896,
+   "coneConf": 0.6602790876199209,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5684,
+   "obs": 335.78920941306035,
+   "conf": 0.9770824932905573,
+   "coneDeg": 324.85534083909715,
+   "coneConf": 0.9444491704563724,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5786,
+   "obs": 339.85533561484317,
+   "conf": 0.5673546017537254,
+   "coneDeg": 337.36187972439507,
+   "coneConf": 0.6803993041581472,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 5876,
+   "obs": 335.61551050995854,
+   "conf": 0.6751488814771057,
+   "coneDeg": 333.84390553269645,
+   "coneConf": 0.6918879956919439,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6002,
+   "obs": 335.04442906846407,
+   "conf": 0.24075144558231149,
+   "coneDeg": 333.1741748454922,
+   "coneConf": 0.6909175505142,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6103,
+   "obs": 336.33570465104117,
+   "conf": 0.6684785213364471,
+   "coneDeg": 342.29555609736053,
+   "coneConf": 0.49629145588173795,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6204,
+   "obs": 330.26341839443535,
+   "conf": 0.8909331427516727,
+   "coneDeg": 328.98467738949375,
+   "coneConf": 0.7367040650306045,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6322,
+   "obs": 329.41283038594156,
+   "conf": 0.801057962177102,
+   "coneDeg": 320.55131002761254,
+   "coneConf": 0.3517532704751364,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6450,
+   "obs": 325.2625618680063,
+   "conf": 0.5662133808052665,
+   "coneDeg": 326.7647818929437,
+   "coneConf": 0.8356695336838413,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6579,
+   "obs": 326.90398890895426,
+   "conf": 0.5905426367978898,
+   "coneDeg": 336.05978798821127,
+   "coneConf": 0.4855580712402142,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6686,
+   "obs": 326.1493966917393,
+   "conf": 0.9920225864141301,
+   "coneDeg": 334.32813848888725,
+   "coneConf": 0.5933910437844208,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6804,
+   "obs": 322.1010713165399,
+   "conf": 0.9951394851191759,
+   "coneDeg": 325.0464442947525,
+   "coneConf": 0.4817497423574677,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 6920,
+   "obs": 315.93132909641895,
+   "conf": 0.9391897693018405,
+   "coneDeg": 321.4897400749594,
+   "coneConf": 0.9833167767113347,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7022,
+   "obs": 318.623483356001,
+   "conf": 0.6022058371343199,
+   "coneDeg": 317.7810448081657,
+   "coneConf": 0.9641182619994781,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7124,
+   "obs": 324.423748722166,
+   "conf": 0.5905068301457229,
+   "coneDeg": 329.52685983887136,
+   "coneConf": 0.890516007107337,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7215,
+   "obs": 322.754082923698,
+   "conf": 0.9438744141473143,
+   "coneDeg": 326.7886044086864,
+   "coneConf": 0.8399497016891719,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7335,
+   "obs": 325.33596609447545,
+   "conf": 0.556353560347658,
+   "coneDeg": 334.13998872650336,
+   "coneConf": 0.6554291037040364,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7447,
+   "obs": 331.2751175622167,
+   "conf": 0.562678327391082,
+   "coneDeg": 336.5603244934606,
+   "coneConf": 0.8437762271249145,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7570,
+   "obs": 332.8571501467047,
+   "conf": 0.8903226418048895,
+   "coneDeg": 333.913772962502,
+   "coneConf": 0.7176175290061201,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7699,
+   "obs": 326.8041619592824,
+   "conf": 0.7771760793698896,
+   "coneDeg": 326.7645304819489,
+   "coneConf": 0.7811260975387706,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7810,
+   "obs": 325.7422657023983,
+   "conf": 0.554844646785605,
+   "coneDeg": 328.27795154514706,
+   "coneConf": 0.9595138391385585,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 7919,
+   "obs": 328.63005545959595,
+   "conf": 0.6475765626871904,
+   "coneDeg": 336.9576093309929,
+   "coneConf": 0.9722736660326536,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8048,
+   "obs": 334.89801099568126,
+   "conf": 0.9368130387474813,
+   "coneDeg": 328.96829374902177,
+   "coneConf": 0.7501716838567917,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8148,
+   "obs": 337.0488395518739,
+   "conf": 0.2309614422337528,
+   "coneDeg": 343.6396417053511,
+   "coneConf": 0.3865335985753996,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8272,
+   "obs": 340.6651967730527,
+   "conf": 0.7017628810372584,
+   "coneDeg": 332.69904992559464,
+   "coneConf": 0.5011648064481944,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8385,
+   "obs": 165.77071882709197,
+   "conf": 0.9756565817342272,
+   "coneDeg": 343.64097393156067,
+   "coneConf": 0.7324687865172672,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8501,
+   "obs": 348.99685039510894,
+   "conf": 0.7461372279669478,
+   "coneDeg": 343.3812116643837,
+   "coneConf": 0.36514612302769583,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8620,
+   "obs": 351.2768264073594,
+   "conf": 0.9776198933547409,
+   "coneDeg": 357.7504704417082,
+   "coneConf": 0.7318161018732506,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8736,
+   "obs": 351.7667745549156,
+   "conf": 0.7020519996998021,
+   "coneDeg": 344.27146653744217,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 8851,
+   "obs": 350.81951324730653,
+   "conf": 0.7751473386132036,
+   "coneDeg": 348.4748888179836,
+   "coneConf": 0.34644126169067835,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 8964,
+   "obs": 354.31826625236295,
+   "conf": 0.9582209089557223,
+   "coneDeg": 350.0640870393405,
+   "coneConf": 0.8632296891564573,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9057,
+   "obs": 352.47213005495087,
+   "conf": 0.6797085432404906,
+   "coneDeg": 346.8059144785643,
+   "coneConf": 0.3893058969148681,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9150,
+   "obs": 353.75392756163023,
+   "conf": 0.7307743537427798,
+   "coneDeg": 352.3984709904528,
+   "coneConf": 0.627738237108043,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9265,
+   "obs": 352.06368962234455,
+   "conf": 0.9510840394303864,
+   "coneDeg": 352.9259266748388,
+   "coneConf": 0.4672823170822305,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9381,
+   "obs": 353.8993093336235,
+   "conf": 0.830855667353807,
+   "coneDeg": 0.7127699360050883,
+   "coneConf": 0.42437318792202816,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9485,
+   "obs": 350.9881338290844,
+   "conf": 0.9285354542263168,
+   "coneDeg": 355.5139930158655,
+   "coneConf": 0.828867531527967,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9597,
+   "obs": 347.12949358255844,
+   "conf": 0.6040985471462129,
+   "coneDeg": 339.7912150537111,
+   "coneConf": 0.7535358478672652,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9722,
+   "obs": 349.9981692030558,
+   "conf": 0.6179748054519237,
+   "coneDeg": 338.8247426331102,
+   "coneConf": 0.48730464304967425,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9836,
+   "obs": 352.65879572733763,
+   "conf": 0.6955995814049616,
+   "coneDeg": 344.4115678156754,
+   "coneConf": 0.5522486165986044,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 9942,
+   "obs": 347.54120442004455,
+   "conf": 0.607589501691421,
+   "coneDeg": 336.8993036930682,
+   "coneConf": 0.7643328487324371,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10032,
+   "obs": 349.62670207597023,
+   "conf": 0.7155432487990576,
+   "coneDeg": 348.3060574485703,
+   "coneConf": 0.7379049879819863,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10137,
+   "obs": 339.5952878036992,
+   "conf": 0.6334673419556272,
+   "coneDeg": 349.27624087763877,
+   "coneConf": 0.43393743881814584,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10231,
+   "obs": 337.68380733967865,
+   "conf": 0.9548269187809962,
+   "coneDeg": 338.62231845562883,
+   "coneConf": 0.7520195492897228,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10332,
+   "obs": 345.00504483143004,
+   "conf": 0.8452215159766427,
+   "coneDeg": 338.2024928834762,
+   "coneConf": 0.6660997978565515,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10435,
+   "obs": 339.077752133384,
+   "conf": 0.9506858512527976,
+   "coneDeg": 331.8843281203614,
+   "coneConf": 0.7039779816996254,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10548,
+   "obs": 336.3176156183049,
+   "conf": 0.8216156039786562,
+   "coneDeg": 335.3443099468352,
+   "coneConf": 0.8705474037375645,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10671,
+   "obs": 336.2391604611744,
+   "conf": 0.7523181968606818,
+   "coneDeg": 335.45334399758235,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 10784,
+   "obs": 330.9624252482231,
+   "conf": 0.8839991769948973,
+   "coneDeg": 340.0030047413902,
+   "coneConf": 0.696652243378724,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 10904,
+   "obs": 328.8548113149254,
+   "conf": 0.8388546764941083,
+   "coneDeg": 337.4346453951289,
+   "coneConf": 0.45654309526005366,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11031,
+   "obs": 331.405975863898,
+   "conf": 0.7118852325509967,
+   "coneDeg": 334.29756874039276,
+   "coneConf": 0.9682317366516757,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11149,
+   "obs": 332.2432170103407,
+   "conf": 0.9942629682352447,
+   "coneDeg": 335.46264513010715,
+   "coneConf": 0.8185443009525872,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11240,
+   "obs": 330.5517476046349,
+   "conf": 0.8509179408780574,
+   "coneDeg": 339.90297117314867,
+   "coneConf": 0.7102432013513156,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11354,
+   "obs": 324.42796671516953,
+   "conf": 0.6807920489182677,
+   "coneDeg": 327.46510996563984,
+   "coneConf": 0.4719880676297443,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11461,
+   "obs": 325.5374186161298,
+   "conf": 0.6552179378120271,
+   "coneDeg": 318.320018839166,
+   "coneConf": 0.4870466839957625,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11559,
+   "obs": 320.82743926295757,
+   "conf": 0.37522039818000524,
+   "coneDeg": 319.6797792640705,
+   "coneConf": 0.3234036132980612,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11669,
+   "obs": 324.6145796695762,
+   "conf": 0.689187409551625,
+   "coneDeg": 337.0734097843699,
+   "coneConf": 0.31225242896756444,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11766,
+   "obs": 333.8048073371888,
+   "conf": 0.8251687388343665,
+   "coneDeg": 331.77312406054114,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 11856,
+   "obs": 325.8250603873346,
+   "conf": 0.7704871074227819,
+   "coneDeg": 326.63308835603175,
+   "coneConf": 0.4398722324846015,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 11962,
+   "obs": 320.9516763011817,
+   "conf": 0.8016111666340408,
+   "coneDeg": 330.5755718561302,
+   "coneConf": 0.45406738616388,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12090,
+   "obs": 322.4931680144498,
+   "conf": 0.8184573176359892,
+   "coneDeg": 333.54142627016245,
+   "coneConf": 0.4382667348110738,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12208,
+   "obs": 322.61569777774105,
+   "conf": 0.8862028103522498,
+   "coneDeg": 319.19209506623315,
+   "coneConf": 0.7369013927031545,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12335,
+   "obs": 317.2869949201795,
+   "conf": 0.38047278145804836,
+   "coneDeg": 314.4680947886012,
+   "coneConf": 0.44190543765246526,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12431,
+   "obs": 320.1245929457076,
+   "conf": 0.7497518190414999,
+   "coneDeg": 322.61716730767375,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 12539,
+   "obs": 320.3314885104385,
+   "conf": 0.8525862312998125,
+   "coneDeg": 318.43557096841687,
+   "coneConf": 0.6566788026030824,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12637,
+   "obs": 320.3014568177291,
+   "conf": 0.5554501249816851,
+   "coneDeg": 319.0511075684458,
+   "coneConf": 0.8176929875551009,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12754,
+   "obs": 326.2800227909539,
+   "conf": 0.9158826911160449,
+   "coneDeg": 322.2247846182963,
+   "coneConf": 0.43520161698926274,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12851,
+   "obs": 318.83869840946056,
+   "conf": 0.28643969550878734,
+   "coneDeg": 321.25434320821796,
+   "coneConf": 0.5777358853206355,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 12957,
+   "obs": 318.1577196407968,
+   "conf": 0.9559848862481268,
+   "coneDeg": 311.1518709420118,
+   "coneConf": 0.8394459195061228,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13080,
+   "obs": 323.3589727660549,
+   "conf": 0.30084281775654365,
+   "coneDeg": 315.6991500024918,
+   "coneConf": 0.8157578660910385,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13177,
+   "obs": 144.0743685651281,
+   "conf": 0.6941964674727518,
+   "coneDeg": 327.7647070655985,
+   "coneConf": 0.3320573303457483,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13272,
+   "obs": 314.63869894101276,
+   "conf": 0.6994329516774587,
+   "coneDeg": 324.5789762997488,
+   "coneConf": 0.9461481507043699,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13374,
+   "obs": 311.10462633383145,
+   "conf": 0.3314024344392592,
+   "coneDeg": 308.22102150745286,
+   "coneConf": 0.9083847747436689,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13465,
+   "obs": 307.7208107474079,
+   "conf": 0.8565852554297506,
+   "coneDeg": 307.50461193069486,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 13567,
+   "obs": 305.04228466470806,
+   "conf": 0.8139040760961138,
+   "coneDeg": 300.8343323354692,
+   "coneConf": 0.6490117486913249,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13688,
+   "obs": 301.6406444959905,
+   "conf": 0.5859412618647193,
+   "coneDeg": 301.323066720116,
+   "coneConf": 0.6721966879843261,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13781,
+   "obs": 301.3682157463322,
+   "conf": 0.9531647319563583,
+   "coneDeg": 310.6817775007064,
+   "coneConf": 0.5818675555479405,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13874,
+   "obs": 121.04286927032376,
+   "conf": 0.7414183925002391,
+   "coneDeg": 291.3937522413662,
+   "coneConf": 0.8717459320024927,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 13996,
+   "obs": 297.51371829316827,
+   "conf": 0.2993893154196882,
+   "coneDeg": 298.7642804311507,
+   "coneConf": 0.31313065027658143,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14106,
+   "obs": 298.54187390430434,
+   "conf": 0.8710052117521422,
+   "coneDeg": 294.9878798664988,
+   "coneConf": 0.603026753897552,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14211,
+   "obs": 121.8839267210301,
+   "conf": 0.6302541714348491,
+   "coneDeg": 306.02420034167017,
+   "coneConf": 0.5911679953781813,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14322,
+   "obs": 298.8191989580682,
+   "conf": 0.6446800478954521,
+   "coneDeg": 302.1903736074901,
+   "coneConf": 0.5116331635302941,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14420,
+   "obs": 294.32045820805286,
+   "conf": 0.9746707386394662,
+   "coneDeg": 301.87362267353456,
+   "coneConf": 0.47652228737168995,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14522,
+   "obs": 296.1609099915163,
+   "conf": 0.7442768606809613,
+   "coneDeg": 299.2741817131814,
+   "coneConf": 0.7726363236952192,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14642,
+   "obs": 286.0282114220387,
+   "conf": 0.578418782360018,
+   "coneDeg": 283.92165349003005,
+   "coneConf": 0.4519068442405916,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14749,
+   "obs": 286.2869223936666,
+   "conf": 0.6807186541451884,
+   "coneDeg": 292.71480429189194,
+   "coneConf": 0.5155757239357511,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 14847,
+   "obs": 277.13939423350166,
+   "conf": 0.8519574398877932,
+   "coneDeg": 271.23479632037606,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 14947,
+   "obs": 277.8210908562928,
+   "conf": 0.8802244742820563,
+   "coneDeg": 275.46838533586583,
+   "coneConf": 0.9842414166043143,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 15037,
+   "obs": 284.0991957902677,
+   "conf": 0.912826169145486,
+   "coneDeg": 282.69201855005076,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 15165,
+   "obs": 281.61144852652524,
+   "conf": 0.7241064558909522,
+   "coneDeg": 281.4803503056713,
+   "coneConf": 0.6625174773071234,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 15293,
+   "obs": 275.6192647210837,
+   "conf": 0.7886117697084816,
+   "coneDeg": 270.0747804483577,
+   "coneConf": 0.6080636496674418,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 15406,
+   "obs": 275.0727021317173,
+   "conf": 0.2900825484399876,
+   "coneDeg": 272.4999102345905,
+   "coneConf": 0.4910192476564597,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 15517,
+   "obs": 277.5366561395439,
+   "conf": 0.8597362170367819,
+   "coneDeg": 284.183758988554,
+   "coneConf": 0.9754729637120554,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 15629,
+   "obs": 272.40426646764536,
+   "conf": 0.6404063070985504,
+   "coneDeg": 274.80497433496794,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 15750,
+   "obs": 268.70404161645706,
+   "conf": 0.9967122335794179,
+   "coneDeg": 269.92947005013264,
+   "coneConf": 0.9482521820692933,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 15858,
+   "obs": 273.67728717175294,
+   "conf": 0.8624405661161153,
+   "coneDeg": 266.0942274094782,
+   "coneConf": 0.6472088069764917,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 15971,
+   "obs": 269.5831551203935,
+   "conf": 0.5740353552447715,
+   "coneDeg": 274.4232564467063,
+   "coneConf": 0.6598355366987725,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 16084,
+   "obs": 274.77483946498864,
+   "conf": 0.8611372757263336,
+   "coneDeg": 283.98721560463036,
+   "coneConf": 0.32943509782884156,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 16203,
+   "obs": 279.2046171483132,
+   "conf": 0.8831385888702094,
+   "coneDeg": 284.1647085776009,
+   "coneConf": 0.47249747316178337,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 16322,
+   "obs": 285.09450235965096,
+   "conf": 0.6312339243435381,
+   "coneDeg": 291.99653236474796,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 16441,
+   "obs": 278.068859848443,
+   "conf": 0.5745515326444413,
+   "coneDeg": 286.2373394501021,
+   "coneConf": 0.8297382385772043,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 16531,
+   "obs": 276.978255978315,
+   "conf": 0.9078685481352426,
+   "coneDeg": 266.7075045785655,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 16654,
+   "obs": 281.5407547742459,
+   "conf": 0.6393676869313624,
+   "coneDeg": 274.5626073536845,
+   "coneConf": 0.6031455797616265,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 16781,
+   "obs": 286.9754651538043,
+   "conf": 0.8792608981321708,
+   "coneDeg": 281.75869181606924,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 16893,
+   "obs": 282.6801031748023,
+   "conf": 0.8076408142008914,
+   "coneDeg": 292.6293748353214,
+   "coneConf": 0.41005117714173417,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 16988,
+   "obs": 284.3711498280459,
+   "conf": 0.906679766906118,
+   "coneDeg": 286.9256794263905,
+   "coneConf": 0.5602832290484298,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17112,
+   "obs": 280.60001311628184,
+   "conf": 0.5925982619851359,
+   "coneDeg": 270.25574026355923,
+   "coneConf": 0.7236416244468749,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17227,
+   "obs": 281.4239933710604,
+   "conf": 0.7097994711738544,
+   "coneDeg": 276.63286278039084,
+   "coneConf": 0.5025912298826946,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17335,
+   "obs": 281.8433764550939,
+   "conf": 0.8298380551696378,
+   "coneDeg": 282.35550101761635,
+   "coneConf": 0.5159726445600327,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17426,
+   "obs": 285.47697087714414,
+   "conf": 0.8202678202465801,
+   "coneDeg": 274.63201349848737,
+   "coneConf": 0.6230256374280494,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17539,
+   "obs": 287.8548323975076,
+   "conf": 0.8666143745106214,
+   "coneDeg": 288.19760659667645,
+   "coneConf": 0.8161625848887866,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17651,
+   "obs": 289.0781761403382,
+   "conf": 0.8474727840040515,
+   "coneDeg": 289.6734653687279,
+   "coneConf": 0.5824919081485113,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17770,
+   "obs": 285.5964762011074,
+   "conf": 0.8627302290784964,
+   "coneDeg": 281.41807193761224,
+   "coneConf": 0.9340915111904244,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17896,
+   "obs": 286.85175275985466,
+   "conf": 0.6649136605125185,
+   "coneDeg": 292.62071135002725,
+   "coneConf": 0.7070322174129617,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 17995,
+   "obs": 288.5400466843373,
+   "conf": 0.6936624560024736,
+   "coneDeg": 285.387164913907,
+   "coneConf": 0.42915120803032797,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18123,
+   "obs": 284.2400816421123,
+   "conf": 0.6633260760836597,
+   "coneDeg": 275.56759108592973,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 18221,
+   "obs": 284.63086364828814,
+   "conf": 0.5757259863721501,
+   "coneDeg": 289.3260106824637,
+   "coneConf": 0.5891172640000277,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18315,
+   "obs": 281.56216702623396,
+   "conf": 0.9444763207096785,
+   "coneDeg": 284.0487907827019,
+   "coneConf": 0.6839217966617834,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18410,
+   "obs": 283.73848420119407,
+   "conf": 0.3151122295100038,
+   "coneDeg": 287.2924030090903,
+   "coneConf": 0.4482886464214624,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18529,
+   "obs": 279.5405394641084,
+   "conf": 0.5709396697745984,
+   "coneDeg": 278.0561769488404,
+   "coneConf": 0.6523199103195965,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18628,
+   "obs": 276.64600529792926,
+   "conf": 0.8008581647418576,
+   "coneDeg": 273.07932788484777,
+   "coneConf": 0.8574585510318768,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18755,
+   "obs": 93.24259611178331,
+   "conf": 0.7259187410180268,
+   "coneDeg": 278.1262751357,
+   "coneConf": 0.8065625015428668,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18868,
+   "obs": 270.03410423943706,
+   "conf": 0.9986758154115352,
+   "coneDeg": 274.2822311660939,
+   "coneConf": 0.8514435524007873,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 18994,
+   "obs": 263.8550516890498,
+   "conf": 0.7096751373749401,
+   "coneDeg": 259.71858245593535,
+   "coneConf": 0.43939078886513383,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 19107,
+   "obs": 263.35403975619874,
+   "conf": 0.9531764460851384,
+   "coneDeg": 251.95045786023923,
+   "coneConf": 0.6684440290016225,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 19223,
+   "obs": 254.54428612523418,
+   "conf": 0.3244365508026529,
+   "coneDeg": 249.83081929055834,
+   "coneConf": 0.6803715407569826,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 19313,
+   "obs": 255.07381991857596,
+   "conf": 0.8877234980784645,
+   "coneDeg": 253.75676683703432,
+   "coneConf": 0.7558811662615932,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 19435,
+   "obs": 251.92958471899215,
+   "conf": 0.6616725859026594,
+   "coneDeg": 249.08556515096893,
+   "coneConf": 0.6542295690286507,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 19532,
+   "obs": 254.3190614532964,
+   "conf": 0.7120815971777965,
+   "coneDeg": 256.6981849537001,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 19640,
+   "obs": 260.3513879099289,
+   "conf": 0.35934206344171943,
+   "coneDeg": 259.3849584123557,
+   "coneConf": 0.9406516604452979,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 19739,
+   "obs": 263.6032049778397,
+   "conf": 0.8280173812243197,
+   "coneDeg": 270.77389871812807,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 19839,
+   "obs": 263.70900281535273,
+   "conf": 0.8668642331768909,
+   "coneDeg": 270.53179556842304,
+   "coneConf": 0.7771114378881434,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 19933,
+   "obs": 258.98934763343823,
+   "conf": 0.9728873094713519,
+   "coneDeg": 258.7316455749643,
+   "coneConf": 0.9447684129804299,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20040,
+   "obs": 253.42921056655052,
+   "conf": 0.7679928204668669,
+   "coneDeg": 248.21317782723713,
+   "coneConf": 0.8710398983142897,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20167,
+   "obs": 253.43346427204938,
+   "conf": 0.39865171746319433,
+   "coneDeg": 244.66924015867335,
+   "coneConf": 0.4157685023769197,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20270,
+   "obs": 255.45367987045483,
+   "conf": 0.6372438107354669,
+   "coneDeg": 254.49142396973787,
+   "coneConf": 0.45619525715154485,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20392,
+   "obs": 259.8908624343792,
+   "conf": 0.7343011574783133,
+   "coneDeg": 254.49123381462277,
+   "coneConf": 0.9276683012320819,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20490,
+   "obs": 264.05452765036785,
+   "conf": 0.20382720991126896,
+   "coneDeg": 261.1575934284276,
+   "coneConf": 0.5767406790230285,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20616,
+   "obs": 261.61476615644483,
+   "conf": 0.9925133557507102,
+   "coneDeg": 270.1547491187598,
+   "coneConf": 0.4168809060279468,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20726,
+   "obs": 262.8070200178331,
+   "conf": 0.7008406409762895,
+   "coneDeg": 257.70652404933,
+   "coneConf": 0.8342208008594394,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20818,
+   "obs": 260.35050145242224,
+   "conf": 0.7810182529457422,
+   "coneDeg": 253.48993329319478,
+   "coneConf": 0.8659466044432358,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 20932,
+   "obs": 267.12462955157457,
+   "conf": 0.6043269570461305,
+   "coneDeg": 254.5808490325195,
+   "coneConf": 0.6767042747644485,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21047,
+   "obs": 260.63460922605327,
+   "conf": 0.6292820159879704,
+   "coneDeg": 261.7174283013961,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 21150,
+   "obs": 270.5806363228671,
+   "conf": 0.8397462261118336,
+   "coneDeg": 271.3391867529933,
+   "coneConf": 0.5211976732409553,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21264,
+   "obs": 266.14662517773695,
+   "conf": 0.7077500039613225,
+   "coneDeg": 255.15665233627897,
+   "coneConf": 0.9953066254489371,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21389,
+   "obs": 262.10386681116825,
+   "conf": 0.650440347823417,
+   "coneDeg": 260.51785070926906,
+   "coneConf": 0.7966515563420605,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21495,
+   "obs": 255.18875872720787,
+   "conf": 0.6618889320436607,
+   "coneDeg": 256.4057270685232,
+   "coneConf": 0.580768164009966,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21618,
+   "obs": 250.62429358568681,
+   "conf": 0.8277110100904739,
+   "coneDeg": 245.9293481395423,
+   "coneConf": 0.3678344803787382,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21722,
+   "obs": 247.19110412062014,
+   "conf": 0.6544599456490158,
+   "coneDeg": 243.85979084341386,
+   "coneConf": 0.9112255590295477,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21817,
+   "obs": 248.57194556472245,
+   "conf": 0.7896467442716582,
+   "coneDeg": 247.31446846186122,
+   "coneConf": 0.5598181619680994,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 21946,
+   "obs": 247.7196155676438,
+   "conf": 0.832384584118236,
+   "coneDeg": 240.3398943101854,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": false
+  },
+  {
+   "now": 22071,
+   "obs": 246.83037850163714,
+   "conf": 0.9726704486814958,
+   "coneDeg": 254.41411250699707,
+   "coneConf": 0.8173062048659907,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22199,
+   "obs": 247.153983746226,
+   "conf": 0.5878566780332143,
+   "coneDeg": 240.7954289435404,
+   "coneConf": 0.6281781447418449,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22317,
+   "obs": 253.80855009304628,
+   "conf": 0.9830024938292342,
+   "coneDeg": 249.2712127792821,
+   "coneConf": 0.6039809706862971,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22423,
+   "obs": 253.87262573206692,
+   "conf": 0.6248224686190539,
+   "coneDeg": 254.68815108684146,
+   "coneConf": 0.5674249106243776,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22513,
+   "obs": 244.5476760309075,
+   "conf": 0.7211475085982,
+   "coneDeg": 253.34629245506346,
+   "coneConf": 0.7054474874877947,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22639,
+   "obs": 246.59143314733979,
+   "conf": 0.6866475088025088,
+   "coneDeg": 241.0066153432731,
+   "coneConf": 0.6244869564949738,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22747,
+   "obs": 249.6184331259276,
+   "conf": 0.61167900993295,
+   "coneDeg": 239.14078394676199,
+   "coneConf": 0.3745057428894811,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22873,
+   "obs": 249.01774051599693,
+   "conf": 0.8342578545059678,
+   "coneDeg": 257.173091547372,
+   "coneConf": 0.6417638794849077,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 22967,
+   "obs": 252.23786048247507,
+   "conf": 0.865156842853212,
+   "coneDeg": 246.46459136215685,
+   "coneConf": 0.7103424436902492,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23081,
+   "obs": 252.18883840907188,
+   "conf": 0.8161283897040712,
+   "coneDeg": 253.78941493849106,
+   "coneConf": 0.4924169954826163,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23180,
+   "obs": 75.51154701423718,
+   "conf": 0.8312521803032729,
+   "coneDeg": 250.0532779735645,
+   "coneConf": 0.32728101486044026,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23292,
+   "obs": 249.46416095282598,
+   "conf": 0.77140782658742,
+   "coneDeg": 250.00417370163086,
+   "coneConf": 0.6491193392661212,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23406,
+   "obs": 243.17581893507838,
+   "conf": 0.6018725235252345,
+   "coneDeg": 238.68525373625778,
+   "coneConf": 0.823531600815135,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23507,
+   "obs": 243.0174733302605,
+   "conf": 0.2133193915740865,
+   "coneDeg": 243.71322938653566,
+   "coneConf": 0.5132243142726888,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23629,
+   "obs": 243.05452299352226,
+   "conf": 0.578796644003316,
+   "coneDeg": 233.95758784049212,
+   "coneConf": 0.8146442756090881,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23726,
+   "obs": 243.83916196712357,
+   "conf": 0.9873195581690688,
+   "coneDeg": 238.75341886485853,
+   "coneConf": 0.35592438400628146,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23833,
+   "obs": 241.72377154154879,
+   "conf": 0.8761257713022935,
+   "coneDeg": 238.4407156935065,
+   "coneConf": 0.934073726491554,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 23947,
+   "obs": 240.90496955949538,
+   "conf": 0.9058824168881128,
+   "coneDeg": 238.4111301965114,
+   "coneConf": 0.33789216064333266,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24066,
+   "obs": 237.79301979690717,
+   "conf": 0.6598548947623594,
+   "coneDeg": 232.2610490434488,
+   "coneConf": 0.5852750040090817,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24181,
+   "obs": 57.348501888651526,
+   "conf": 0.6170514028209847,
+   "coneDeg": 241.84310738459396,
+   "coneConf": 0.45426771986630454,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24284,
+   "obs": 228.19241874460045,
+   "conf": 0.3861586058480103,
+   "coneDeg": 221.13695368290428,
+   "coneConf": 0.7854401867104321,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24413,
+   "obs": 225.16880413987042,
+   "conf": 0.9507488954231955,
+   "coneDeg": 218.4072115198735,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 24510,
+   "obs": 233.8815338734736,
+   "conf": 0.2830593200128198,
+   "coneDeg": 227.99024193081868,
+   "coneConf": 0.4757092288173058,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24638,
+   "obs": 228.60963243982133,
+   "conf": 0.29986676790282757,
+   "coneDeg": 237.15816234218926,
+   "coneConf": 0.6238396543133631,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24737,
+   "obs": 236.21858168468407,
+   "conf": 0.5892670326724805,
+   "coneDeg": 227.02817795030592,
+   "coneConf": 0.7218688310407728,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24831,
+   "obs": 233.625947736816,
+   "conf": 0.6656564099750614,
+   "coneDeg": 236.87291674569167,
+   "coneConf": 0.47263976770281785,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 24925,
+   "obs": 238.9842569851288,
+   "conf": 0.2862595683630229,
+   "coneDeg": 232.77647031954962,
+   "coneConf": 0.4210947891513572,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25041,
+   "obs": 232.96907135005404,
+   "conf": 0.5946665674202766,
+   "coneDeg": 238.8350561710165,
+   "coneConf": 0.834787122610674,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25159,
+   "obs": 233.10552111317156,
+   "conf": 0.6130663678778956,
+   "coneDeg": 227.8821660903949,
+   "coneConf": 0.5144051196087164,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25274,
+   "obs": 233.44552883702545,
+   "conf": 0.7430686207588457,
+   "coneDeg": 242.46023835625124,
+   "coneConf": 0.6582418941329796,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25367,
+   "obs": 236.56105473301477,
+   "conf": 0.9858346152784849,
+   "coneDeg": 239.57911082440592,
+   "coneConf": 0.6474701984197531,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25462,
+   "obs": 243.18616075771627,
+   "conf": 0.9859368954519594,
+   "coneDeg": 245.17280807326938,
+   "coneConf": 0.7982908610949038,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25572,
+   "obs": 242.90426647009053,
+   "conf": 0.7705194165163021,
+   "coneDeg": 247.17351598832227,
+   "coneConf": 0.7828312243062143,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25668,
+   "obs": 236.82759239613813,
+   "conf": 0.8415827012019192,
+   "coneDeg": 234.95274388067344,
+   "coneConf": 0.7187935814770855,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25778,
+   "obs": 236.0187908879069,
+   "conf": 0.7213939956439179,
+   "coneDeg": 232.87967410424812,
+   "coneConf": 0,
+   "coneValid": false,
+   "mapPresent": true
+  },
+  {
+   "now": 25892,
+   "obs": 236.57512633352997,
+   "conf": 0.6064865320819632,
+   "coneDeg": 238.28548637039262,
+   "coneConf": 0.723328095237568,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 25985,
+   "obs": 240.1505503727018,
+   "conf": 0.9477609744057434,
+   "coneDeg": 240.49308507621697,
+   "coneConf": 0.8314033964256298,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 26098,
+   "obs": 237.50057392532585,
+   "conf": 0.9609711329245407,
+   "coneDeg": 245.3393941250033,
+   "coneConf": 0.8590089402764589,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 26212,
+   "obs": 240.23415881470737,
+   "conf": 0.9849739909020658,
+   "coneDeg": 228.38960930993642,
+   "coneConf": 0.486971867523848,
+   "coneValid": true,
+   "mapPresent": true
+  },
+  {
+   "now": 26314,
+   "obs": 243.74392011965347,
+   "conf": 0.7832999933821383,
+   "coneDeg": 247.34206700728885,
+   "coneConf": 0.47008782501101676,
+   "coneValid": true,
+   "mapPresent": true
+  }
+ ],
+ "smooth": [
+  355.0079985163193,
+  353.59299809603044,
+  353.4294500948075,
+  352.86399840802824,
+  347.9493177071847,
+  344.91730720147416,
+  345.4824281982285,
+  344.1652882921667,
+  340.1683597303793,
+  338.82036191980615,
+  337.0871441575857,
+  336.4017227158579,
+  335.6722716119548,
+  334.4548381142997,
+  335.1530502713499,
+  332.0469052534131,
+  333.7218677552157,
+  337.2444557729425,
+  338.72396089321774,
+  339.75059566185155,
+  339.4852522733895,
+  340.77720809857374,
+  339.45239911946146,
+  338.74626441052305,
+  338.150996828438,
+  333.64222518350016,
+  330.73728417632856,
+  332.157964810242,
+  332.0539994780838,
+  330.0072380954696,
+  332.1001008500821,
+  330.18088751201844,
+  328.85754053894675,
+  325.54783896335107,
+  325.481442910974,
+  324.3934647979795,
+  321.8448587883054,
+  324.01556251824695,
+  321.4140935151506,
+  324.08518210694797,
+  323.4240227945065,
+  323.8352125582069,
+  323.04331556965235,
+  323.9648453859727,
+  320.34367043568204,
+  317.7555955137233,
+  null,
+  318.40593340503096,
+  323.7374476168077,
+  null,
+  330.87016932191534,
+  334.78163950244607,
+  338.6581856020814,
+  338.33190342563853,
+  338.677162469001,
+  338.29889389141704,
+  334.08901924643055,
+  331.39273139012516,
+  327.9448380533306,
+  326.6746183877981,
+  325.89264557277136,
+  323.08896495197587,
+  318.1495863147263,
+  317.3133702233263,
+  319.9258956909175,
+  321.3593169170065,
+  323.1982154672371,
+  327.28557020772587,
+  331.0916882886768,
+  329.62595533383865,
+  328.24829490309025,
+  328.65096895767647,
+  332.60376031445116,
+  334.9875792461262,
+  338.785826636559,
+  null,
+  345.27591571227435,
+  350.20662801871674,
+  352.71371929891984,
+  353.1375651915055,
+  354.84757755230453,
+  354.51170318394134,
+  354.7298923466026,
+  353.64231115737675,
+  354.09848548462935,
+  352.47185845039667,
+  349.80523222626766,
+  349.5584731306112,
+  350.94490310375784,
+  349.20526112297466,
+  349.2472257725676,
+  344.1604287075347,
+  339.70990801896573,
+  341.7716085613938,
+  339.66154619294707,
+  337.0802832863966,
+  335.7139786652324,
+  332.23188267944306,
+  329.32550315877324,
+  329.2329006958971,
+  330.3963946435281,
+  330.1397168123141,
+  326.7436891647985,
+  325.45457131101216,
+  322.7482411493211,
+  322.896215344443,
+  328.5929506759743,
+  327.30659275881703,
+  323.7864150506168,
+  322.6304824089152,
+  322.2316282529798,
+  319.5950947433573,
+  319.4482653417615,
+  319.5959564524883,
+  319.6603602427099,
+  323.40445714372845,
+  321.84623498367773,
+  319.62872157732806,
+  320.79667555477056,
+  null,
+  317.45298099736874,
+  314.19809231757483,
+  309.88856802196165,
+  306.12891612750934,
+  302.28540970306744,
+  300.71165192162573,
+  null,
+  297.6013369477638,
+  296.99180989048205,
+  null,
+  296.8414165584479,
+  294.705142769246,
+  294.6951714747148,
+  289.6300235561764,
+  286.86211442830586,
+  280.3760743392397,
+  277.5240466384654,
+  280.2723323676655,
+  280.05606303408103,
+  276.8873938518112,
+  275.11539618669076,
+  275.7895005090778,
+  273.5075050016709,
+  269.95603129935853,
+  271.3418372804391,
+  269.93860250369346,
+  272.2545380699112,
+  276.2029892321873,
+  281.1200695510736,
+  280.5255218199434,
+  278.8003256248858,
+  280.3687382983883,
+  284.4994558294509,
+  284.0701047045575,
+  284.56299389234914,
+  283.049443127426,
+  282.3272304077734,
+  282.0742575875694,
+  283.9913945671508,
+  286.47482884863473,
+  288.41696664015376,
+  287.35503774591257,
+  287.47217910095117,
+  288.26768424777913,
+  286.5289736188521,
+  285.6441623549804,
+  283.1297825956116,
+  282.94406917135507,
+  280.87432824038865,
+  278.1071032469333,
+  null,
+  272.50970853377976,
+  266.5406049531289,
+  263.3169204994663,
+  257.702229070301,
+  254.9242060559818,
+  251.4549953083697,
+  251.55353143457023,
+  253.85979962491479,
+  258.8208653620468,
+  261.76024770474714,
+  260.40351208497873,
+  256.7181582544813,
+  254.83536617842583,
+  254.74192778496217,
+  257.16578840035515,
+  259.79741794113534,
+  261.1966118078826,
+  262.418645517708,
+  261.6044627430465,
+  264.5922024447864,
+  263.1007693868107,
+  267.54959508035483,
+  267.5370989996901,
+  265.3663499574302,
+  260.27393757654886,
+  254.31510002261416,
+  249.68771532667347,
+  248.01007027080675,
+  246.55473719654697,
+  245.74162929043666,
+  245.36586670836948,
+  249.94797701862603,
+  251.94162712311902,
+  248.16663379631484,
+  246.92673434141625,
+  247.87396391220886,
+  248.32763679086668,
+  250.52108010462507,
+  251.68754754063843,
+  null,
+  250.7607306061924,
+  247.10158705679714,
+  245.1680503181865,
+  243.58838945950413,
+  243.38176556762323,
+  242.06946746929634,
+  240.96645296016334,
+  238.80116547688374,
+  null,
+  233.52035170205136,
+  227.4294935529647,
+  228.47006582896154,
+  227.09574327259668,
+  230.77336063321547,
+  232.0683870304581,
+  234.88735866931006,
+  234.32205146851425,
+  233.93953428265092,
+  233.7874751603306,
+  235.54304682167253,
+  240.46319127283368,
+  242.68174787193516,
+  240.08156489374528,
+  238.2527031904607,
+  237.47221881979658,
+  239.06056750187201,
+  238.2781887414045,
+  239.5268034866674,
+  242.02967709861366
+ ],
+ "view": [
+  null,
+  {
+   "deg": 346.82512640413483,
+   "conf": 0.7897248507220589,
+   "src": "cone"
+  },
+  {
+   "deg": 351.78271194871,
+   "conf": 0.5960269054621521,
+   "src": "cone"
+  },
+  {
+   "deg": 351.78271194871,
+   "conf": 0.5066228696428292,
+   "src": "hold"
+  },
+  {
+   "deg": 341.89726926321396,
+   "conf": 0.8458286577476721,
+   "src": "cone"
+  },
+  {
+   "deg": 343.34488006292213,
+   "conf": 0.4128745949391449,
+   "src": "cone"
+  },
+  {
+   "deg": 346.353635396271,
+   "conf": 0.8329955061508798,
+   "src": "cone"
+  },
+  {
+   "deg": 342.677432764042,
+   "conf": 0.9479499284056829,
+   "src": "cone"
+  },
+  {
+   "deg": 343.4549030403622,
+   "conf": 0.4232695922775356,
+   "src": "cone"
+  },
+  {
+   "deg": 338.22797459436083,
+   "conf": 0.9090016096618496,
+   "src": "cone"
+  },
+  {
+   "deg": 338.63851448202195,
+   "conf": 0.9442006600890775,
+   "src": "cone"
+  },
+  {
+   "deg": 334.98935681920057,
+   "conf": 0.7051711793302491,
+   "src": "cone"
+  },
+  {
+   "deg": 332.25778509382303,
+   "conf": 0.4974595465458602,
+   "src": "cone"
+  },
+  {
+   "deg": 336.4862558609675,
+   "conf": 0.6915962717709123,
+   "src": "cone"
+  },
+  {
+   "deg": 339.868746410065,
+   "conf": 0.30258818308417407,
+   "src": "cone"
+  },
+  {
+   "deg": 340.8556921305051,
+   "conf": 0.5131606149285008,
+   "src": "cone"
+  },
+  {
+   "deg": 338.77083868409727,
+   "conf": 0.5407495946485432,
+   "src": "cone"
+  },
+  {
+   "deg": 338.6021855447341,
+   "conf": 0.5482440306684571,
+   "src": "cone"
+  },
+  {
+   "deg": 336.4515401445585,
+   "conf": 0.3912107398480202,
+   "src": "cone"
+  },
+  {
+   "deg": 337.10615783500066,
+   "conf": 0.7441213083090543,
+   "src": "cone"
+  },
+  {
+   "deg": 337.10615783500066,
+   "conf": 0.6325031120626962,
+   "src": "hold"
+  },
+  {
+   "deg": 336.44097843313875,
+   "conf": 0.8391857676997747,
+   "src": "cone"
+  },
+  {
+   "deg": 338.2422399688628,
+   "conf": 0.3828758371721198,
+   "src": "cone"
+  },
+  {
+   "deg": 340.5516364424585,
+   "conf": 0.4871847543835604,
+   "src": "cone"
+  },
+  {
+   "deg": 340.5516364424585,
+   "conf": 0.4141070412260263,
+   "src": "hold"
+  },
+  {
+   "deg": 334.73993960159123,
+   "conf": 0.7137281357575506,
+   "src": "cone"
+  },
+  {
+   "deg": 329.9111163086976,
+   "conf": 0.5937307101659781,
+   "src": "cone"
+  },
+  {
+   "deg": 329.81905926766444,
+   "conf": 0.52696752201928,
+   "src": "cone"
+  },
+  {
+   "deg": 334.3109148580718,
+   "conf": 0.7977935442230183,
+   "src": "cone"
+  },
+  {
+   "deg": 334.3109148580718,
+   "conf": 0.6781245125895655,
+   "src": "hold"
+  },
+  {
+   "deg": 336.6398498708536,
+   "conf": 0.9308799437784776,
+   "src": "cone"
+  },
+  {
+   "deg": 332.1595305506796,
+   "conf": 0.784873124697449,
+   "src": "cone"
+  },
+  {
+   "deg": 325.5117926284329,
+   "conf": 0.6640479984609522,
+   "src": "cone"
+  },
+  {
+   "deg": 321.52388565525234,
+   "conf": 0.9248875185672396,
+   "src": "cone"
+  },
+  {
+   "deg": 326.65198056238603,
+   "conf": 0.37126768496149865,
+   "src": "cone"
+  },
+  {
+   "deg": 322.9100731546332,
+   "conf": 0.8918400358156859,
+   "src": "cone"
+  },
+  {
+   "deg": 321.89516137162036,
+   "conf": 0.44161384036802076,
+   "src": "cone"
+  },
+  {
+   "deg": 321.3748081062985,
+   "conf": 0.9233949996352651,
+   "src": "cone"
+  },
+  {
+   "deg": 318.3175808654105,
+   "conf": 0.8172782321966434,
+   "src": "cone"
+  },
+  {
+   "deg": 324.62351958719387,
+   "conf": 0.4538892629216167,
+   "src": "cone"
+  },
+  {
+   "deg": 323.0979667330856,
+   "conf": 0.33137701007802434,
+   "src": "cone"
+  },
+  {
+   "deg": 328.49783061168523,
+   "conf": 0.8761557727763791,
+   "src": "cone"
+  },
+  {
+   "deg": 329.51150753456204,
+   "conf": 0.8473974180983839,
+   "src": "cone"
+  },
+  {
+   "deg": 321.82514246886785,
+   "conf": 0.6852735693765044,
+   "src": "cone"
+  },
+  {
+   "deg": 320.2064120598793,
+   "conf": 0.30294779317987797,
+   "src": "cone"
+  },
+  {
+   "deg": 320.2064120598793,
+   "conf": 0.25750562420289624,
+   "src": "hold"
+  },
+  {
+   "deg": 321.2486263692334,
+   "conf": 0.5554442188365953,
+   "src": "cone"
+  },
+  {
+   "deg": 315.562215234042,
+   "conf": 0.969517642042953,
+   "src": "cone"
+  },
+  {
+   "deg": 320.0700724167193,
+   "conf": 0.3000905068591448,
+   "src": "cone"
+  },
+  {
+   "deg": 330.8517358529043,
+   "conf": 0.7919418283952264,
+   "src": "cone"
+  },
+  {
+   "deg": 332.3848633153435,
+   "conf": 0.6602790876199209,
+   "src": "cone"
+  },
+  {
+   "deg": 327.22293528861223,
+   "conf": 0.9444491704563724,
+   "src": "cone"
+  },
+  {
+   "deg": 332.5139187903735,
+   "conf": 0.6803993041581472,
+   "src": "cone"
+  },
+  {
+   "deg": 333.21744261870026,
+   "conf": 0.6918879956919439,
+   "src": "cone"
+  },
+  {
+   "deg": 333.1945812737731,
+   "conf": 0.6909175505142,
+   "src": "cone"
+  },
+  {
+   "deg": 336.90505510411936,
+   "conf": 0.49629145588173795,
+   "src": "cone"
+  },
+  {
+   "deg": 332.49533316811244,
+   "conf": 0.7367040650306045,
+   "src": "cone"
+  },
+  {
+   "deg": 328.6960943486355,
+   "conf": 0.3517532704751364,
+   "src": "cone"
+  },
+  {
+   "deg": 327.502320935934,
+   "conf": 0.8356695336838413,
+   "src": "cone"
+  },
+  {
+   "deg": 330.93425890305707,
+   "conf": 0.4855580712402142,
+   "src": "cone"
+  },
+  {
+   "deg": 332.522263466587,
+   "conf": 0.5933910437844208,
+   "src": "cone"
+  },
+  {
+   "deg": 329.5417676942393,
+   "conf": 0.4817497423574677,
+   "src": "cone"
+  },
+  {
+   "deg": 323.8275947486711,
+   "conf": 0.9833167767113347,
+   "src": "cone"
+  },
+  {
+   "deg": 319.60859443838604,
+   "conf": 0.9641182619994781,
+   "src": "cone"
+  },
+  {
+   "deg": 326.07649292159454,
+   "conf": 0.890516007107337,
+   "src": "cone"
+  },
+  {
+   "deg": 326.51854952561814,
+   "conf": 0.8399497016891719,
+   "src": "cone"
+  },
+  {
+   "deg": 330.3777875456167,
+   "conf": 0.6554291037040364,
+   "src": "cone"
+  },
+  {
+   "deg": 334.23038141434654,
+   "conf": 0.8437762271249145,
+   "src": "cone"
+  },
+  {
+   "deg": 334.0578542287394,
+   "conf": 0.7176175290061201,
+   "src": "cone"
+  },
+  {
+   "deg": 329.7963784338816,
+   "conf": 0.7811260975387706,
+   "src": "cone"
+  },
+  {
+   "deg": 328.7412257446624,
+   "conf": 0.9595138391385585,
+   "src": "cone"
+  },
+  {
+   "deg": 334.51577960572297,
+   "conf": 0.9722736660326536,
+   "src": "cone"
+  },
+  {
+   "deg": 331.3808596001511,
+   "conf": 0.7501716838567917,
+   "src": "cone"
+  },
+  {
+   "deg": 335.54456513066134,
+   "conf": 0.3865335985753996,
+   "src": "cone"
+  },
+  {
+   "deg": 334.3758489224192,
+   "conf": 0.5011648064481944,
+   "src": "cone"
+  },
+  {
+   "deg": 339.50993864420684,
+   "conf": 0.7324687865172672,
+   "src": "cone"
+  },
+  {
+   "deg": 340.77348575361407,
+   "conf": 0.36514612302769583,
+   "src": "cone"
+  },
+  {
+   "deg": 350.1740832911453,
+   "conf": 0.7318161018732506,
+   "src": "cone"
+  },
+  {
+   "deg": 350.1740832911453,
+   "conf": 0.6220436865922631,
+   "src": "hold"
+  },
+  {
+   "deg": 349.63918777600236,
+   "conf": 0.34644126169067835,
+   "src": "cone"
+  },
+  {
+   "deg": 349.9090848109249,
+   "conf": 0.8632296891564573,
+   "src": "cone"
+  },
+  {
+   "deg": 348.8497566217869,
+   "conf": 0.3893058969148681,
+   "src": "cone"
+  },
+  {
+   "deg": 350.5857795537611,
+   "conf": 0.627738237108043,
+   "src": "cone"
+  },
+  {
+   "deg": 351.49777007468015,
+   "conf": 0.4672823170822305,
+   "src": "cone"
+  },
+  {
+   "deg": 354.8438413588806,
+   "conf": 0.42437318792202816,
+   "src": "cone"
+  },
+  {
+   "deg": 355.25524603337726,
+   "conf": 0.828867531527967,
+   "src": "cone"
+  },
+  {
+   "deg": 346.48416788407144,
+   "conf": 0.7535358478672652,
+   "src": "cone"
+  },
+  {
+   "deg": 343.40409179648645,
+   "conf": 0.48730464304967425,
+   "src": "cone"
+  },
+  {
+   "deg": 343.8497932858745,
+   "conf": 0.5522486165986044,
+   "src": "cone"
+  },
+  {
+   "deg": 339.86100207004984,
+   "conf": 0.7643328487324371,
+   "src": "cone"
+  },
+  {
+   "deg": 344.5691296702104,
+   "conf": 0.7379049879819863,
+   "src": "cone"
+  },
+  {
+   "deg": 346.30624769553515,
+   "conf": 0.43393743881814584,
+   "src": "cone"
+  },
+  {
+   "deg": 341.95520646920806,
+   "conf": 0.7520195492897228,
+   "src": "cone"
+  },
+  {
+   "deg": 340.03013241889585,
+   "conf": 0.6660997978565515,
+   "src": "cone"
+  },
+  {
+   "deg": 335.6601825300129,
+   "conf": 0.7039779816996254,
+   "src": "cone"
+  },
+  {
+   "deg": 335.4581063962328,
+   "conf": 0.8705474037375645,
+   "src": "cone"
+  },
+  {
+   "deg": 335.4581063962328,
+   "conf": 0.7399652931769297,
+   "src": "hold"
+  },
+  {
+   "deg": 337.87564868015943,
+   "conf": 0.696652243378724,
+   "src": "cone"
+  },
+  {
+   "deg": 337.70671940870034,
+   "conf": 0.45654309526005366,
+   "src": "cone"
+  },
+  {
+   "deg": 335.31927866117826,
+   "conf": 0.9682317366516757,
+   "src": "cone"
+  },
+  {
+   "deg": 335.4063734278466,
+   "conf": 0.8185443009525872,
+   "src": "cone"
+  },
+  {
+   "deg": 337.83611354862046,
+   "conf": 0.7102432013513156,
+   "src": "cone"
+  },
+  {
+   "deg": 333.76411942720483,
+   "conf": 0.4719880676297443,
+   "src": "cone"
+  },
+  {
+   "deg": 327.55607062160607,
+   "conf": 0.4870466839957625,
+   "src": "cone"
+  },
+  {
+   "deg": 325.1891644135151,
+   "conf": 0.3234036132980612,
+   "src": "cone"
+  },
+  {
+   "deg": 328.6783373303681,
+   "conf": 0.31225242896756444,
+   "src": "cone"
+  },
+  {
+   "deg": 328.6783373303681,
+   "conf": 0.2654145646224298,
+   "src": "hold"
+  },
+  {
+   "deg": 327.91603052889104,
+   "conf": 0.4398722324846015,
+   "src": "cone"
+  },
+  {
+   "deg": 328.9307034685046,
+   "conf": 0.45406738616388,
+   "src": "cone"
+  },
+  {
+   "deg": 330.64462613365936,
+   "conf": 0.4382667348110738,
+   "src": "cone"
+  },
+  {
+   "deg": 324.26695364890793,
+   "conf": 0.7369013927031545,
+   "src": "cone"
+  },
+  {
+   "deg": 320.602362974719,
+   "conf": 0.44190543765246526,
+   "src": "cone"
+  },
+  {
+   "deg": 320.602362974719,
+   "conf": 0.3756196220045955,
+   "src": "hold"
+  },
+  {
+   "deg": 319.503494218372,
+   "conf": 0.6566788026030824,
+   "src": "cone"
+  },
+  {
+   "deg": 319.2289092507683,
+   "conf": 0.8176929875551009,
+   "src": "cone"
+  },
+  {
+   "deg": 320.336858866154,
+   "conf": 0.43520161698926274,
+   "src": "cone"
+  },
+  {
+   "deg": 320.7572467501111,
+   "conf": 0.5777358853206355,
+   "src": "cone"
+  },
+  {
+   "deg": 314.7975291822934,
+   "conf": 0.8394459195061228,
+   "src": "cone"
+  },
+  {
+   "deg": 315.34370391562436,
+   "conf": 0.8157578660910385,
+   "src": "cone"
+  },
+  {
+   "deg": 319.1429850212636,
+   "conf": 0.3320573303457483,
+   "src": "cone"
+  },
+  {
+   "deg": 322.8754010682501,
+   "conf": 0.9461481507043699,
+   "src": "cone"
+  },
+  {
+   "deg": 313.15663764083774,
+   "conf": 0.9083847747436689,
+   "src": "cone"
+  },
+  {
+   "deg": 313.15663764083774,
+   "conf": 0.7721270585321185,
+   "src": "hold"
+  },
+  {
+   "deg": 306.9660681435306,
+   "conf": 0.6490117486913249,
+   "src": "cone"
+  },
+  {
+   "deg": 304.04997974358093,
+   "conf": 0.6721966879843261,
+   "src": "cone"
+  },
+  {
+   "deg": 307.10563284818613,
+   "conf": 0.5818675555479405,
+   "src": "cone"
+  },
+  {
+   "deg": 297.0424486255796,
+   "conf": 0.8717459320024927,
+   "src": "cone"
+  },
+  {
+   "deg": 297.54890996016286,
+   "conf": 0.31313065027658143,
+   "src": "cone"
+  },
+  {
+   "deg": 296.3352977591064,
+   "conf": 0.603026753897552,
+   "src": "cone"
+  },
+  {
+   "deg": 300.855404869995,
+   "conf": 0.5911679953781813,
+   "src": "cone"
+  },
+  {
+   "deg": 301.4123705963393,
+   "conf": 0.5116331635302941,
+   "src": "cone"
+  },
+  {
+   "deg": 301.59476987888445,
+   "conf": 0.47652228737168995,
+   "src": "cone"
+  },
+  {
+   "deg": 300.25106922263535,
+   "conf": 0.7726363236952192,
+   "src": "cone"
+  },
+  {
+   "deg": 294.042915315526,
+   "conf": 0.4519068442405916,
+   "src": "cone"
+  },
+  {
+   "deg": 293.4855642956268,
+   "conf": 0.5155757239357511,
+   "src": "cone"
+  },
+  {
+   "deg": 293.4855642956268,
+   "conf": 0.43823936534538843,
+   "src": "hold"
+  },
+  {
+   "deg": 280.6892290792582,
+   "conf": 0.9842414166043143,
+   "src": "cone"
+  },
+  {
+   "deg": 280.6892290792582,
+   "conf": 0.8366052041136671,
+   "src": "hold"
+  },
+  {
+   "deg": 281.09330281818325,
+   "conf": 0.6625174773071234,
+   "src": "cone"
+  },
+  {
+   "deg": 275.83747356699484,
+   "conf": 0.6080636496674418,
+   "src": "cone"
+  },
+  {
+   "deg": 274.487656375135,
+   "conf": 0.4910192476564597,
+   "src": "cone"
+  },
+  {
+   "deg": 281.32140392719316,
+   "conf": 0.9754729637120554,
+   "src": "cone"
+  },
+  {
+   "deg": 281.32140392719316,
+   "conf": 0.829152019155247,
+   "src": "hold"
+  },
+  {
+   "deg": 273.4847063222019,
+   "conf": 0.9482521820692933,
+   "src": "cone"
+  },
+  {
+   "deg": 269.78008494607445,
+   "conf": 0.6472088069764917,
+   "src": "cone"
+  },
+  {
+   "deg": 272.143914422782,
+   "conf": 0.6598355366987725,
+   "src": "cone"
+  },
+  {
+   "deg": 275.7472359727112,
+   "conf": 0.32943509782884156,
+   "src": "cone"
+  },
+  {
+   "deg": 279.0548686456559,
+   "conf": 0.47249747316178337,
+   "src": "cone"
+  },
+  {
+   "deg": 279.0548686456559,
+   "conf": 0.40162285218751587,
+   "src": "hold"
+  },
+  {
+   "deg": 283.4680495439268,
+   "conf": 0.8297382385772043,
+   "src": "cone"
+  },
+  {
+   "deg": 283.4680495439268,
+   "conf": 0.7052775027906236,
+   "src": "hold"
+  },
+  {
+   "deg": 279.24731290732484,
+   "conf": 0.6031455797616265,
+   "src": "cone"
+  },
+  {
+   "deg": 279.24731290732484,
+   "conf": 0.5126737427973825,
+   "src": "hold"
+  },
+  {
+   "deg": 283.9876638527428,
+   "conf": 0.41005117714173417,
+   "src": "cone"
+  },
+  {
+   "deg": 285.3020603387183,
+   "conf": 0.5602832290484298,
+   "src": "cone"
+  },
+  {
+   "deg": 277.04677936049825,
+   "conf": 0.7236416244468749,
+   "src": "cone"
+  },
+  {
+   "deg": 276.87640857978727,
+   "conf": 0.5025912298826946,
+   "src": "cone"
+  },
+  {
+   "deg": 279.1770961488303,
+   "conf": 0.5159726445600327,
+   "src": "cone"
+  },
+  {
+   "deg": 276.9669320142523,
+   "conf": 0.6230256374280494,
+   "src": "cone"
+  },
+  {
+   "deg": 283.7729544387811,
+   "conf": 0.8161625848887866,
+   "src": "cone"
+  },
+  {
+   "deg": 286.49394545156997,
+   "conf": 0.5824919081485113,
+   "src": "cone"
+  },
+  {
+   "deg": 283.04673327619037,
+   "conf": 0.9340915111904244,
+   "src": "cone"
+  },
+  {
+   "deg": 288.20097987071904,
+   "conf": 0.7070322174129617,
+   "src": "cone"
+  },
+  {
+   "deg": 287.17091608054625,
+   "conf": 0.42915120803032797,
+   "src": "cone"
+  },
+  {
+   "deg": 287.17091608054625,
+   "conf": 0.36477852682577877,
+   "src": "hold"
+  },
+  {
+   "deg": 288.17357967077453,
+   "conf": 0.5891172640000277,
+   "src": "cone"
+  },
+  {
+   "deg": 286.0120603051149,
+   "conf": 0.6839217966617834,
+   "src": "cone"
+  },
+  {
+   "deg": 286.4959516960994,
+   "conf": 0.4482886464214624,
+   "src": "cone"
+  },
+  {
+   "deg": 282.2386056954988,
+   "conf": 0.6523199103195965,
+   "src": "cone"
+  },
+  {
+   "deg": 276.4533832448217,
+   "conf": 0.8574585510318768,
+   "src": "cone"
+  },
+  {
+   "deg": 277.4572333922664,
+   "conf": 0.8065625015428668,
+   "src": "cone"
+  },
+  {
+   "deg": 275.4636653615628,
+   "conf": 0.8514435524007873,
+   "src": "cone"
+  },
+  {
+   "deg": 269.59984554383664,
+   "conf": 0.43939078886513383,
+   "src": "cone"
+  },
+  {
+   "deg": 260.5203775316429,
+   "conf": 0.6684440290016225,
+   "src": "cone"
+  },
+  {
+   "deg": 254.94224155702557,
+   "conf": 0.6803715407569826,
+   "src": "cone"
+  },
+  {
+   "deg": 254.26812571639562,
+   "conf": 0.7558811662615932,
+   "src": "cone"
+  },
+  {
+   "deg": 251.64770735343882,
+   "conf": 0.6542295690286507,
+   "src": "cone"
+  },
+  {
+   "deg": 251.64770735343882,
+   "conf": 0.556095133674353,
+   "src": "hold"
+  },
+  {
+   "deg": 256.933828453959,
+   "conf": 0.9406516604452979,
+   "src": "cone"
+  },
+  {
+   "deg": 256.933828453959,
+   "conf": 0.7995539113785032,
+   "src": "hold"
+  },
+  {
+   "deg": 264.845249346945,
+   "conf": 0.7771114378881434,
+   "src": "cone"
+  },
+  {
+   "deg": 260.65280633513476,
+   "conf": 0.9447684129804299,
+   "src": "cone"
+  },
+  {
+   "deg": 252.69088757898123,
+   "conf": 0.8710398983142897,
+   "src": "cone"
+  },
+  {
+   "deg": 249.8209308695375,
+   "conf": 0.4157685023769197,
+   "src": "cone"
+  },
+  {
+   "deg": 251.60898739609718,
+   "conf": 0.45619525715154485,
+   "src": "cone"
+  },
+  {
+   "deg": 253.55494859400937,
+   "conf": 0.9276683012320819,
+   "src": "cone"
+  },
+  {
+   "deg": 257.0337608948387,
+   "conf": 0.5767406790230285,
+   "src": "cone"
+  },
+  {
+   "deg": 261.7371911816683,
+   "conf": 0.4168809060279468,
+   "src": "cone"
+  },
+  {
+   "deg": 259.2493953232895,
+   "conf": 0.8342208008594394,
+   "src": "cone"
+  },
+  {
+   "deg": 255.58126943548427,
+   "conf": 0.8659466044432358,
+   "src": "cone"
+  },
+  {
+   "deg": 255.06149436197416,
+   "conf": 0.6767042747644485,
+   "src": "cone"
+  },
+  {
+   "deg": 255.06149436197416,
+   "conf": 0.5751986335497812,
+   "src": "hold"
+  },
+  {
+   "deg": 261.9492787490334,
+   "conf": 0.5211976732409553,
+   "src": "cone"
+  },
+  {
+   "deg": 257.0783535426133,
+   "conf": 0.9953066254489371,
+   "src": "cone"
+  },
+  {
+   "deg": 259.1211533372061,
+   "conf": 0.7966515563420605,
+   "src": "cone"
+  },
+  {
+   "deg": 257.871850170626,
+   "conf": 0.580768164009966,
+   "src": "cone"
+  },
+  {
+   "deg": 253.9540242695217,
+   "conf": 0.3678344803787382,
+   "src": "cone"
+  },
+  {
+   "deg": 247.24176435896948,
+   "conf": 0.9112255590295477,
+   "src": "cone"
+  },
+  {
+   "deg": 247.27426943715273,
+   "conf": 0.5598181619680994,
+   "src": "cone"
+  },
+  null,
+  {
+   "deg": 254.41411250699707,
+   "conf": 0.8173062048659907,
+   "src": "cone"
+  },
+  {
+   "deg": 247.74816933832597,
+   "conf": 0.6281781447418449,
+   "src": "cone"
+  },
+  {
+   "deg": 248.4708050210586,
+   "conf": 0.6039809706862971,
+   "src": "cone"
+  },
+  {
+   "deg": 251.2798233897695,
+   "conf": 0.5674249106243776,
+   "src": "cone"
+  },
+  {
+   "deg": 252.39029725055025,
+   "conf": 0.7054474874877947,
+   "src": "cone"
+  },
+  {
+   "deg": 246.8443733216734,
+   "conf": 0.6244869564949738,
+   "src": "cone"
+  },
+  {
+   "deg": 244.2852905378869,
+   "conf": 0.3745057428894811,
+   "src": "cone"
+  },
+  {
+   "deg": 250.70204424663893,
+   "conf": 0.6417638794849077,
+   "src": "cone"
+  },
+  {
+   "deg": 248.4120725232599,
+   "conf": 0.7103424436902492,
+   "src": "cone"
+  },
+  {
+   "deg": 250.59150153817245,
+   "conf": 0.4924169954826163,
+   "src": "cone"
+  },
+  {
+   "deg": 250.42846596195477,
+   "conf": 0.32728101486044026,
+   "src": "cone"
+  },
+  {
+   "deg": 250.2152786226825,
+   "conf": 0.6491193392661212,
+   "src": "cone"
+  },
+  {
+   "deg": 243.17516542570343,
+   "conf": 0.823531600815135,
+   "src": "cone"
+  },
+  {
+   "deg": 243.4001832763331,
+   "conf": 0.5132243142726888,
+   "src": "cone"
+  },
+  {
+   "deg": 237.68666281515482,
+   "conf": 0.8146442756090881,
+   "src": "cone"
+  },
+  {
+   "deg": 238.02874280384822,
+   "conf": 0.35592438400628146,
+   "src": "cone"
+  },
+  {
+   "deg": 238.30852418521317,
+   "conf": 0.934073726491554,
+   "src": "cone"
+  },
+  {
+   "deg": 238.34028004179163,
+   "conf": 0.33789216064333266,
+   "src": "cone"
+  },
+  {
+   "deg": 235.52638333486243,
+   "conf": 0.5852750040090817,
+   "src": "cone"
+  },
+  {
+   "deg": 237.93713571511523,
+   "conf": 0.45426771986630454,
+   "src": "cone"
+  },
+  {
+   "deg": 228.07588388236172,
+   "conf": 0.7854401867104321,
+   "src": "cone"
+  },
+  {
+   "deg": 228.07588388236172,
+   "conf": 0.6676241587038673,
+   "src": "hold"
+  },
+  {
+   "deg": 228.04206047383923,
+   "conf": 0.4757092288173058,
+   "src": "cone"
+  },
+  {
+   "deg": 232.4796018803811,
+   "conf": 0.6238396543133631,
+   "src": "cone"
+  },
+  {
+   "deg": 229.49462741502873,
+   "conf": 0.7218688310407728,
+   "src": "cone"
+  },
+  {
+   "deg": 232.3945655803741,
+   "conf": 0.47263976770281785,
+   "src": "cone"
+  },
+  {
+   "deg": 232.53246327357544,
+   "conf": 0.4210947891513572,
+   "src": "cone"
+  },
+  {
+   "deg": 236.42474306502118,
+   "conf": 0.834787122610674,
+   "src": "cone"
+  },
+  {
+   "deg": 232.84599126271098,
+   "conf": 0.5144051196087164,
+   "src": "cone"
+  },
+  {
+   "deg": 237.73108610692395,
+   "conf": 0.6582418941329796,
+   "src": "cone"
+  },
+  {
+   "deg": 238.65774395559004,
+   "conf": 0.6474701984197531,
+   "src": "cone"
+  },
+  {
+   "deg": 242.5338183770042,
+   "conf": 0.7982908610949038,
+   "src": "cone"
+  },
+  {
+   "deg": 245.2496902382528,
+   "conf": 0.7828312243062143,
+   "src": "cone"
+  },
+  {
+   "deg": 239.63114065309685,
+   "conf": 0.7187935814770855,
+   "src": "cone"
+  },
+  {
+   "deg": 239.63114065309685,
+   "conf": 0.6109745442555227,
+   "src": "hold"
+  },
+  {
+   "deg": 238.89309850434927,
+   "conf": 0.723328095237568,
+   "src": "cone"
+  },
+  {
+   "deg": 239.87784240898952,
+   "conf": 0.8314033964256298,
+   "src": "cone"
+  },
+  {
+   "deg": 243.33274106673048,
+   "conf": 0.8590089402764589,
+   "src": "cone"
+  },
+  {
+   "deg": 237.3267593285293,
+   "conf": 0.486971867523848,
+   "src": "cone"
+  },
+  {
+   "deg": 241.24729610259033,
+   "conf": 0.47008782501101676,
+   "src": "cone"
+  }
+ ]
+}

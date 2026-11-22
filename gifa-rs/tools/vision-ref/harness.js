@@ -40,7 +40,11 @@ function loadReference() {
   }
 
   const prelude = `
-    const BEARING = { mask: null, canvas: null, ctx: null, layoutId: null, revision: 0 };
+    const BEARING = {
+      mask: null, canvas: null, ctx: null, layoutId: null, revision: 0,
+      ab: { theta: -1, omega: 0, t: 0, suspect: 0 },
+      view: { theta: -1, conf: 0, src: '', t: 0, pending: -1 },
+    };
     const DEFAULTS = { step: 1 };
     const results = {};
   `;
@@ -241,6 +245,45 @@ function main() {
     }
     fs.writeFileSync(path.join(dir, 'expected.json'), JSON.stringify(out, null, 1));
     console.log(`参考结果 ${out.length} 条 → ${dir}/expected.json`);
+    return;
+  }
+
+  if (mode === 'seq') {
+    // 生成一串观测，跑原版 smoothBearing / updateView，导出输入+输出给 Rust 复现
+    const outFile = rest[0] || 'filter-seq.json';
+    const ref = loadReference();
+    let s0 = 12345;
+    const rnd = () => { s0 = (s0 * 1664525 + 1013904223) >>> 0; return s0 / 0xffffffff; };
+    const steps = [];
+    let truth = 0;      // 真实朝向（缓慢变化）
+    let now = 0;
+    let t = 0;
+    for (let i = 0; i < 240; i++) {
+      now += 90 + Math.floor(rnd() * 40);        // 90~130ms/帧
+      truth = (truth + (rnd() - 0.5) * 12 + 360) % 360;
+      const r = rnd();
+      let obs = (truth + (rnd() - 0.5) * 6 + 360) % 360;  // 通常贴着真值
+      let conf = 0.55 + rnd() * 0.45;
+      if (r < 0.05) obs = (obs + 180) % 360;              // 5% 单帧 180° 假峰
+      else if (r < 0.12) conf = 0.2 + rnd() * 0.2;        // 7% 低置信
+      const coneValid = rnd() > 0.15;
+      const coneDeg = (truth + (rnd() - 0.5) * 20 + 360) % 360;
+      const coneConf = coneValid ? 0.3 + rnd() * 0.7 : 0;
+      steps.push({
+        now, obs, conf, coneDeg, coneConf,
+        coneValid, mapPresent: i % 200 !== 199,
+      });
+    }
+    const smooth = [];
+    const view = [];
+    for (const st of steps) {
+      smooth.push(ref.smoothBearing(st.obs, st.conf, st.now, st.coneDeg, st.coneConf));
+      const cone = { valid: st.coneValid, deg: st.coneDeg, conf: st.coneConf, width: 90 };
+      const v = ref.updateView(st.coneValid ? cone : null, st.now, st.mapPresent);
+      view.push(v ? { deg: v.deg, conf: v.conf, src: v.src } : null);
+    }
+    fs.writeFileSync(outFile, JSON.stringify({ steps, smooth, view }, null, 1));
+    console.log(`时序序列 ${steps.length} 步 → ${outFile}`);
     return;
   }
 

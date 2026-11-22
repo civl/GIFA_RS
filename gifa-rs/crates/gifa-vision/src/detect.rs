@@ -58,6 +58,8 @@ pub struct Detect {
     pub cyan_frac: f32,
     /// 采样点数
     pub samples: u32,
+    /// 这一帧有没有小地图（青色占比门控）
+    pub map_present: bool,
 }
 
 /// 屏幕/浮窗坐标 → 帧内坐标的偏移
@@ -99,6 +101,7 @@ pub fn detect_window(
     if cone.cyan_frac < params::MAP_CYAN_FRAC_MIN {
         return out;
     }
+    out.map_present = true;
 
     if arrow.valid {
         // 原版给的是 atan2 角，叠加层要罗盘角
