@@ -115,6 +115,8 @@ struct UiState {
     /// 浮窗被盖住过（只用日志，不参与逻辑）
     covered_logged: bool,
     covered_detail: String,
+    /// 叠加层当前圆心（跟着采样窗走）
+    overlay_center: Option<(i32, i32)>,
     /// `--seek <秒>`：视频就绪后跳转一次
     seek_to: Option<f64>,
     seeked: bool,
@@ -1288,6 +1290,19 @@ fn bearing_step(ui: &mut UiState) {
             ui.immersion,
             gifa_shell::click_through()
         );
+    }
+
+    // 叠加层跟着采样窗走：窗口移动/沉浸改尺寸后，圆心要重新贴到 ROI 上
+    if let Some(b) = vision_box(ui) {
+        let (cx, cy) = (b.x + b.w / 2, b.y + b.h / 2);
+        let moved = ui
+            .overlay_center
+            .map(|(ox, oy)| (ox - cx).abs() > 8 || (oy - cy).abs() > 8)
+            .unwrap_or(true);
+        if moved {
+            ui.overlay_center = Some((cx, cy));
+            gifa_shell::overlay_move_center(cx, cy);
+        }
     }
 
     if ui.vision_box.is_none() && ui.video_rect.is_some() && el > 0.8 {
