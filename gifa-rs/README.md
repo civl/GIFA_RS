@@ -2,6 +2,33 @@
 
 GIFA 的 Rust 复刻工程（对应仓库根的 `task.md`）。
 
+**能用了**：跟着攻略视频认路 + 在**真实游戏**里把方向标在屏幕上。
+识别跑在 Rust 里（不在页面里），与 B 站播放器解耦。
+
+## 当前状态（2026-11-22）
+
+| 能力 | 实测 |
+|---|---|
+| 视频素材（蒙德 1080p，138 帧人工真值） | 箭头 138/138，误差中位 **0.03°** |
+| 真实游戏（2560×1440 绿地，5 分钟长跑） | 箭头 **2989/3004（100%）**、视锥 98% |
+| 性能 | 截帧 11.4ms / 检测 1.0~1.2ms，5 分钟无漂移 |
+| 资源 | 内存 24→25MB、CPU 2.7% 单核、线程/句柄无增长 |
+| 自检门禁 | 18 项全过；测试 130 通过 |
+
+```powershell
+# 在游戏里跑（会自动找 UnityWndClass 窗口、隐藏浮窗、只留叠加层）
+gifa-demo.exe --game 300 --autocenter
+```
+
+**已知限制**（不是 bug，是边界）：
+
+* 冰原/雪地这类**低对比度地图**上箭头识别会失效（箭头和底色同为浅青）；
+  绿地、璃月、须弥正常。判据是算法本身的，`docs/VISION.md` 里有数据。
+* 独占全屏（exclusive fullscreen）无法叠加，必须**无边框全屏或窗口化**。
+* 游戏以管理员运行时，非提权的 GIFA 收不到全局热键（UIPI），要用发布版（清单要求提权）。
+* 小地图里图标特别密、和箭头粘成一块时，那一帧会退到"六边形兜底"，
+  兜底结果有约 5% 的帧会偏；时序滤波能吃掉其中 89%。
+
 ```
 gifa-rs/
 ├─ Cargo.toml
@@ -26,7 +53,17 @@ gifa-rs/
 │  │  ├─ src/action.rs          #   11 个动作 + 中英文标签
 │  │  └─ src/state.rs           #   倍速循环 / 长按加速（多来源）/ 透明度切换
 │  ├─ gifa-input/               # XInput 轮询 + 八方向状态机 + 全局热键（注册/钩子）
-│  ├─ gifa-vision/              # 二期：帧源抽象 + 青色分数/阈值（算法骨架）
+│  ├─ gifa-vision/              # 识别：与页面无关，纯 Rust
+│  │  ├─ src/arrow.rs           #   箭头三点拟合（原版 analyze 的忠实移植）
+│  │  ├─ src/cone.rs            #   视锥白膜（原版 analyzeCone 的忠实移植）
+│  │  ├─ src/filter.rs          #   α-β 滤波 + 视角状态机（时序层）
+│  │  ├─ src/hexagon.rs         #   六边形法：两个凹点定方向（兜底）
+│  │  ├─ src/autocenter.rs      #   自动定心：找箭头反推小地图圆心
+│  │  ├─ src/recovery.rs        #   重试策略：缩窗 + 8 方向偏移 + 簇投票
+│  │  ├─ src/detect.rs          #   一帧 → (箭头, 视锥, 门控)
+│  │  └─ src/pipeline.rs        #   识别线程：截屏 → 检测 → 事件
+│  ├─ tools/                    # 对拍工具（见 docs/VISION.md）
+│  └─ docs/calibration/         # 人工真值语料（视频 138 帧 / 真机 39 帧）
 │  ├─ gifa-player/              # B 站播放器协议 + 页面内 agent（player-agent.js）
 │  └─ gifa-shell/               # 外壳：舞台窗 + 顶层 chrome 玻璃窗 + 区域联动
 │     ├─ src/shell.rs           #   装配、WndProc、两窗同步、IPC 契约
@@ -118,6 +155,36 @@ cargo run -p gifa-demo -- --open BV1xx411c7mD --ui-test
 
 # 识别链路自检：真实截屏 / 合成地图端到端
 cargo run -p gifa-demo -- --open BV1xx411c7mD --vision-test
+
+# 合成地图端到端（箭头 ≈90° / 视锥 ≈180°）
+cargo run -p gifa-demo -- --vision-synth
+
+# ---- 真实素材 / 真机 ----
+
+# 真机：直接采游戏窗口（自动隐藏浮窗，只留叠加层）
+cargo run -p gifa-demo -- --game 300
+
+# 真机 + 自动定心（找不到小地图就多试几次，收敛后写进布局）
+cargo run -p gifa-demo -- --game 60 --autocenter
+
+# 视频：指定时间点（跳过开头的面板讲解），逐帧 CSV 便于离线分析
+cargo run -p gifa-demo -- --open "https://www.bilibili.com/video/BV1oa4y1H7b5/?p=3" `
+  --size 1400x820 --immerse --seek 120 --autocenter --bearing 30 --vision-csv out.csv
+
+# 临时指定 ROI（cx,cy,r 都是相对内容区的比例），不落盘
+cargo run -p gifa-demo -- --open BV1xx411c7mD --roi "0.147,0.246,0.144"
+
+# 把采样窗原样落盘（排查"采到的是不是小地图"）
+$env:GIFA_DUMP_ALL=1
+cargo run -p gifa-demo -- --open BV1xx411c7mD --dump-frame frames --dump-count 40
+
+# 列出可见窗口（找游戏窗口/排查遮挡）
+cargo run -p gifa-demo -- --list-windows
+
+# ---- 标定工具 ----
+# 逐帧标注 → 出准确率/阈值报告（详见 docs/VISION.md）
+python scripts/label-tool.py apps/gifa-demo/data/labelseq apps/gifa-demo/data/label.csv apps/gifa-demo/data/label
+python scripts/label-report.py labels.json
 cargo run -p gifa-demo -- --vision-synth
 
 # 纯函数单测
@@ -303,21 +370,32 @@ GDI 截屏 → 采样窗（`r×2.4`）→ 占位检测（青素质心/白像素�
 
 详见 `docs/LIVE-TEST.md`。
 
-## M8b：视觉算法（箭头通道完成，2026-11-22）
+## M8b：视觉算法（完成，2026-11-22）
 
-`crates/gifa-vision/src/arrow.rs` 是对原版 `analyze()` 的逐步骤移植：
+两条通道都是**逐步骤移植**，并跟原版 JS 做过逐帧对拍：
 
-```
-自适应阈值(p99) → 半径带 mask → 最大连通块 → 72 格径向剖面 → 三点平滑
-→ 候选峰 + 支撑宽度 → 峰值精修 → 三点枚举评分 → 定鼻尖
-```
+| 通道 | 模块 | 做了什么 |
+|---|---|---|
+| 箭头 | `arrow.rs` | 自适应阈值(p99) → 半径带 mask → 最大连通块 → 72 格径向剖面 → 三点平滑 → 候选峰+支撑宽度 → 峰精修 → 三点枚举评分 |
+| 视锥 | `cone.rs` | 极坐标格(120×12) → 白核剔除+膨胀 → 三通道联合最小二乘解 α → 可见层严格多数 → ±45° 配对 → 亚格细化 |
+| 时序 | `filter.rs` | α-β 滤波（`a=0.32+0.3c`、`b=0.06+0.1c`、ω±540°/s）+ 130° 翻转门限；视角状态机（1200ms 宽限、>100° 挂起、30° 复核） |
+| 兜底 | `hexagon.rs` | 六边形法：两个凹点定"背后"，离它最远的点即尖端 |
+| 定心 | `autocenter.rs` | 扫青色候选 → 交给检测器验收 → 多次聚类定圆心 |
+| 重试 | `recovery.rs` | 缩窗 2.5% + 8 方向偏移 + 按角度聚簇（≥3 票且过半才采纳） |
 
-**对拍 33 帧：与原版 JS 最大角度差 0.0000°、conf 差 1.1e-16**，valid/cyans/tipFrac/
-各余量字段全部相等。对拍工具在 `tools/vision-ref/`（运行时从原版源码切算法段，不抄），
-一条命令：`scripts/vision-golden.ps1`。
+对拍：33 帧合成语料**角度差 0.0000°**；时序层 240 步逐帧一致。
+对拍工具在 `tools/vision-ref/`（运行时从原版源码切算法段，不抄），一条命令 `scripts/vision-golden.ps1`。
 
-视锥通道（扇形白膜）同样完成移植并对拍一致（33 帧角度差 0.0000°）。
-仍未做：α-β 滤波、视角状态机、重试策略、自动定心。
+### 与原版不一样的地方（都是被真机数据逼出来的）
+
+| 改动 | 依据 |
+|---|---|
+| `bisErr` 15→25、`angMargin` 4→18（**只用于管线**，`analyze` 默认仍是原版） | 真机 39 帧人工真值：原版参数 0/39 有效；放宽+收紧后 28/39、误差 9.3°、坏帧 0 |
+| 箭头单独用中心 55% 裁切 | 真机 253px 窗口里箭头只占 1%，`p99<100` 把整帧判成"没有小地图" |
+| 六边形法兜底 | 真机覆盖率 28/39 → **39/39** |
+| 自动定心半径取"最近内置预设" | 按箭头反推会偏 2~3 倍（小地图缩放和显示器宽度都影响） |
+
+真机五分钟长跑的完整数据见 `docs/LIVE-TEST.md`。
 
 ## M12：打包（2026-11-22）
 
@@ -391,4 +469,10 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 1. **`WS_THICKFRAME` 有 ~8px 非客户区** —— 必须用 `WM_NCCALCSIZE` 把客户区顶回整窗，否则子窗和 WebView2 整体内缩、窗口边缘漏出别的程序。
 2. **借用与重入**：`SetWindowPos` 会同步回调 `WM_WINDOWPOSCHANGED`。凡是要触发窗口消息的公开 API，**先取 HWND、放下借用再调用**；页面布局变化走 `WM_APP_RELAYOUT`，等借用放下再 `sync()`。
 3. **thread_local 状态跨线程是空的**：`post_tick` / `eval_chrome` / `close` 都可能被后台线程调用，所以句柄存了一份全局副本、JS 走队列 + `WM_APP_EVAL` 回 UI 线程执行。
-4. **页面上报函数名要和 Rust 调的一致**：`eval_chrome("window.gifaState(...)")` 对不上页面里定义的 `gifaSet` 时是**静默无效**（`&&` 短路），UI 会一直显示"未载入"。M2 就踩了一次 —— 页面导出统一用 `window.gifaState`。
+4. **别用单帧调阈值**：同一帧重复 39 次的人工真值上"分得开"的阈值，一放到真机序列上
+   就把覆盖率从 99% 砍到 31%（凹点对称性那条闸）。要调阈值，先拿连续序列。
+5. **目测不如量数字**：三次判断失误（坐标没换算、内置预设背锅、叠加层"偏移"）
+   都是凭截图/直觉下的结论，量一下全都不成立。
+6. **窗口别压在小地图上**：浮窗默认放左下角。压在左上角等于截自己 ——
+   表现是"视锥 100% 有效、箭头 0 有效"，非常容易误判成算法问题。
+7. **页面上报函数名要和 Rust 调的一致**：`eval_chrome("window.gifaState(...)")` 对不上页面里定义的 `gifaSet` 时是**静默无效**（`&&` 短路），UI 会一直显示"未载入"。M2 就踩了一次 —— 页面导出统一用 `window.gifaState`。
