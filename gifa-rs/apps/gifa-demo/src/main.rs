@@ -24,8 +24,8 @@ use gifa_input::GamepadEvent;
 use gifa_player::{LoginState, PageInfo, PlayerCommand, PlayerMsg, PlayerState, VideoInfo};
 use gifa_shell::{Bounds, ShellConfig};
 
-const W: i32 = 896;
-const H: i32 = 568;
+const W: i32 = 720;
+const H: i32 = 450;
 const DEFAULT_TEXT: &str = "BV1xx411c7mD";
 
 thread_local! {
@@ -451,6 +451,7 @@ fn main() {
     // 父进程若在 WaitForExit 不读就会死锁（自检门禁里真踩过）
     println!("[gifa] 载入 {}（输入 {:?}）", short_url(&url), short_url(&text));
 
+    let saved_bounds = store.bounds;
     UI.with(|ui| {
         let mut ui = ui.borrow_mut();
         ui.layouts = store.bearing.layouts.clone();
@@ -491,14 +492,35 @@ fn main() {
         player_tx: Some(player_tx),
         chrome_tx: Some(chrome_tx),
         bounds: {
-            let (mut bw, mut bh) = (W, H);
+            // 优先用上次记住的位置/尺寸（用户手动调过就照原样恢复）
+            let (mut bw, mut bh) = (
+                saved_bounds.width.max(320),
+                saved_bounds.height.max(200),
+            );
             if let Some(sz) = arg_value(&args, "--size") {
                 if let Some((w, h)) = sz.split_once('x') {
                     bw = w.parse().unwrap_or(W);
                     bh = h.parse().unwrap_or(H);
                 }
             }
-            Bounds::new(80, 80, bw, bh)
+            {
+                // 没存过位置就贴左下角（不压游戏左上角的小地图）
+                let (dx, dy) = match (saved_bounds.x, saved_bounds.y) {
+                    (Some(x), Some(y)) => (x, y),
+                    _ => gifa_shell::list_windows()
+                        .first()
+                        .map(|_| (40, 40))
+                        .unwrap_or((40, 40)),
+                };
+                let mut b = Bounds::new(dx, dy, bw, bh);
+                if let Some(pos) = arg_value(&args, "--pos") {
+                    if let Some((x, y)) = pos.split_once(',') {
+                        b.x = x.trim().parse().unwrap_or(b.x);
+                        b.y = y.trim().parse().unwrap_or(b.y);
+                    }
+                }
+                b
+            }
         },
         opacity: 255,
         title: "GIFA 跟跑浮窗".to_string(),
@@ -573,7 +595,11 @@ fn main() {
         });
     }
 
-    println!("[perf] 窗口就绪 {}ms", boot.elapsed().as_millis());
+    if let Some(b) = gifa_shell::bounds() {
+        println!("[perf] 窗口就绪 {}ms（位置 ({}, {}) 尺寸 {}×{}）", boot.elapsed().as_millis(), b.x, b.y, b.w, b.h);
+    } else {
+        println!("[perf] 窗口就绪 {}ms", boot.elapsed().as_millis());
+    }
     gifa_shell::start_ticks(250);
     gifa_shell::run();
 
@@ -641,6 +667,26 @@ fn on_tick() {
         if std::env::args().any(|a| a == "--overlay-test") {
             overlay_test_step(&mut ui);
         }
+        /* 记住窗口位置/尺寸：用户拖动或拉边之后写回设置，下次启动原样恢复。
+         * 沉浸模式会临时改 bounds（按视频比例收窗口），那不算用户的意图，跳过。 */
+        if !ui.immersion {
+            if let Some(b) = gifa_shell::bounds() {
+                if let Some(store) = ui.store.as_mut() {
+                    let same = store.bounds.x == Some(b.x)
+                        && store.bounds.y == Some(b.y)
+                        && store.bounds.width == b.w
+                        && store.bounds.height == b.h;
+                    if !same {
+                        store.bounds.x = Some(b.x);
+                        store.bounds.y = Some(b.y);
+                        store.bounds.width = b.w;
+                        store.bounds.height = b.h;
+                        store.save();
+                    }
+                }
+            }
+        }
+
         // 2.5) --login：到点在 UI 线程开弹窗
         if let Some(t) = ui.login_at {
             if Instant::now() >= t {

@@ -104,11 +104,15 @@ impl Bounds {
     }
 }
 
-/// 首次启动的默认位置：贴工作区右上，留 40/60 的边距（原版行为）。
+/// 首次启动的默认位置：**贴工作区左下**。
+///
+/// 原版是右上，但右上/左上会压住游戏**左上角的小地图** —— 而识别正是采那块像素，
+/// 窗口压上去等于截自己（真机联调时踩过：视锥 100% 有效、箭头 0 有效）。
+/// 左下角离小地图最远，也避开了右上角的小派蒙菜单。
 pub fn default_bounds(work: WorkArea, w: i32, h: i32) -> Bounds {
     let w = w.max(MIN_W).min(work.w - 16);
     let h = h.max(MIN_H).min(work.h - 16);
-    Bounds::new(work.right() - w - 40, work.y + 60, w, h)
+    Bounds::new(work.x + 40, work.bottom() - h - 40, w, h)
 }
 
 /// 把窗口拉回工作区。

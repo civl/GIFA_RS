@@ -107,7 +107,11 @@ pub fn detect_window(
      *
      * 所以两个通道用两个窗口：视锥用整窗（它要看到扇形边缘），箭头用中心 55% 的
      * 裁切（箭头占 8% 左右，p99 稳定过线）。不额外截屏，只是同一块像素里换窗口。 */
-    let arrow_side = ((size as f64 * 0.55) as usize).clamp(48, size) & !1;
+    let crop_frac: f64 = std::env::var("GIFA_ARROW_CROP")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.55);
+    let arrow_side = ((size as f64 * crop_frac) as usize).clamp(48, size) & !1;
     let crop_off = (size - arrow_side) / 2;
     let arrow = if arrow_side + 8 < size {
         let mut crop = vec![0u8; arrow_side * arrow_side * 4];
