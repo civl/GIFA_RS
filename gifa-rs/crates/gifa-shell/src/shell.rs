@@ -128,6 +128,11 @@ pub struct ShellConfig {
     pub chrome_html: String,
     pub stage_html: String,
     pub bounds: Bounds,
+    /// 是否把初始 bounds 夹回工作区。
+    ///
+    /// 恢复用户上次摆好的位置时**要关掉**：用户可能故意让窗口底边压到任务栏下面
+    /// （那里是游戏的底部 UI，没人在意），clamp 会把它往上推，于是每次启动都漂一点。
+    pub clamp_bounds: bool,
     /// 0..=255
     pub opacity: u8,
     pub title: String,
@@ -353,17 +358,21 @@ fn create_float_window(cfg: &ShellConfig) -> Result<HWND, String> {
         )
         .map_err(|e| format!("CreateWindowExW(float) 失败: {e}"))?;
 
-        // 落到所在屏的工作区里
+        // 落到所在屏的工作区里（恢复用户位置时跳过，见 clamp_bounds 的注释）
         let work = win32::work_area(hwnd);
-        let clamped = layout::clamp_to_work(
-            Bounds::new(b.x, b.y, b.w, b.h),
-            WorkArea {
-                x: work.left,
-                y: work.top,
-                w: work.right - work.left,
-                h: work.bottom - work.top,
-            },
-        );
+        let clamped = if cfg.clamp_bounds {
+            layout::clamp_to_work(
+                Bounds::new(b.x, b.y, b.w, b.h),
+                WorkArea {
+                    x: work.left,
+                    y: work.top,
+                    w: work.right - work.left,
+                    h: work.bottom - work.top,
+                },
+            )
+        } else {
+            Bounds::new(b.x, b.y, b.w, b.h)
+        };
         let _ = SetWindowPos(
             hwnd,
             Some(HWND_TOPMOST),

@@ -121,6 +121,8 @@ struct UiState {
     view: gifa_vision::ViewState,
     /// --game：采游戏窗口（真机验证）。
     game_rect: Option<gifa_shell::RectI>,
+    /// 启动时刻（用来跳过启动期间的 bounds 抖动）
+    boot_at: Option<Instant>,
     /// 是否已经做过自动定心
     autocentered: bool,
     /// --game 统计：有效箭头/视锥帧数、帧间角度、跨帧跳变
@@ -522,6 +524,7 @@ fn main() {
                 b
             }
         },
+        clamp_bounds: saved_bounds.x.is_none(),
         opacity: 255,
         title: "GIFA 跟跑浮窗".to_string(),
         interactive: true,
@@ -600,6 +603,7 @@ fn main() {
     } else {
         println!("[perf] 窗口就绪 {}ms", boot.elapsed().as_millis());
     }
+    UI.with(|ui| ui.borrow_mut().boot_at = Some(Instant::now()));
     gifa_shell::start_ticks(250);
     gifa_shell::run();
 
@@ -669,7 +673,12 @@ fn on_tick() {
         }
         /* 记住窗口位置/尺寸：用户拖动或拉边之后写回设置，下次启动原样恢复。
          * 沉浸模式会临时改 bounds（按视频比例收窗口），那不算用户的意图，跳过。 */
-        if !ui.immersion {
+        // 启动后前 2 秒的 bounds 变化是程序自己摆的（比例纠正/mode 恢复），别记
+        let booted = ui
+            .boot_at
+            .map(|t| t.elapsed().as_secs_f64() > 2.0)
+            .unwrap_or(false);
+        if !ui.immersion && booted {
             if let Some(b) = gifa_shell::bounds() {
                 if let Some(store) = ui.store.as_mut() {
                     let same = store.bounds.x == Some(b.x)

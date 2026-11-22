@@ -34,6 +34,7 @@ fn main() {
         chrome_html: include_str!("../web/chrome.html").to_string(),
         stage_html: include_str!("../web/stage.html").to_string(),
         bounds: Bounds::new(80, 80, W, H),
+        clamp_bounds: true,
         opacity: 255,
         title: "GIFA 跟跑浮窗（外壳骨架）".to_string(),
         stage_url: None,
