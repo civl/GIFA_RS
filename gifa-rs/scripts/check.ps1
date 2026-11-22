@@ -35,9 +35,7 @@ function Add-Row($name, $ok, $detail) {
     Write-Host ("  {0,-32} {1}  {2}" -f $name, $(if ($ok) { "PASS" } else { "FAIL" }), $detail) -ForegroundColor $c
 }
 
-function Run-DemoTest($name, $argLine, $timeoutSec = 60, $exePath = $null, $workDir = $null) {
-    if (-not $exePath) { $exePath = $exe }
-    if (-not $workDir) { $workDir = $demo }
+function New-Psi($exePath, $argLine, $workDir) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exePath
     $psi.Arguments = $argLine
@@ -46,13 +44,23 @@ function Run-DemoTest($name, $argLine, $timeoutSec = 60, $exePath = $null, $work
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
     $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-    $p = [System.Diagnostics.Process]::Start($psi)
+    return $psi
+}
+
+function Run-DemoTest($name, $argLine, $timeoutSec = 60, $exePath = $null, $workDir = $null) {
+    if (-not $exePath) { $exePath = $exe }
+    if (-not $workDir) { $workDir = $demo }
+    $p = [System.Diagnostics.Process]::Start((New-Psi $exePath $argLine $workDir))
+    # 必须先挂异步读取：输出超过管道缓冲（4KB）时，子进程会阻塞在写入，
+    # 而父进程卡在 WaitForExit 不读 → 死锁（门禁里真踩过）
+    $so = $p.StandardOutput.ReadToEndAsync()
+    $se = $p.StandardError.ReadToEndAsync()
     if (-not $p.WaitForExit($timeoutSec * 1000)) {
         try { $p.Kill() } catch {}
         Add-Row $name $false "超时 $timeoutSec s"
         return
     }
-    $out = $p.StandardOutput.ReadToEnd() + $p.StandardError.ReadToEnd()
+    $out = $so.Result + $se.Result
     $m = [regex]::Match($out, "RESULT\s+(\d+)/(\d+)")
     if (-not $m.Success) {
         Add-Row $name $false "没有 RESULT 行"
@@ -66,10 +74,11 @@ function Run-DemoTest($name, $argLine, $timeoutSec = 60, $exePath = $null, $work
     }
     # 这些自检会抢窗口/注入输入，偶尔被前台窗口干扰：失败重试一次再定性
     Write-Host ("  {0,-32} 第一次 {1}/{2}，重试…" -f $name, $got, $all) -ForegroundColor Yellow
-    $psi2 = $psi.Clone()
-    $p2 = [System.Diagnostics.Process]::Start($psi2)
+    $p2 = [System.Diagnostics.Process]::Start((New-Psi $exePath $argLine $workDir))
+    $so2 = $p2.StandardOutput.ReadToEndAsync()
+    $se2 = $p2.StandardError.ReadToEndAsync()
     if (-not $p2.WaitForExit($timeoutSec * 1000)) { try { $p2.Kill() } catch {} }
-    $out2 = $p2.StandardOutput.ReadToEnd() + $p2.StandardError.ReadToEnd()
+    $out2 = $so2.Result + $se2.Result
     $m2 = [regex]::Match($out2, "RESULT\s+(\d+)/(\d+)")
     if ($m2.Success) {
         $g2 = [int]$m2.Groups[1].Value
@@ -88,7 +97,22 @@ try {
 } finally { Pop-Location }
 Add-Row "cargo build --workspace" $true "ok"
 
-Write-Host "== 2/4 单元测试 + clippy ==" -ForegroundColor Cyan
+Write-Host "== 2/4 视觉对拍素材 + 单元测试 + clippy ==" -ForegroundColor Cyan
+# 有 node 就现场生成对拍语料（调用原版 JS），这样 cargo test 里的 golden 测试不是空跑
+$node = Get-Command node -ErrorAction SilentlyContinue
+if ($node) {
+    $ref = Join-Path $root "tools\vision-ref\harness.js"
+    $frames = Join-Path $root "tools\vision-ref\frames"
+    $ErrorActionPreference = 'Continue'
+    & node $ref gen $frames 2>&1 | Out-Null
+    $g1 = $LASTEXITCODE
+    & node $ref batch $frames 2>&1 | Out-Null
+    $g2 = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    Add-Row "生成视觉对拍语料" ($g1 -eq 0 -and $g2 -eq 0) "frames + expected.json"
+} else {
+    Add-Row "生成视觉对拍语料" $true "跳过（没有 node）"
+}
 Push-Location $root
 try {
     $out = (Invoke-Native "cargo" @("test", "--workspace")).Out

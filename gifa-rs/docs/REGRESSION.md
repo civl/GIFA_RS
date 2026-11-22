@@ -16,7 +16,8 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 | 层 | 项 | 判据 |
 |---|---|---|
 | 编译 | `cargo build --workspace` | 退出码 |
-| 单测 | `cargo test` | **105 通过 / 0 失败** |
+| 语料 | 生成视觉对拍素材（node） | 有 node 时现场生成，交给 golden 测试 |
+| 单测 | `cargo test` | **106 通过 / 0 失败**（含视觉 golden 对拍） |
 | 静态 | `cargo clippy --all-targets` | **0 warning** |
 | 外壳 | `shell-demo` 区域/拖角/命中 | 6/6 |
 | 热键 | `--hotkey-test` 注册/钩子/交换 | 6/6（环境受限时降级 SKIP） |
@@ -42,6 +43,17 @@ CPU      0.2%       （预算 10%，播放 + 识别 10 帧/秒）
 ```
 
 待机内存 24MB 明显低于预算 —— 因为识别只截 216×216 的采样窗，不是整屏。
+
+## 遮挡会让"几何/命中/截屏"类断言失去意义
+
+浮窗被别的窗口（尤其是独占全屏的游戏）盖住时：
+
+* `WindowFromPoint` 返回的是**别人**，区域/命中测试测不了；
+* GDI 按屏幕坐标截屏，截到的是**别人**，合成地图根本不在画面里。
+
+所以这些自检会先判断"浮窗是否真的露着"，被盖住就标 **SKIP** 而不是 FAIL ——
+判据是"代码路径对不对"，不是"这台机器上别人有没有挡住它"。
+真出问题（区域没盖住舞台 → 命中 `Float`）仍然判 FAIL。
 
 ## 视觉回归：一期只做冒烟
 
@@ -102,5 +114,8 @@ PowerShell 5.1 下有两件事会让这种脚本莫名其妙地挂：
 2. **原生程序往 stderr 写东西**会被 `$ErrorActionPreference = "Stop"` 当成异常抛出来
    （`NativeCommandError`）。`cargo build` 一编译就中招，所以脚本里用 `Invoke-Native`
    临时放宽、靠 `$LASTEXITCODE` 判定。
-3. **空管道的 `.Count` 不是 0**：`($rows | Where-Object {...}).Count` 在全通过时返回 `$null`，
+3. **重定向输出会把管道写满**：子进程一次打印 3.5KB 的 `data:` URL 超过管道缓冲（4KB），
+   父进程又卡在 `WaitForExit` 不读 → **死锁**，表现为"超时 60s"。
+   两边都修了：应用侧截断长 URL，脚本侧先挂 `ReadToEndAsync` 再等退出。
+4. **空管道的 `.Count` 不是 0**：`($rows | Where-Object {...}).Count` 在全通过时返回 `$null`，
    于是"失败 0 项"被打印成"失败  项"、退出码还算成 1。必须写成 `@(...).Count`。

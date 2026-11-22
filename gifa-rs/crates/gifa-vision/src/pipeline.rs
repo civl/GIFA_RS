@@ -15,7 +15,8 @@
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
-use crate::detect::{detect_simple, Detect, Origin, SampleBox};
+use crate::arrow::ArrowWorkspace;
+use crate::detect::{detect_window, Detect, SampleBox};
 use crate::screen;
 
 /// 一次识别结果（带耗时，便于判断性能是否达标）
@@ -40,6 +41,7 @@ where
         .name("gifa-vision".into())
         .spawn(move || {
             let mut seq = 0u64;
+            let mut ws = ArrowWorkspace::default();
             let mut next = Instant::now();
             loop {
                 next += interval;
@@ -58,7 +60,9 @@ where
                     Err(_) => continue,
                 };
                 let t1 = Instant::now();
-                let result = detect_simple(&frame, win, Origin { x: win.x, y: win.y });
+                // 截的就是采样窗本身，正方形，直接喂给箭头算法
+                let side = win.w.min(win.h).max(8) as usize;
+                let result = detect_window(&frame.data, side, &mut ws);
                 let t2 = Instant::now();
                 seq += 1;
                 if tx

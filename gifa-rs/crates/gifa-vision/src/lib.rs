@@ -8,6 +8,7 @@
 //! 刻意**不**在这里写"半成品算法"：二期的移植纪律是逐函数对照
 //! `webview-preload.js`，凭理解先写一版反而会把对拍基线搞乱。
 
+pub mod arrow;
 pub mod color;
 pub mod detect;
 pub mod pipeline;
@@ -15,7 +16,8 @@ pub mod frame;
 pub mod result;
 pub mod screen;
 
-pub use detect::{detect_simple, Detect, Origin, SampleBox};
+pub use arrow::{analyze, to_compass, ArrowResult, ArrowWorkspace, Corner};
+pub use detect::{detect_simple, detect_window, Detect, Origin, SampleBox};
 pub use frame::{Frame, FrameSource, Roi};
 pub use pipeline::{start as start_pipeline, VisionEvent};
 pub use screen::capture_screen;

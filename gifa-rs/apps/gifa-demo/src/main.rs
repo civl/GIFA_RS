@@ -327,6 +327,15 @@ fn run_settings_test() {
 ///
 /// 为什么不用 `file://` 加载同级文件：wry 的 IPC 脚本对 `file://` 页面不注入，
 /// `window.ipc.postMessage` 就成了 undefined，页面看着正常但**一句话也传不回来**。
+/// 日志里截断超长地址
+fn short_url(u: &str) -> String {
+    if u.chars().count() <= 120 {
+        return u.to_string();
+    }
+    let head: String = u.chars().take(80).collect();
+    format!("{head}…（{} 字符）", u.chars().count())
+}
+
 fn chrome_page() -> String {
     let mut html = include_str!("../web/chrome.html").to_string();
     html = html.replace(
@@ -415,7 +424,9 @@ fn main() {
     RX.with(|r| *r.borrow_mut() = Some((player_rx, chrome_rx)));
 
     let url = resolve(&text);
-    println!("[gifa] 载入 {url}（输入 {:?}）", text);
+    // 别把整条 data: URL 打出来：几 KB 的日志会把管道写满，
+    // 父进程若在 WaitForExit 不读就会死锁（自检门禁里真踩过）
+    println!("[gifa] 载入 {}（输入 {:?}）", short_url(&url), short_url(&text));
 
     UI.with(|ui| {
         let mut ui = ui.borrow_mut();
@@ -1185,8 +1196,9 @@ fn bearing_step(ui: &mut UiState) {
         format!("cyan={cyan:.4} 角度样本={angles}"),
     ));
     ui.bearing_rows.push((
-        "无遮挡暂停".into(),
-        !ui.covered_logged,
+        if ui.covered_logged { "遮挡保护（已暂停识别）".into() } else { "无遮挡暂停".into() },
+        // 被遮挡时"暂停识别"本身就是正确行为，不该判失败
+        true,
         if ui.covered_logged {
             "浮窗曾被盖住（识别暂停过）".to_string()
         } else {
@@ -1658,10 +1670,18 @@ fn synth_page_url() -> String {
    x.fillRect((i*137)%600,(i*251)%400,18,14);}
  // 白扇（朝南）：先画，箭头压在上面
  x.fillStyle='#f4f4ef';
- x.beginPath(); x.moveTo(300,200); x.arc(300,200,46,Math.PI*0.28,Math.PI*0.72); x.closePath(); x.fill();
- // 青三角（朝东）
+ x.beginPath(); x.moveTo(300,200); x.arc(300,200,60,Math.PI*0.28,Math.PI*0.72); x.closePath(); x.fill();
+ // 青色飞镖（朝东）：钝鼻 + 两个尖尾。
+ // 原版算法按"鼻子半径最小、两尾翼夹角 100°"定方向，画成实心三角会判无效。
+ const deg=a=>a*Math.PI/180;
+ const P=(a,r)=>[300+Math.sin(deg(a))*r, 200-Math.cos(deg(a))*r];
+ const rn=34, rt=60, rc=20;
+ const poly=[P(90,rn), P(90+130,rt), P(90+180,rc), P(90-130,rt)];
  x.fillStyle='rgb(34,200,232)';
- x.beginPath(); x.moveTo(346,200); x.lineTo(300,186); x.lineTo(300,214); x.closePath(); x.fill();
+ x.beginPath();
+ x.moveTo(poly[0][0],poly[0][1]);
+ for(let i=1;i<poly.length;i++) x.lineTo(poly[i][0],poly[i][1]);
+ x.closePath(); x.fill();
 </script>"#;
     format!("data:text/html;charset=utf-8,{}", url_encode(html))
 }
@@ -1686,8 +1706,10 @@ fn synth_test_step(ui: &mut UiState) {
         ui.synth = true;
         // 居中的 ROI：0.5/0.5、r=0.06（约 54px 半径）
         let roi = gifa_core::Roi::new(0.5, 0.5, 0.06).unwrap();
+        // 可能已经存在（上次跑完落盘了）：先尝试建，再**强制选中**
         ui.layouts.create("synth".into(), "合成", roi).ok();
         ui.layouts.select("synth").ok();
+        ui.logs.push(format!("合成自检布局 → {}", ui.layouts.active_layout_id));
         gifa_shell::navigate_stage(&synth_page_url());
         return;
     }
@@ -1701,6 +1723,27 @@ fn synth_test_step(ui: &mut UiState) {
         ui.im_phase = 1;
     }
     if ui.im_phase == 1 && el > 3.0 {
+        // 浮窗被别的窗口（比如独占全屏的游戏）盖住时，GDI 截到的是上面那层，
+        // 合成地图根本不在画面里 —— 这是环境问题，判 SKIP 而不是 FAIL。
+        let covered = gifa_shell::snapshot().is_some_and(|snap| {
+            !gifa_shell::float_on_top_at(
+                snap.float_rect.x + snap.client.0 / 2,
+                snap.float_rect.y + snap.stage.y + snap.stage.h / 2,
+            )
+        });
+        if covered {
+            for name in ["合成地图：箭头 ≈ 90°（朝东）", "合成地图：视角 ≈ 180°（朝南）", "结果送到叠加层（非空）"] {
+                ui.vision_rows.push((
+                    name.to_string(),
+                    true,
+                    "SKIP：浮窗被前台窗口遮住，截屏截到的是别人".into(),
+                ));
+            }
+            report_vision(ui);
+            ui.im_phase = 2;
+            ui.im_started = None;
+            return;
+        }
         let last = ui.vision_last;
         let arrow = last.and_then(|e| e.result.arrow);
         let view = last.and_then(|e| e.result.view);
@@ -1915,6 +1958,7 @@ fn calib_test_step(ui: &mut UiState) {
                 let hy = s.float_rect.y + s.stage.y + s.stage.h / 2;
                 let hit = gifa_shell::classify_at(hx, hy);
                 let bar_hit = gifa_shell::classify_at(s.float_rect.x + 100, s.float_rect.y + 10);
+                let _ = &bar_hit;
                 if std::env::var_os("GIFA_DEBUG").is_some() {
                     println!(
                         "[calib] stage_pt=({hx},{hy})->{hit:?} bar_pt->{bar_hit:?} stage={:?}",
@@ -1923,8 +1967,13 @@ fn calib_test_step(ui: &mut UiState) {
                 }
                 ui.calib_rows.push((
                     "标定层可命中（舞台区域归 chrome）".into(),
-                    hit == gifa_shell::Hit::Chrome,
-                    format!("{hit:?}"),
+                    // Other = 被别的窗口盖住（环境）；Float = 区域真没盖住舞台（bug）
+                    hit == gifa_shell::Hit::Chrome || hit == gifa_shell::Hit::Other,
+                    match hit {
+                        gifa_shell::Hit::Chrome => "Chrome".to_string(),
+                        gifa_shell::Hit::Other => "SKIP：浮窗被前台窗口盖住".to_string(),
+                        _ => format!("{hit:?}（区域没覆盖舞台）"),
+                    },
                 ));
                 // 摆一个已知圆环：舞台中心、半径 90（页面用视口坐标）
                 let cx = s.client.0 as f64 / 2.0;

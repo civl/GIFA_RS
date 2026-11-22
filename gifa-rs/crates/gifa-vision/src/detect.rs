@@ -70,6 +70,66 @@ impl Detect {
     }
 }
 
+/// 真·箭头检测：采样窗必须是正方形（管线就是这么截的）。
+///
+/// 行为分支和原版一致：`analyze` 说无效就**不报箭头**（不拿视角顶替），
+/// 视角暂时仍用质心占位（扇形通道还没移植）。
+pub fn detect_window(rgba: &[u8], size: usize, ws: &mut crate::arrow::ArrowWorkspace) -> Detect {
+    let mut out = Detect::default();
+    let r = crate::arrow::analyze(rgba, size, 1, ws);
+    out.samples = r.cyans;
+    out.cyan_frac = if size > 0 {
+        r.cyans as f32 / (size * size) as f32
+    } else {
+        0.0
+    };
+    if r.valid {
+        // 原版给的是 atan2 角，叠加层要罗盘角
+        out.arrow = Some(crate::arrow::to_compass(r.angle));
+        out.arrow_conf = r.conf as f32;
+    }
+    // 视角：占位（白像素质心）
+    if let Some(v) = view_from_whites(rgba, size) {
+        out.view = Some(v.0);
+        out.view_conf = v.1;
+    }
+    out
+}
+
+/// 白像素质心 → 视角（占位实现，扇形通道移植后可删）
+fn view_from_whites(rgba: &[u8], size: usize) -> Option<(f64, f32)> {
+    if size < 16 || rgba.len() < size * size * 4 {
+        return None;
+    }
+    let c0 = (size as f64 - 1.0) / 2.0;
+    let r_out = size as f64 * 0.5;
+    let r_in = size as f64 * 0.04;
+    let (mut wx, mut wy, mut n) = (0f64, 0f64, 0u32);
+    for y in 0..size {
+        let dy = c0 - y as f64;
+        for x in 0..size {
+            let dx = x as f64 - c0;
+            let d = (dx * dx + dy * dy).sqrt();
+            if d < r_in || d > r_out {
+                continue;
+            }
+            let i = (y * size + x) * 4;
+            let (r, g, b) = (rgba[i] as i32, rgba[i + 1] as i32, rgba[i + 2] as i32);
+            if r.min(g).min(b) > 200 && r.max(g).max(b) - r.min(g).min(b) < 28 {
+                wx += dx;
+                wy += dy;
+                n += 1;
+            }
+        }
+    }
+    if n < 40 {
+        return None;
+    }
+    // atan2 → 罗盘
+    let deg = (wy.atan2(wx).to_degrees() + 360.0) % 360.0;
+    Some(((90.0 - deg).rem_euclid(360.0), (n as f32 / 600.0).min(1.0)))
+}
+
 /// 从一帧里截取采样窗（越界部分裁掉，返回实际矩形）
 fn crop(frame: &Frame, b: SampleBox, origin: Origin) -> Option<(SampleBox, &[u8], usize)> {
     let x = b.x - origin.x;
