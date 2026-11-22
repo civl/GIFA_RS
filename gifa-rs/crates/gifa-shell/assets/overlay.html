@@ -209,8 +209,12 @@
     const dpr = window.devicePixelRatio || 1;
     const a = ((deg - 90) * Math.PI) / 180;
 
+    /* 箭头从**圆心附近**起步，而不是从环上。
+     * 之前 tailX = 0.4r：箭头贴在外圈，视觉上像是"没对准小地图圆心"
+     * （真机联调时我自己都看错了，量了窗口中心才发现其实对齐）。
+     * 尾端留一点点余量，免得和中心的十字/准星糊在一起。 */
     const tipX = r * 0.9;
-    const tailX = r * 0.4;
+    const tailX = r * 0.12;
     const headL = Math.max(13, r * 0.24);
     const headW = headL * 0.56;
     const barbX = tipX - headL;

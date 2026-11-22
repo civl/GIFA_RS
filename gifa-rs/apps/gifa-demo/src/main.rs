@@ -2205,7 +2205,14 @@ fn game_step(ui: &mut UiState) {
                 .unwrap_or(6);
         }
         match gifa_shell::overlay_init(radius.max(40), Some((cx, cy))) {
-            Ok(()) => println!("[game] 叠加层已就位"),
+            Ok(()) => {
+                let rect = gifa_shell::overlay_rect();
+                println!(
+                    "[game] 叠加层已就位：期望圆心 ({cx},{cy})，窗口 {:?}（窗口中心 {:?}）",
+                    rect,
+                    rect.map(|r| (r.x + r.w / 2, r.y + r.h / 2))
+                );
+            }
             Err(e) => println!("[game] 叠加层失败：{e}"),
         }
         start_vision(ui);
