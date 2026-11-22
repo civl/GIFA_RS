@@ -2331,10 +2331,18 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
          * 左键双击 = 显示；右键 = 弹菜单（显示 / 退出）。
          * 只记录意图，真正动作交给应用层 tick（这里不能重入窗口操作）。 */
         WM_TRAY => {
-            const WM_LBUTTONDBLCLK: usize = 0x0203;
-            const WM_RBUTTONUP: usize = 0x0205;
-            match wp.0 {
+            /* 默认通知版本（没调 NIM_SETVERSION）下：wParam = 图标 id，**lParam = 鼠标消息**。
+             * 新版（V4）把两者压进 lParam 的高低字 —— 取低 16 位两种情况都对。 */
+            const WM_LBUTTONDBLCLK: u16 = 0x0203;
+            const WM_LBUTTONUP: u16 = 0x0202;
+            const WM_RBUTTONUP: u16 = 0x0205;
+            let mouse = lp.0 as u16;
+            match mouse {
                 WM_LBUTTONDBLCLK => {
+                    with_shell(|s| s.tray_action = Some(TrayAction::Show));
+                }
+                // 单击左键也当"显示"：双击的节奏不好把握，单击更顺手
+                WM_LBUTTONUP => {
                     with_shell(|s| s.tray_action = Some(TrayAction::Show));
                 }
                 WM_RBUTTONUP => {
@@ -2678,7 +2686,14 @@ pub fn start_ticks(interval_ms: u64) {
 }
 
 /// 关掉浮窗（等价于点标题栏的关闭）。
-/// 显示浮窗（托盘"显示"用）：还原 + 置前，不抢焦点
+/// 浮窗当前是否可见（Alt+H 要靠它做 toggle）
+pub fn visible() -> bool {
+    float_hwnd()
+        .map(|f| unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(f).as_bool() })
+        .unwrap_or(false)
+}
+
+/// 显示浮窗（托盘"显示"/Alt+H 用）：还原 + 置前，不抢焦点
 pub fn show_window() {
     if let Some(f) = float_hwnd() {
         unsafe {

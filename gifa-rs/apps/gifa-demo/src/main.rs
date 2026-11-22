@@ -1543,7 +1543,17 @@ fn dispatch_action(ui: &mut UiState, action: Action, phase: Option<&str>) {
             ui.opacity = next;
             gifa_shell::set_opacity(next);
         }
-        Action::ToggleVisible => gifa_shell::hide(),
+        /* Alt+H：隐藏 / 显示。
+         * 只 hide 不 show 的话，按一次就再也叫不回来（原版是 toggle）。 */
+        Action::ToggleVisible => {
+            if gifa_shell::visible() {
+                gifa_shell::hide();
+                ui.toast = "已隐藏（Alt+H 或托盘「显示」叫回来）".into();
+            } else {
+                gifa_shell::show_window();
+                ui.toast = "已显示".into();
+            }
+        }
         Action::HoldSpeed => {
             let hold = ui
                 .store

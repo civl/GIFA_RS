@@ -25,7 +25,7 @@ pub use shell::{
     prevent_suspension, primary_work_area, reassert_topmost, relaunch_elevated, run, set_bounds,
     set_click_through, set_hover_fade, set_immersion, set_interactive, set_opacity, show_inactive,
     show_window, snapshot, start_ticks, take_power_event, take_tray_action, tray_ready,
-    try_single_instance, webview2_version, window_at, DiscState, OverlayState, PowerEvent,
+    try_single_instance, visible, webview2_version, window_at, DiscState, OverlayState, PowerEvent,
     ShellConfig, TrayAction, WEBVIEW2_MIN_MAJOR,
 };
 pub use shell::{parse_version, runtime_ok};

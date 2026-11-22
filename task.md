@@ -449,7 +449,8 @@ gifa-rs/
 - [x] 透明度：舞台窗 `LWA_ALPHA`；chrome 侧改页面 `opacity`（用 LWA 会破坏逐像素透明）
 - [x] 位置钳制：`layout::clamp_to_work` / `default_bounds`（含 4 条单测）
 - [x] 非激活显示：`SW_SHOWNOACTIVATE` + chrome 的 `WS_EX_NOACTIVATE` / `WM_MOUSEACTIVATE→MA_NOACTIVATE`
-- [x] 托盘图标：右键「显示 / 退出」，左键双击显示；失败只报一次且不影响窗口/热键
+- [x] 托盘图标：右键「显示 / 退出」，**左键单击**也显示；失败只报一次且不影响窗口/热键
+      ↳ 坑：托盘回调的鼠标消息在 **lParam**（wParam 是图标 id）；读成 wParam 就"点了没反应"
 - [x] 发布版无控制台：`#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`
       （debug 保留控制台，门禁靠它读 `RESULT n/m`；release 走 GUI 子系统，
       `--check` 这类命令行模式会 `AttachConsole` 接父控制台）
