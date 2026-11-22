@@ -343,6 +343,75 @@ mod tests {
         assert!(js.contains("\"value\":5.0"));
     }
 
+    /// 每条指令在 agent 里都必须有同名 handler。
+    ///
+    /// 这个测试是为了一个真实 bug：`seek-by` 指令对应的 handler 写成了 `seekBy`，
+    /// 于是"快进/后退 5 秒"热键一直是"页面回一句未知指令"，静默失效。
+    /// 名字对不上时 `dispatch` 只会打一行日志，不会有任何报错——所以必须靠测试钉住。
+    #[test]
+    fn every_command_has_an_agent_handler() {
+        let js = include_str!("../assets/player-agent.js");
+        // 从 `const handlers = { ... };` 里抠出所有键：'kebab-case'(m) / camelCase() / camelCase(m)
+        let body = js
+            .split("const handlers = {")
+            .nth(1)
+            .and_then(|s| s.split("\n  };").next())
+            .expect("找不到 handlers 表");
+        let mut handlers: Vec<String> = Vec::new();
+        for line in body.lines() {
+            let t = line.trim();
+            if t.starts_with("//") || t.starts_with('*') {
+                continue;
+            }
+            let Some(head) = t.split('(').next() else {
+                continue;
+            };
+            let name = head.trim().trim_matches('\'').trim();
+            if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                handlers.push(name.to_string());
+            }
+        }
+        assert!(handlers.len() > 5, "handler 解析失败: {handlers:?}");
+        let commands = [
+            PlayerCommand::Toggle,
+            PlayerCommand::Play,
+            PlayerCommand::Pause,
+            PlayerCommand::Seek { value: 1.0 },
+            PlayerCommand::SeekBy { value: 5.0 },
+            PlayerCommand::Rate { value: 1.5 },
+            PlayerCommand::Volume { value: 50.0 },
+            PlayerCommand::Mute { value: true },
+            PlayerCommand::Preferences {
+                volume: 60.0,
+                muted: false,
+                rate: 1.25,
+            },
+            PlayerCommand::Clean { on: true },
+            PlayerCommand::FetchView { id: "BV1".into() },
+            PlayerCommand::VideoRect,
+            PlayerCommand::FetchNav,
+            PlayerCommand::Presentation {
+                video_only: true,
+                session: 0,
+            },
+            PlayerCommand::Ping,
+        ];
+        for cmd in commands {
+            let json = serde_json::to_string(&cmd).unwrap_or_default();
+            let name = json
+                .split("\"cmd\":\"")
+                .nth(1)
+                .and_then(|s| s.split('"').next())
+                .unwrap_or("")
+                .to_string();
+            assert!(!name.is_empty(), "指令没有 cmd 字段: {json}");
+            assert!(
+                handlers.contains(&name),
+                "agent 里没有 {name} 的 handler（页面会回「未知指令 {name}」）"
+            );
+        }
+    }
+
     #[test]
     fn detects_short_links() {
         assert!(is_short_link("https://b23.tv/abc123"));

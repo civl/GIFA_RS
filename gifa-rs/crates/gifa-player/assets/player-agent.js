@@ -347,7 +347,7 @@
       if (!video) return;
       video.currentTime = clamp(Number(m.value) || 0, 0, video.duration || 1e9);
     },
-    seekBy(m) {
+    'seek-by'(m) {
       if (!video) return;
       const t = (video.currentTime || 0) + (Number(m.value) || 0);
       video.currentTime = clamp(t, 0, video.duration || 1e9);

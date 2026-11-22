@@ -404,3 +404,23 @@ apps/gifa-demo/data/gamelabel/label.html
 单帧样本上分得开的阈值，放到真实序列上就是灾难。
 
 **又一次同一个教训：别用单帧调阈值。**
+
+
+## 静默失效的一类 bug：指令名和 handler 名对不上
+
+"快进/后退 5 秒"热键一直是哑的。日志里只有一行：
+
+```
+[live] hotkey seekFwd 前进 5 秒 None
+[page] 未知指令 seek-by
+```
+
+Rust 发的是 `seek-by`（kebab-case，和其它 `fetch-view` / `video-rect` 一致），
+agent 里的 handler 却写成了 `seekBy`（camelCase）。`dispatch` 找不到就只打一行日志，
+**不会有任何报错**——热键"能用"（能触发）、播放器"没反应"，最难查的那种。
+
+修好之后：`Alt+←/→` 实测能跳，截图对比（`docs/seek-before.png` / `seek-after.png`）画面变了。
+
+**加了回归测试** `every_command_has_an_agent_handler`：
+遍历所有 `PlayerCommand`，从 JSON 里抠出 `cmd` 字段，再去 agent 源码里确认有同名 handler。
+故意把名字改回去验证过：测试立刻失败并指出哪个指令缺 handler。
