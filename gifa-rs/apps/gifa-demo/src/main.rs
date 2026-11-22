@@ -121,6 +121,10 @@ struct UiState {
     view: gifa_vision::ViewState,
     /// --game：采游戏窗口（真机验证）。
     game_rect: Option<gifa_shell::RectI>,
+    /// 用户正在输入框里打字（此时单键热键让路，别抢键）
+    typing: bool,
+    /// 正在录制新键位（此时所有热键都不触发，按键只用来捕获）
+    capturing: bool,
     /// 数据目录（startup.log 写在这下面）
     data_root: Option<std::path::PathBuf>,
     /// 启动时刻（用来跳过启动期间的 bounds 抖动）
@@ -889,6 +893,30 @@ fn on_tick() {
         // 2.55) 实战：热键事件 → 动作
         let hk_events = ui.hotkeys.as_ref().map(|h| h.drain()).unwrap_or_default();
         for ev in hk_events {
+            /* 两种"让路"：
+             * · 录制态：所有热键都不触发，按键交给页面去捕获
+             * · 输入态：只挡**单键**（用户正在输入框打字），组合键照常生效 */
+            if ui.capturing {
+                continue;
+            }
+            if ui.typing {
+                let single = ui
+                    .hotkeys
+                    .as_ref()
+                    .and_then(|h| {
+                        let key = match &ev {
+                            gifa_input::HotkeyEvent::Fire(a)
+                            | gifa_input::HotkeyEvent::Down(a)
+                            | gifa_input::HotkeyEvent::Up(a) => a.key(),
+                        };
+                        h.map().get(key).cloned()
+                    })
+                    .map(|accel| !accel.contains('+'))
+                    .unwrap_or(false);
+                if single {
+                    continue;
+                }
+            }
             let (act, phase) = match ev {
                 gifa_input::HotkeyEvent::Fire(a) => (a, None),
                 gifa_input::HotkeyEvent::Down(a) => (a, Some("down")),
@@ -961,6 +989,43 @@ fn on_tick() {
             }
         } else {
             ui.last_nav_poll = None;
+        }
+
+        /* --bind-test：走真实链路验证"录制换绑" —— 页面 ipc.postMessage → handle_chrome
+         * → set_binding（冲突自动交换）→ 写回 settings。 */
+        if std::env::args().any(|a| a == "--bind-test") {
+            if ui.ticks == 12 {
+                gifa_shell::eval_chrome(
+                    "window.ipc.postMessage(JSON.stringify({t:'bind',action:'togglePlay',accel:'Ctrl+Shift+P'}))",
+                );
+            }
+            if ui.ticks == 20 {
+                let now = ui
+                    .store
+                    .as_ref()
+                    .and_then(|s| s.hotkeys.get("togglePlay").cloned())
+                    .unwrap_or_default();
+                let ok = now == "Ctrl+Shift+P";
+                println!(
+                    "[bind-test] togglePlay 现在是 {now:?} → {}",
+                    if ok { "PASS" } else { "FAIL" }
+                );
+                println!("RESULT {}/1", if ok { 1 } else { 0 });
+                std::thread::spawn(|| {
+                    std::thread::sleep(Duration::from_millis(400));
+                    gifa_shell::close();
+                });
+            }
+        }
+
+        // --hk-panel：把快捷键面板打开（自检/截图用），2 秒后打开一次
+        if std::env::args().any(|a| a == "--hk-panel") && ui.ticks == 8 {
+            // 面板内容由 applyState 里的 hotkeys 渲染，这里只需要把它显示出来
+            gifa_shell::eval_chrome(
+                "(function(){var p=document.getElementById('hkPanel'); if(!p) return; \
+                 p.classList.remove('hidden'); \
+                 if(window.__gifaRenderHotkeys) window.__gifaRenderHotkeys();})()",
+            );
         }
 
         // 4) 置顶巡检（原版 2.5s）
@@ -3412,6 +3477,67 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
                 gifa_shell::player_command(PlayerCommand::FetchView { id });
             }
         }
+        /* 输入态：页面在输入框里打字时，单键热键要让路，否则用户打不出这个字符。
+         * 组合键（带 Ctrl/Alt）不冲突，照常生效。 */
+        "typing" => {
+            ui.typing = v.get("on").and_then(|x| x.as_bool()).unwrap_or(false);
+        }
+        /* 录制态：期间所有热键都不触发，按键只用来捕获新键位。 */
+        "capture" => {
+            ui.capturing = v.get("on").and_then(|x| x.as_bool()).unwrap_or(false);
+        }
+        /* 绑定新键位：校验 → 写入 → 重挂钩子 → 回推最新映射 */
+        "bind" => {
+            let action = v.get("action").and_then(|x| x.as_str()).unwrap_or("");
+            let accel = v.get("accel").and_then(|x| x.as_str()).unwrap_or("");
+            println!("[bind] 收到 action={action:?} accel={accel:?}");
+            let Some(act) = gifa_core::Action::from_key(action) else {
+                println!("[bind] 未知动作 {action:?}");
+                ui.logs.push(format!("未知动作 {action}"));
+                return;
+            };
+            /* 没连着热键管理器（非实战模式）也要能改：直接改设置里的映射，
+             * 下次装上钩子时生效——录制面板不该因为"当前没在游戏里"就用不了。 */
+            if ui.hotkeys.is_none() {
+                if let Some(store) = ui.store.as_mut() {
+                    match gifa_core::hotkey::swap_map(&store.hotkeys, act, accel) {
+                        Ok(next) => {
+                            println!("[bind] 未装钩子，先写设置：{} → {accel}", act.label());
+                            store.hotkeys = next;
+                            store.save();
+                        }
+                        Err(e) => println!("[bind] 键位无法解析：{e:?}"),
+                    }
+                }
+                let payload = ui_payload(ui);
+                ui.last_push = payload.clone();
+                gifa_shell::eval_chrome(&format!(
+                    "window.gifaState && window.gifaState({payload})"
+                ));
+                return;
+            }
+            if let Some(hk) = ui.hotkeys.as_mut() {
+                match hk.set_binding(act, accel) {
+                    Ok(map) => {
+                        ui.logs.push(format!("{} → {accel}", act.label()));
+                        if let Some(store) = ui.store.as_mut() {
+                            store.hotkeys = map;
+                            store.save();
+                        }
+                    }
+                    Err(e) => {
+                        ui.logs.push(format!("绑定失败：{e}"));
+                        gifa_shell::eval_chrome(&format!(
+                            "window.gifaToast && window.gifaToast('这个键用不了：{e}')"
+                        ));
+                    }
+                }
+            }
+            // 立刻回推（不等 tick），界面才能马上显示新键位
+            let payload = ui_payload(ui);
+            ui.last_push = payload.clone();
+            gifa_shell::eval_chrome(&format!("window.gifaState && window.gifaState({payload})"));
+        }
         "part" => {
             let p = v.get("p").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
             if let Some(s) = ui.state.as_ref() {
@@ -3535,6 +3661,19 @@ fn ui_payload(ui: &UiState) -> String {
             .map(|l| serde_json::json!({"id": l.id, "name": l.name, "builtIn": l.built_in}))
             .collect::<Vec<_>>(),
         "log": ui.logs.last().cloned().unwrap_or_default(),
+        // 快捷键面板用：动作 → 显示名/当前键位
+        "hotkeys": ui
+            .hotkeys
+            .as_ref()
+            .map(|h| {
+                h.map()
+                    .iter()
+                    .map(|(k, v)| serde_json::json!({"action": k, "accel": v}))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+        "typing": ui.typing,
+        "capturing": ui.capturing,
     })
     .to_string()
 }

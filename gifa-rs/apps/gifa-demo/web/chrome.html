@@ -74,6 +74,16 @@
         </button>
       </footer>
 
+      <!-- 快捷键面板：点「改」后按下新键即可换绑 -->
+      <div id="hkPanel" class="hidden" role="dialog" aria-label="快捷键">
+        <div class="hk-head">
+          <span>快捷键</span>
+          <button id="hkClose" class="tb" title="关闭">✕</button>
+        </div>
+        <div id="hkList" class="hk-list"></div>
+        <div class="hk-hint">点「改」后直接按下新键；Esc 取消</div>
+      </div>
+
       <div id="grip" title="拖动调整大小"></div>
       <div id="toast"></div>
     </div>
