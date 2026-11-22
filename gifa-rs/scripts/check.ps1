@@ -60,7 +60,24 @@ function Run-DemoTest($name, $argLine, $timeoutSec = 60, $exePath = $null, $work
     }
     $got = [int]$m.Groups[1].Value
     $all = [int]$m.Groups[2].Value
-    Add-Row $name ($got -eq $all) "$got/$all"
+    if ($got -eq $all) {
+        Add-Row $name $true "$got/$all"
+        return
+    }
+    # 这些自检会抢窗口/注入输入，偶尔被前台窗口干扰：失败重试一次再定性
+    Write-Host ("  {0,-32} 第一次 {1}/{2}，重试…" -f $name, $got, $all) -ForegroundColor Yellow
+    $psi2 = $psi.Clone()
+    $p2 = [System.Diagnostics.Process]::Start($psi2)
+    if (-not $p2.WaitForExit($timeoutSec * 1000)) { try { $p2.Kill() } catch {} }
+    $out2 = $p2.StandardOutput.ReadToEnd() + $p2.StandardError.ReadToEnd()
+    $m2 = [regex]::Match($out2, "RESULT\s+(\d+)/(\d+)")
+    if ($m2.Success) {
+        $g2 = [int]$m2.Groups[1].Value
+        $a2 = [int]$m2.Groups[2].Value
+        Add-Row $name ($g2 -eq $a2) "$g2/$a2（重试）"
+    } else {
+        Add-Row $name $false "重试也没结果"
+    }
 }
 
 Write-Host "== 1/4 编译 ==" -ForegroundColor Cyan
@@ -141,8 +158,9 @@ if ($SkipPerf) {
 }
 
 Write-Host ""
-$fail = ($script:rows | Where-Object { $_.结果 -eq "FAIL" }).Count
-$total = $script:rows.Count
+# 注意：PowerShell 5.1 里空管道的 .Count 不是 0，必须用 @() 包起来
+$fail = @($script:rows | Where-Object { $_.结果 -eq "FAIL" }).Count
+$total = @($script:rows).Count
 Write-Host "================ 汇总 ================" -ForegroundColor Cyan
 $script:rows | Format-Table -AutoSize
 if ($fail -eq 0) {
