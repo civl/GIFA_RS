@@ -85,18 +85,45 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 | 项 | 结果 |
 |---|---|
 | release 清单注入 | ✅ `requireAdministrator` ×2 |
+| exe 图标 | ✅ 从 exe 提取出 32×32 图标（绿弧 + 红箭头） |
+| exe 版本信息 | ✅ `FileDescription=GIFA 原神跟跑助手`、`FileVersion=0.2.6` |
 | release 二进制可运行（no-admin 变体） | ✅ `--version` → `GIFA 0.2.6` |
 | 数据目录解析 | ✅ `Portable`（exe 同级 `data`） |
 | 设置层自检 | ✅ 7/7 |
 | 界面自检（release） | ✅ 5/5（几何/控件/进度拖动/自动隐藏/URL 条） |
+| 安装器静默安装 | ✅ 7 个文件 + 注册表（`Software\GIFA` + 卸载项） |
+| 安装器静默卸载 | ✅ 目录删除、两个注册表键清空 |
+| 安装版 exe 版本信息 | ✅ 装进去的 `GIFA.exe` 也带 `0.2.6` |
+
+## 安装器（NSIS 3.13）
+
+`installer/gifa.nsi` → `dist/GIFA-0.2.6-setup.exe`（0.87 MB）。
+
+| 设计 | 原因 |
+|---|---|
+| **按用户安装**（`$LOCALAPPDATA\Programs\GIFA`，只写 HKCU） | 程序启动时才需要管理员（热键），不该让"安装"也卡在 UAC 上 |
+| 卸载默认**保留** `%APPDATA%\原神跟跑助手` | 用户的标定/布局/上次看到都在里面；删不删由用户在卸载时选 |
+| 静默卸载一律保留数据 | `/S` 下 `MessageBox` 会阻塞，所以 `IfSilent` 直接跳过询问 |
+| 装入 `installed.flag` | 决定数据目录走向：有它 → `%APPDATA%`，没有 → exe 同级 `data\` |
+
+组件：主程序（必装）、快捷方式（开始菜单 + 桌面）、开机自启（`HKCU\...\Run`，默认不勾）。
+
+### 一个坑：`/SOLID lzma` 的静默安装是坏的
+
+第一版用 `SetCompressor /SOLID lzma`，体积 811 KB 更小，但 `/S` 静默安装**直接退出**：
+127ms、退出码 0、什么都不做（目录和注册表都没有）。改用非 solid 的 `SetCompressor lzma`
+后正常，体积 907 KB —— 多 96 KB 换可靠性，值。
 
 ## 本机没做 / 做不了的
 
 | 项 | 原因 |
 |---|---|
-| **NSIS 安装器** | 本机没有 `makensis`。原版 `build/installer.nsh` + 两张 bmp 素材都在，脚本可后补 |
-| **exe 图标 / 版本资源** | `rc.exe` 不存在；MSYS 的 `windres` 在这台机器上预处理直接失败（`Assertion failed`）。任务栏图标目前是系统默认 |
 | **真实 UAC 提权启动** | 本会话点不了 UAC 弹窗。提权后的行为（热键能否覆盖提权游戏）需要在干净机器上验收 |
+| **安装器在干净机器上的体验** | 只验证了静默安装/卸载；向导各页（欢迎/许可/组件/目录/完成）没有逐页点过 |
+
+> 实测补充：安装包放在 `gifa-rs\dist\` 里直接运行时静默安装不生效，复制到 `C:\Temp\` 后一切正常。
+> 判断是本机沙箱对"从工作区启动的进程写用户目录"有限制，不是安装器本身的问题
+> （同一份 906930 字节的二进制，换个目录就正常）。发给用户时它在下载目录里，不受影响。
 
 ## 下一步（M12 剩余）
 

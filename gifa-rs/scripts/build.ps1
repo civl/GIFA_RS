@@ -42,9 +42,26 @@ $zip = Join-Path $root "dist\$name.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
 Compress-Archive -Path $dist -DestinationPath $zip -CompressionLevel Optimal
 
+Write-Host "== 5/5 安装器（有 NSIS 才做） ==" -ForegroundColor Cyan
+$makensis = $null
+foreach ($c in @("${env:ProgramFiles(x86)}\NSIS\makensis.exe", "$env:ProgramFiles\NSIS\makensis.exe")) {
+    if (Test-Path $c) { $makensis = $c; break }
+}
+if (-not $makensis) { $cmd = Get-Command makensis -ErrorAction SilentlyContinue; if ($cmd) { $makensis = $cmd.Source } }
+$setup = Join-Path $root "dist\GIFA-$ver-setup.exe"
+if ($makensis) {
+    & $makensis (Join-Path $root "installer\gifa.nsi") 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Host "  安装器编译失败（继续）" -ForegroundColor Yellow }
+} else {
+    Write-Host "  未找到 makensis，跳过安装器" -ForegroundColor Yellow
+}
+
 $exe = Join-Path $dist "GIFA.exe"
 Write-Host ""
 Write-Host "产物：" -ForegroundColor Green
 Write-Host ("  {0}  ({1:N1} MB)" -f $exe, ((Get-Item $exe).Length / 1MB))
 Write-Host ("  {0}  ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
 Write-Host ("  {0}" -f $sums)
+if (Test-Path $setup) {
+    Write-Host ("  {0}  ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
+}

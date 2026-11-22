@@ -645,23 +645,28 @@ gifa-rs/
 6. 被遮挡时截屏截到"上面的窗口"，报出假方位
 7. 置顶被游戏抢走，需无条件重新抬起
 
-### M12 打包与分发 `5d` [P0] 🟡 绿色版完成，安装器待补
+### M12 打包与分发 `5d` [P0] ✅ 完成（绿色版 + 安装器；提权链路待干净机验收）
 
 - [x] `cargo build --release` + **清单注入**（管理员 + `PerMonitorV2` + `longPathAware` + Common-Controls）
       用链接器 `/MANIFESTINPUT`，不依赖 `rc.exe`
-- [x] 单文件 exe（页面/样式/脚本编译期内联）1.7 MB
-- [x] 绿色版 zip：`dist/GIFA-0.2.6-win-x64.zip`（0.7 MB），顶层 `GIFA-0.2.6-win-x64/`，
-      含 `GIFA.exe` + `data/` + `licenses/` + `README.txt`
+- [x] **图标与版本资源**：Windows SDK 的 `rc.exe`（`find_rc` 自动找最新版），
+      `FileDescription=GIFA 原神跟跑助手` / `FileVersion=0.2.6`
+- [x] 单文件 exe（页面/样式/脚本编译期内联）1.8 MB
+- [x] 绿色版 zip：`dist/GIFA-0.2.6-win-x64.zip`（0.8 MB），含 `GIFA.exe` + `data/` + `licenses/` + `README.txt`
+- [x] **NSIS 安装器**：`installer/gifa.nsi` → `dist/GIFA-0.2.6-setup.exe`（0.87 MB）
+      · 按用户安装（`%LOCALAPPDATA%\Programs\GIFA`，只写 HKCU，不触发 UAC）
+      · 开始菜单 / 桌面快捷方式 · 开机自启（可选，`HKCU\...\Run`）
+      · 卸载默认**保留** `%APPDATA%\原神跟跑助手`，静默卸载跳过询问
+      · 装入 `installed.flag` → 数据目录走 `%APPDATA%`
 - [x] `SHA256SUMS.txt`（逐文件）
 - [x] 许可打包：`LICENSE-GIFA.txt`、`NOTICE-GIFA.txt`、`LICENSE-LGPL-3.0.txt`
 - [x] 数据目录：release 走 `resolve_data_dir`（安装版 `%APPDATA%` / 绿色版 `<exe>\data`）
 - [x] WebView2 运行时检查：缺失或 <110 时弹框给下载地址后退出
-- [x] 构建脚本 `scripts/build.ps1`（构建 → 组装 → 校验和 → zip）
-- [ ] NSIS 安装器（本机无 `makensis`；原版 `build/installer.nsh` 与素材已就位）
-- [ ] exe 图标/版本资源（本机无 `rc.exe`，MSYS `windres` 预处理失败）
-- **验收（已验证部分）**：release 清单含 `requireAdministrator`×2；no-admin release 变体
-  `--version` 正常、`--settings-test` 7/7、`--ui-test` 5/5
-- **待验收**：干净 Win10 22H2 上双击 → UAC → 起窗 → 加载视频 → 热键生效
+- [x] 构建脚本 `scripts/build.ps1`：构建 → 组装 → 校验和 → zip → 安装器（有 makensis 才做）
+- **实测**：静默安装 7 文件 + 注册表；静默卸载目录与两个注册表键清空；装进去的 exe 带 0.2.6 版本信息
+- **踩到的坑**：`SetCompressor /SOLID lzma` 的安装包在 `/S` 下直接退出（127ms、什么都不做），
+  换非 solid 的 lzma 正常，体积 907 KB（+96 KB）
+- **待验收**：干净 Win10 22H2 上双击安装 → UAC → 起窗 → 加载视频 → 热键生效
 - **详见**：`gifa-rs/docs/PACKAGING.md`
 
 ### M13 测试与对拍 `8d` [P0] 🟡 门禁完成，手工矩阵待铺
