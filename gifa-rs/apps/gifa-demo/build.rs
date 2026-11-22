@@ -19,7 +19,7 @@ fn main() {
     println!("cargo:rerun-if-changed=app.manifest");
     println!("cargo:rerun-if-env-changed=GIFA_NO_ADMIN");
     println!("cargo:rerun-if-env-changed=GIFA_RC");
-    println!("cargo:rerun-if-changed=../../../reference/GIFA/build/icon.ico");
+    println!("cargo:rerun-if-changed=assets/icon.ico");
 
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let release = std::env::var("PROFILE").unwrap_or_default() == "release";
@@ -73,8 +73,8 @@ fn main() {
 }
 
 fn embed_icon_and_version(out: &Path) {
-    let icon =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../reference/GIFA/build/icon.ico");
+    // 自己的图标（由 assets/icon.svg 渲染而来），不再引用原版仓库里的那张
+    let icon = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/icon.ico");
     if !icon.exists() {
         println!("cargo:warning=找不到 icon.ico，跳过图标与版本资源");
         return;
