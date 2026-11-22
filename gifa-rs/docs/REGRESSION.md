@@ -121,3 +121,28 @@ PowerShell 5.1 下有两件事会让这种脚本莫名其妙地挂：
    两边都修了：应用侧截断长 URL，脚本侧先挂 `ReadToEndAsync` 再等退出。
 4. **空管道的 `.Count` 不是 0**：`($rows | Where-Object {...}).Count` 在全通过时返回 `$null`，
    于是"失败 0 项"被打印成"失败  项"、退出码还算成 1。必须写成 `@(...).Count`。
+
+
+## 跨语言契约的两条对拍测试
+
+`seek-by` 那次事故（页面 handler 写成了 `seekBy`，热键触发但播放器不动）暴露了一类
+**静默失效**：两边名字对不上时，谁都不会报错。
+
+现在两个方向各钉一条：
+
+| 方向 | 测试 | 做法 |
+|---|---|---|
+| Rust → 页面 | `every_command_has_an_agent_handler` | 遍历所有 `PlayerCommand`，从 JSON 抠 `cmd`，去 `player-agent.js` 里找同名 handler |
+| 页面 → Rust（播放器） | `every_agent_message_has_a_variant` | 扫 `player-agent.js` 里的 `t: 'xxx'`，确认 `PlayerMsg` 有对应变体（kebab-case） |
+| 页面 → Rust（界面） | `every_page_message_has_a_rust_arm` | 扫 `app.js` 的 `t: 'xxx'`，确认 `handle_chrome` 有分支 **或** 外壳的 `ChromeMsg` 接住了 |
+
+三条都做过**反向验证**（故意改坏 → 测试红 → 改回），确认不是"永远绿"的摆设。
+
+两个实现上的坑：
+
+1. 扫 `t:` 会误伤 `at: 'page-mousedown'` —— 必须检查前一个字符不是标识符字符。
+2. 不能只收全小写的种类名，否则把 `ready` 改成 `readyX` 这种错误反而被过滤掉、测试仍绿。
+   现在允许 `[A-Za-z0-9_-]`，越界的东西才会被抓出来。
+
+界面上还有一半归外壳管（`ChromeMsg`：`layout`/`drag`/`resize`/`close`/`opacity`），
+测试把它的变体也折成 kebab-case 一起比对，否则会误报。

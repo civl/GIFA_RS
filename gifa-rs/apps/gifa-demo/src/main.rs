@@ -3978,6 +3978,109 @@ fn _assert_send(_: Sender<PlayerMsg>) {}
 
 #[cfg(test)]
 mod tests {
+    /// 页面发的每一种 `{t:'...'}`，Rust 侧必须有一个分支接住。
+    ///
+    /// 这类 bug 和 `seek-by` 那次是同一种病：页面发了、Rust 不认，`match` 落到
+    /// `_ => {}` 上，**不报错、不提示**，功能就是"点了没反应"。
+    #[test]
+    fn every_page_message_has_a_rust_arm() {
+        let js = include_str!("../web/app.js");
+        let src = include_str!("main.rs");
+
+        // 1) 页面发出的种类（t: 'xxx' / t:"xxx"）
+        let mut sent: Vec<String> = Vec::new();
+        for (i, _) in js.match_indices("t:") {
+            // `at: 'page-mousedown'` 里的 "t:" 不算字段名
+            if i > 0 && js.as_bytes()[i - 1].is_ascii_alphanumeric() {
+                continue;
+            }
+            let rest = &js[i + 2..];
+            let rest = rest.trim_start();
+            let Some(inner) = rest.strip_prefix('\'').or_else(|| rest.strip_prefix('"')) else {
+                continue;
+            };
+            let Some(end) = inner.find(['\'', '"']) else {
+                continue;
+            };
+            let kind = &inner[..end];
+            if !kind.is_empty()
+                && kind
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                sent.push(kind.to_string());
+            }
+        }
+        sent.sort();
+        sent.dedup();
+        assert!(sent.len() > 5, "页面消息解析失败: {sent:?}");
+
+        // 2) handle_chrome 里的分支（"xxx" =>）
+        let body = src
+            .split("fn handle_chrome(ui: &mut UiState")
+            .nth(1)
+            .and_then(|s| s.split("\nfn ").next())
+            .expect("找不到 handle_chrome");
+        let mut handled: Vec<String> = Vec::new();
+        for (i, _) in body.match_indices('"') {
+            let rest = &body[i + 1..];
+            let Some(end) = rest.find('"') else { continue };
+            let name = &rest[..end];
+            if !name.is_empty()
+                && name.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+                && rest[end + 1..].trim_start().starts_with("=>")
+            {
+                handled.push(name.to_string());
+            }
+        }
+        assert!(handled.len() > 5, "handle_chrome 分支解析失败: {handled:?}");
+
+        // 2b) 外壳自己接的那几类（ChromeMsg：layout / drag / resize / close / opacity）
+        let shell_src = include_str!("../../../crates/gifa-shell/src/shell.rs");
+        let enum_body = shell_src
+            .split("pub enum ChromeMsg {")
+            .nth(1)
+            .and_then(|s| s.split("\n}").next())
+            .unwrap_or("");
+        for line in enum_body.lines() {
+            let t = line.trim();
+            if t.is_empty() || t.starts_with("//") || t.starts_with('#') || t.starts_with("fn ") {
+                continue;
+            }
+            let name: String = t
+                .split(|c: char| c == '{' || c == '(' || c == ',' || c.is_whitespace())
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !name.is_empty()
+                && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                && name.chars().all(|c| c.is_ascii_alphanumeric())
+            {
+                // CamelCase → kebab-case
+                let mut kebab = String::new();
+                for (i, ch) in name.chars().enumerate() {
+                    if ch.is_ascii_uppercase() {
+                        if i > 0 {
+                            kebab.push('-');
+                        }
+                        kebab.push(ch.to_ascii_lowercase());
+                    } else {
+                        kebab.push(ch);
+                    }
+                }
+                handled.push(kebab);
+            }
+        }
+
+        // 3) 页面发了但 Rust 不认 → 静默失效
+        let missing: Vec<&String> = sent.iter().filter(|k| !handled.contains(k)).collect();
+        assert!(
+            missing.is_empty(),
+            "页面会发这些消息，但 handle_chrome 没有对应分支：{missing:?}"
+        );
+    }
+
     use super::*;
 
     #[test]

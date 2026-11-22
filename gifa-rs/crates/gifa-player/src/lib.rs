@@ -412,6 +412,86 @@ mod tests {
         }
     }
 
+    /// 反方向：agent 上报的每一种 `t`，`PlayerMsg` 必须能接住。
+    ///
+    /// 与 `every_command_has_an_agent_handler` 是一对：那条管"Rust 发的页面认不认"，
+    /// 这条管"页面发的 Rust 认不认"。两边任何一个名字对不上，都是静默失效。
+    #[test]
+    fn every_agent_message_has_a_variant() {
+        let js = include_str!("../assets/player-agent.js");
+        let src = include_str!("lib.rs");
+
+        let mut sent: Vec<String> = Vec::new();
+        for (i, _) in js.match_indices("t:") {
+            if i > 0 && js.as_bytes()[i - 1].is_ascii_alphanumeric() {
+                continue; // `at:` / `count:` 之类
+            }
+            let rest = js[i + 2..].trim_start();
+            let Some(inner) = rest.strip_prefix('\'').or_else(|| rest.strip_prefix('"')) else {
+                continue;
+            };
+            let Some(end) = inner.find(['\'', '"']) else {
+                continue;
+            };
+            let kind = &inner[..end];
+            if !kind.is_empty()
+                && kind
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                sent.push(kind.to_string());
+            }
+        }
+        sent.sort();
+        sent.dedup();
+        assert!(sent.len() > 3, "agent 消息解析失败: {sent:?}");
+
+        // PlayerMsg 的变体名 → kebab-case
+        let body = src
+            .split("pub enum PlayerMsg {")
+            .nth(1)
+            .and_then(|s| s.split("\n}").next())
+            .expect("找不到 PlayerMsg");
+        let mut variants: Vec<String> = Vec::new();
+        for line in body.lines() {
+            let t = line.trim();
+            if t.is_empty() || t.starts_with("//") || t.starts_with('#') {
+                continue;
+            }
+            let name: String = t
+                .split(|c: char| c == '{' || c == '(' || c == ',' || c.is_whitespace())
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if name.is_empty()
+                || !name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                || !name.chars().all(|c| c.is_ascii_alphanumeric())
+            {
+                continue;
+            }
+            let mut kebab = String::new();
+            for (i, ch) in name.chars().enumerate() {
+                if ch.is_ascii_uppercase() {
+                    if i > 0 {
+                        kebab.push('-');
+                    }
+                    kebab.push(ch.to_ascii_lowercase());
+                } else {
+                    kebab.push(ch);
+                }
+            }
+            variants.push(kebab);
+        }
+        assert!(variants.len() > 3, "PlayerMsg 变体解析失败: {variants:?}");
+
+        let missing: Vec<&String> = sent.iter().filter(|k| !variants.contains(k)).collect();
+        assert!(
+            missing.is_empty(),
+            "agent 会发这些消息，但 PlayerMsg 没有对应变体：{missing:?}"
+        );
+    }
+
     #[test]
     fn detects_short_links() {
         assert!(is_short_link("https://b23.tv/abc123"));
