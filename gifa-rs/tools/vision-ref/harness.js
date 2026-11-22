@@ -24,6 +24,10 @@ function loadReference() {
   const endLine = lines.findIndex((l) => l.startsWith('function tickBearing('));
   if (start < 0 || endLine < 0) throw new Error('找不到算法段边界');
   let body = lines.slice(start, endLine).join('\n');
+  // 实验用：THR_RATIO 覆盖自适应阈值的系数（原版 0.74），用来验证"背景青色污染"假设
+  if (process.env.THR_RATIO) {
+    body = body.replace('Math.max(THRESHOLD_FLOOR, p99 * 0.74)', `Math.max(THRESHOLD_FLOOR, p99 * ${process.env.THR_RATIO})`);
+  }
   if (process.env.DEBUG) {
     // 只在自己的副本上加打点，不动原版文件
     body = body

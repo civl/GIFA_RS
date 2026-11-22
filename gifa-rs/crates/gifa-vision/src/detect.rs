@@ -60,6 +60,8 @@ pub struct Detect {
     pub samples: u32,
     /// 这一帧有没有小地图（青色占比门控）
     pub map_present: bool,
+    /// 箭头因"鼻子不在轴上"被挡掉（背景青色污染，原版会给出 10° 以上的错误角度）
+    pub rejected_axis: bool,
 }
 
 /// 屏幕/浮窗坐标 → 帧内坐标的偏移
@@ -104,9 +106,15 @@ pub fn detect_window(
     out.map_present = true;
 
     if arrow.valid {
-        // 原版给的是 atan2 角，叠加层要罗盘角
-        out.arrow = Some(crate::arrow::to_compass(arrow.angle));
-        out.arrow_conf = arrow.conf as f32;
+        // 原版给的是 atan2 角，叠加层要罗盘角。
+        // 额外过一道"鼻子在轴上"的检查：小地图背景的青色混进连通块时，
+        // 原版仍会判有效、但角度能偏 10° 以上（实测见 NOSE_AXIS_MAX_DEG 文档）。
+        if crate::arrow::axis_consistent(&arrow) {
+            out.arrow = Some(crate::arrow::to_compass(arrow.angle));
+            out.arrow_conf = arrow.conf as f32;
+        } else {
+            out.rejected_axis = true;
+        }
     }
     if cone.valid {
         out.view = Some(crate::cone::to_compass(cone.deg));
@@ -373,8 +381,8 @@ mod tests {
             r: 0.06,
         };
         let b = SampleBox::from_roi(roi, 1920, 1080).unwrap();
-        // r = 115px → 窗 ≈ 276px
-        assert!((b.w - 276).abs() <= 2, "实际 {}", b.w);
+        // r = 115px → 窗 = r×2×0.62 ≈ 143px（与原版 grabCenter 一致）
+        assert!((b.w - 143).abs() <= 2, "实际 {}", b.w);
         assert_eq!(b.w, b.h);
         assert!((b.x + b.w / 2 - 960).abs() <= 1);
     }
