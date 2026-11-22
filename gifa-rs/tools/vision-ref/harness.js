@@ -25,6 +25,10 @@ function loadReference() {
   if (start < 0 || endLine < 0) throw new Error('找不到算法段边界');
   let body = lines.slice(start, endLine).join('\n');
   // 实验用：THR_RATIO 覆盖自适应阈值的系数（原版 0.74），用来验证"背景青色污染"假设
+  // 实验：放宽 bisErr（默认 15）
+  if (process.env.BIS_ERR) {
+    body = body.replace(/bisErr <= 15/g, `bisErr <= ${process.env.BIS_ERR}`);
+  }
   if (process.env.THR_RATIO || process.env.THR_FLOOR) {
     const ratio = process.env.THR_RATIO || '0.74';
     const floor = process.env.THR_FLOOR || '112';
