@@ -1,3 +1,10 @@
+/* 发布版不带控制台窗口（避免启动时黑框一闪/常驻）。
+ *
+ * 只在 release 生效：debug 下自检要靠 stdout 打 `RESULT n/m`，门禁脚本读的就是它。
+ * 发布版的运行日志走 `<data>/startup.log`，不依赖控制台。
+ */
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! M3 切片：B 站解析与登录态。
 //!
 //! 在 M2（真页面 + 播放代理）之上补三件事：
@@ -417,7 +424,33 @@ fn chrome_page() -> String {
     html
 }
 
+/// 发布版是 GUI 子系统（没有控制台）。当用户从命令行跑 `--check`/`--version` 这类
+/// 需要读输出的模式时，把自己接到父进程的控制台上，println! 才有地方去。
+fn attach_parent_console_if_needed() {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let wants_console = std::env::args().any(|a| {
+        matches!(
+            a.as_str(),
+            "--check" | "--version" | "--runtime" | "--list-windows" | "--bench" | "--help"
+        )
+    });
+    if !wants_console {
+        return;
+    }
+    #[allow(non_snake_case)]
+    extern "system" {
+        fn AttachConsole(dwProcessId: u32) -> i32;
+    }
+    const ATTACH_PARENT_PROCESS: u32 = 0xFFFF_FFFF;
+    unsafe {
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
 fn main() {
+    attach_parent_console_if_needed();
     let boot = Instant::now();
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version") {
@@ -711,6 +744,10 @@ fn main() {
             start_live(&mut ui, &data_root);
         });
     }
+    // 热键是常驻能力：不管哪种模式，启动即装（游戏在前台时也要能按）
+    UI.with(|ui| install_hotkeys(&mut ui.borrow_mut()));
+    // 托盘：显示 / 退出（失败会在 tick 里重试几次，Explorer 刚启动时常见）
+    gifa_shell::init_tray();
 
     if let Some(b) = gifa_shell::bounds() {
         println!(
@@ -842,6 +879,24 @@ fn on_tick() {
                         store.bounds.height = b.h;
                         store.save();
                     }
+                }
+            }
+        }
+
+        /* ---- 托盘菜单：显示 / 退出 */
+        if let Some(action) = gifa_shell::take_tray_action() {
+            match action {
+                gifa_shell::TrayAction::Show => {
+                    gifa_shell::show_window();
+                    println!("[gifa] 托盘 → 显示窗口");
+                }
+                gifa_shell::TrayAction::Exit => {
+                    println!("[gifa] 托盘 → 退出");
+                    if let Some(store) = ui.store.as_mut() {
+                        store.save();
+                    }
+                    close_after_check = true;
+                    return;
                 }
             }
         }
@@ -1041,6 +1096,11 @@ fn on_tick() {
                  if(window.__gifaRenderHotkeys) window.__gifaRenderHotkeys(); \
                  })()",
             );
+        }
+
+        // 托盘没挂上就隔 2.5 秒再试（最多 6 次）
+        if !gifa_shell::tray_ready() && ui.ticks <= 60 && ui.ticks % 10 == 0 {
+            gifa_shell::init_tray();
         }
 
         // 4) 置顶巡检（原版 2.5s）
@@ -1936,6 +1996,43 @@ fn chrono_like_now() -> String {
 }
 
 /// 实战模式：文档里那套配置全开 —— 识别 + 叠加层 + 手柄 + 热键 + 日志
+/// 安装全局热键。**任何模式都要装** —— 热键是常驻能力，不该只在 --live 下生效
+/// （早期只在实战模式装，普通浮窗按什么键都没反应）。
+fn install_hotkeys(ui: &mut UiState) {
+    if ui.hotkeys.is_some() {
+        return;
+    }
+    match gifa_input::hotkey::Hotkeys::install() {
+        Ok(mut mgr) => {
+            let map = ui
+                .store
+                .as_ref()
+                .map(|s| s.hotkeys.clone())
+                .unwrap_or_default();
+            let report = mgr.apply(&map);
+            let line = format!(
+                "热键已装：注册 {} 条，失败 {}",
+                report.registered,
+                report.failures.len()
+            );
+            println!("[gifa] {line}");
+            live_log(ui, "hotkey", &line);
+            for f in &report.failures {
+                live_log(
+                    ui,
+                    "hotkey",
+                    &format!("失败 {} → {:?}", f.accelerator, f.reason),
+                );
+            }
+            ui.hotkeys = Some(mgr);
+        }
+        Err(e) => {
+            println!("[gifa] 热键安装失败：{e}");
+            live_log(ui, "hotkey", &format!("安装失败：{e}"));
+        }
+    }
+}
+
 fn start_live(ui: &mut UiState, log_dir: &std::path::Path) {
     let _ = std::fs::create_dir_all(log_dir);
     match std::fs::File::create(log_dir.join("live.log")) {
@@ -1957,34 +2054,7 @@ fn start_live(ui: &mut UiState, log_dir: &std::path::Path) {
     }
 
     // 热键
-    match gifa_input::hotkey::Hotkeys::install() {
-        Ok(mut mgr) => {
-            let map = ui
-                .store
-                .as_ref()
-                .map(|s| s.hotkeys.clone())
-                .unwrap_or_default();
-            let report = mgr.apply(&map);
-            live_log(
-                ui,
-                "hotkey",
-                &format!(
-                    "注册 {} 条，失败 {}",
-                    report.registered,
-                    report.failures.len()
-                ),
-            );
-            for f in &report.failures {
-                live_log(
-                    ui,
-                    "hotkey",
-                    &format!("失败 {} → {:?}", f.accelerator, f.reason),
-                );
-            }
-            ui.hotkeys = Some(mgr);
-        }
-        Err(e) => live_log(ui, "hotkey", &format!("安装失败：{e}")),
-    }
+    install_hotkeys(ui);
 
     // 识别：等视频矩形就绪后由 tick 拉起（vision_box 需要它）
     ui.logs.push("实战模式：等待视频矩形后启动识别".into());

@@ -201,6 +201,12 @@ struct Shell {
     power: Option<PowerEvent>,
     /// 单实例互斥体（活着就代表本进程是唯一实例）
     instance_mutex: Option<isize>,
+    /// 托盘图标是否已添加（退出时要删掉，否则托盘留个死图标）
+    tray: bool,
+    /// 托盘失败只报一次
+    tray_failed_logged: bool,
+    /// 用户在托盘菜单里点了什么
+    tray_action: Option<TrayAction>,
 }
 
 /// 系统电源事件
@@ -214,6 +220,18 @@ pub enum PowerEvent {
     Unlock,
     /// 恢复
     Resume,
+}
+
+/// 托盘图标的回调消息（WM_APP + n）
+const WM_TRAY: u32 = 0x8000 + 20;
+const IDM_SHOW: usize = 1;
+const IDM_EXIT: usize = 2;
+
+/// 托盘菜单点了什么（应用层在 tick 里取走）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayAction {
+    Show,
+    Exit,
 }
 
 struct Overlay {
@@ -342,6 +360,9 @@ pub fn create(cfg: ShellConfig) -> Result<(), String> {
             overlay: None,
             power: None,
             instance_mutex: None,
+            tray: false,
+            tray_failed_logged: false,
+            tray_action: None,
         });
     });
 
@@ -1525,6 +1546,104 @@ pub fn primary_work_area() -> RectI {
     }
 }
 
+/// 添加托盘图标（气泡菜单：显示 / 退出）。
+fn add_tray(hwnd: HWND) {
+    use windows::Win32::UI::Shell::{
+        Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NOTIFYICONDATAW,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{LoadIconW, IDI_APPLICATION};
+
+    // 优先用 exe 里嵌的图标（build.rs 的资源 id = 1），没有就退回系统默认
+    let hinst = unsafe { windows::Win32::System::LibraryLoader::GetModuleHandleW(None) }
+        .unwrap_or_default();
+    let res = windows::core::PCWSTR(std::ptr::dangling::<u16>()); // MAKEINTRESOURCE(1)
+    let icon = unsafe { LoadIconW(Some(hinst.into()), res) }
+        .or_else(|_| unsafe { LoadIconW(None, IDI_APPLICATION) })
+        .unwrap_or_default();
+
+    let mut data = NOTIFYICONDATAW {
+        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: 1,
+        uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP,
+        uCallbackMessage: WM_TRAY,
+        hIcon: icon,
+        ..Default::default()
+    };
+    let tip = "原神跟跑助手";
+    for (i, c) in tip.encode_utf16().take(127).enumerate() {
+        data.szTip[i] = c;
+    }
+    // 逐个 cbSize 版本试：老系统只认 V2(936) / V3(952)，照抄 sizeof 反而是最常见的失败原因
+    let mut ok = false;
+    for size in [952u32, 936, 976] {
+        data.cbSize = size;
+        ok = unsafe { Shell_NotifyIconW(NIM_ADD, &data) }.as_bool();
+        if ok {
+            println!("[shell] 托盘用 cbSize={size} 添加成功");
+            break;
+        }
+    }
+    let mut first_err = 0u32;
+    if !ok {
+        first_err = unsafe { windows::Win32::Foundation::GetLastError() }.0;
+        /* 失败常见原因是图标句柄不被接受（exe 里没有资源时 LoadIconW 会给出 0）。
+         * 退一步只挂消息 + 提示文字，托盘照样能用（显示系统缺省图标）。 */
+        let mut basic = data;
+        basic.uFlags = NIF_MESSAGE | NIF_TIP;
+        basic.hIcon = Default::default();
+        ok = unsafe { Shell_NotifyIconW(NIM_ADD, &basic) }.as_bool();
+    }
+    if ok {
+        with_shell(|s| s.tray = true);
+        println!("[shell] 托盘图标已添加");
+    } else {
+        let err = unsafe { windows::Win32::Foundation::GetLastError() };
+        /* 别再刷屏：只报一次，把结论说清楚。
+         * 常见于沙箱/受限令牌（Shell_NotifyIcon 需要和任务栏交互，被拒时就是 5）。 */
+        if !with_shell(|s| s.tray_failed_logged).unwrap_or(false) {
+            with_shell(|s| s.tray_failed_logged = true);
+            println!(
+                "[shell] 托盘图标添加失败：{}（首次 {first_err}）—— 托盘不可用，但窗口/热键不受影响",
+                err.0
+            );
+        }
+    }
+}
+
+/// 弹出托盘右键菜单（建菜单 → 显示 → 销毁，菜单对象不长期持有）
+fn tray_menu(hwnd: HWND) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, SetForegroundWindow,
+        TrackPopupMenu, MF_SEPARATOR, MF_STRING, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON,
+    };
+    unsafe {
+        let Ok(menu) = CreatePopupMenu() else { return };
+        let _ = AppendMenuW(menu, MF_STRING, IDM_SHOW, windows::core::w!("显示"));
+        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, windows::core::w!(""));
+        let _ = AppendMenuW(menu, MF_STRING, IDM_EXIT, windows::core::w!("退出"));
+        let mut pt = windows::Win32::Foundation::POINT::default();
+        let _ = GetCursorPos(&mut pt);
+        // 必须先抢前台，否则点菜单外面菜单不消失（Windows 的经典怪癖）
+        let _ = SetForegroundWindow(hwnd);
+        let _ = TrackPopupMenu(
+            menu,
+            TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON,
+            pt.x,
+            pt.y,
+            Some(0),
+            hwnd,
+            None,
+        );
+        let _ = DestroyMenu(menu);
+    }
+}
+
+/// 取走托盘菜单的动作（应用层在 tick 里调）
+pub fn take_tray_action() -> Option<TrayAction> {
+    with_shell(|s| s.tray_action.take()).flatten()
+}
+
 /// 取走一个待处理的系统电源事件（应用层在 tick 里调）
 pub fn take_power_event() -> Option<PowerEvent> {
     with_shell(|s| s.power.take()).flatten()
@@ -2207,6 +2326,36 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             windows::Win32::Foundation::LRESULT(0)
         }
 
+        /* ---- 托盘图标回调
+         *
+         * 左键双击 = 显示；右键 = 弹菜单（显示 / 退出）。
+         * 只记录意图，真正动作交给应用层 tick（这里不能重入窗口操作）。 */
+        WM_TRAY => {
+            const WM_LBUTTONDBLCLK: usize = 0x0203;
+            const WM_RBUTTONUP: usize = 0x0205;
+            match wp.0 {
+                WM_LBUTTONDBLCLK => {
+                    with_shell(|s| s.tray_action = Some(TrayAction::Show));
+                }
+                WM_RBUTTONUP => {
+                    if let Some(f) = float_hwnd() {
+                        tray_menu(f);
+                    }
+                }
+                _ => {}
+            }
+            windows::Win32::Foundation::LRESULT(0)
+        }
+        // 托盘菜单的 WM_COMMAND
+        windows::Win32::UI::WindowsAndMessaging::WM_COMMAND if (wp.0 & 0xffff) == IDM_SHOW => {
+            with_shell(|s| s.tray_action = Some(TrayAction::Show));
+            windows::Win32::Foundation::LRESULT(0)
+        }
+        windows::Win32::UI::WindowsAndMessaging::WM_COMMAND if (wp.0 & 0xffff) == IDM_EXIT => {
+            with_shell(|s| s.tray_action = Some(TrayAction::Exit));
+            windows::Win32::Foundation::LRESULT(0)
+        }
+
         /* ---- 电源事件：挂起/锁屏/恢复
          *
          * 只在钩子里记一笔，真正的处理交给应用层（它才知道手柄在不在跑、
@@ -2529,6 +2678,37 @@ pub fn start_ticks(interval_ms: u64) {
 }
 
 /// 关掉浮窗（等价于点标题栏的关闭）。
+/// 显示浮窗（托盘"显示"用）：还原 + 置前，不抢焦点
+pub fn show_window() {
+    if let Some(f) = float_hwnd() {
+        unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                IsIconic, ShowWindow, SW_RESTORE, SW_SHOWNOACTIVATE,
+            };
+            if IsIconic(f).as_bool() {
+                let _ = ShowWindow(f, SW_RESTORE);
+            } else {
+                let _ = ShowWindow(f, SW_SHOWNOACTIVATE);
+            }
+        }
+        reassert_topmost();
+    }
+}
+
+/// 托盘是否已挂上（应用层据此决定要不要重试）
+pub fn tray_ready() -> bool {
+    with_shell(|s| s.tray).unwrap_or(false)
+}
+
+/// 添加托盘图标（在窗口建好后调用；失败可以反复重试，Exproler 刚起来时经常如此）
+pub fn init_tray() {
+    if let Some(f) = float_hwnd() {
+        if !with_shell(|s| s.tray).unwrap_or(false) {
+            add_tray(f);
+        }
+    }
+}
+
 pub fn close() {
     let Some(f) = float_hwnd() else { return };
     unsafe {

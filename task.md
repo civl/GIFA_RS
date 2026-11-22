@@ -449,6 +449,10 @@ gifa-rs/
 - [x] 透明度：舞台窗 `LWA_ALPHA`；chrome 侧改页面 `opacity`（用 LWA 会破坏逐像素透明）
 - [x] 位置钳制：`layout::clamp_to_work` / `default_bounds`（含 4 条单测）
 - [x] 非激活显示：`SW_SHOWNOACTIVATE` + chrome 的 `WS_EX_NOACTIVATE` / `WM_MOUSEACTIVATE→MA_NOACTIVATE`
+- [x] 托盘图标：右键「显示 / 退出」，左键双击显示；失败只报一次且不影响窗口/热键
+- [x] 发布版无控制台：`#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`
+      （debug 保留控制台，门禁靠它读 `RESULT n/m`；release 走 GUI 子系统，
+      `--check` 这类命令行模式会 `AttachConsole` 接父控制台）
 - [x] 置顶巡检接到定时器：应用层每 10 个 tick（2.5s）调 `reassert_topmost`
 - [x] 移动/缩放落盘：tick 里比对 `bounds()`，变化就写回 `settings.json`；
       启动后前 2 秒不记（那是程序自己按比例摆的）
