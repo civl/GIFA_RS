@@ -119,7 +119,15 @@ struct UiState {
     ab: gifa_vision::AbFilter,
     /// 视角状态机
     view: gifa_vision::ViewState,
-    /// 叠加层当前圆心（跟着采样窗走）
+    /// --game：采游戏窗口（真机验证）。
+    game_rect: Option<gifa_shell::RectI>,
+    /// 是否已经做过自动定心
+    autocentered: bool,
+    /// --game 统计：有效箭头/视锥帧数、帧间角度、跨帧跳变
+    game_arrow: Vec<f64>,
+    game_view: u32,
+    game_jumps: u32,
+    /// `--login`：到点后在 UI 线程开登录弹窗
     overlay_center: Option<(i32, i32)>,
     /// `--seek <秒>`：视频就绪后跳转一次
     seek_to: Option<f64>,
@@ -546,6 +554,13 @@ fn main() {
             ui.logs.push(format!("视觉冒烟 {secs}s"));
         });
     }
+    if std::env::args().any(|a| a == "--list-windows") {
+        for (class, title, r) in gifa_shell::list_windows() {
+            println!("{class:<40} | {title:<30} | {}×{}", r.w, r.h);
+        }
+        return;
+    }
+
     if auto_login {
         UI.with(|ui| {
             ui.borrow_mut().login_at = Some(Instant::now() + Duration::from_millis(2500));
@@ -678,6 +693,10 @@ fn on_tick() {
         }
         if std::env::args().any(|a| a == "--vision-test") {
             vision_test_step(&mut ui);
+        }
+        if std::env::args().any(|a| a == "--game") {
+            game_step(&mut ui);
+            return;
         }
         if std::env::args().any(|a| a == "--vision-synth") {
             synth_test_step(&mut ui);
@@ -1261,6 +1280,41 @@ fn bearing_step(ui: &mut UiState) {
     }
     let el = ui.bearing_since.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
 
+    // --autocenter：视频路径也支持（ROI 漂移时用它修）
+    if std::env::args().any(|a| a == "--autocenter") && !ui.autocentered && el > 1.5 {
+        ui.autocentered = true;
+        if let (Some(snap), Some(vr)) = (gifa_shell::snapshot(), ui.video_rect.as_ref()) {
+            let k = vr.dpr;
+            let elem = (
+                (snap.float_rect.x + snap.stage.x) as f64 + vr.x * k,
+                (snap.float_rect.y + snap.stage.y) as f64 + vr.y * k,
+                vr.w * k,
+                vr.h * k,
+            );
+            let c = gifa_core::bearing::content_rect(elem, vr.vw, vr.vh, &vr.fit);
+            let cur = ui.layouts.active().roi;
+            match gifa_vision::autocenter(
+                c.0 as i32,
+                c.1 as i32,
+                c.2 as i32,
+                c.3 as i32,
+                (cur.cx, cur.cy, cur.r),
+            ) {
+                Some(a) => {
+                    println!(
+                        "[vision] 自动定心：cx={:.4} cy={:.4} r={:.4}（峰值 {}，箭头 {}px）",
+                        a.cx, a.cy, a.r, a.peak, a.arrow_px
+                    );
+                    if let Some(roi) = gifa_core::Roi::new(a.cx, a.cy, a.r) {
+                        ui.layouts.create("auto".into(), "自动定心", roi).ok();
+                        ui.layouts.select("auto").ok();
+                    }
+                }
+                None => println!("[vision] 自动定心失败：找不到青色箭头"),
+            }
+        }
+    }
+
     // --seek：视频就绪（有 duration）后跳一次
     if !ui.seeked {
         if let (Some(t), Some(st)) = (ui.seek_to, ui.state.as_ref()) {
@@ -1710,6 +1764,20 @@ fn report_ui(ui: &UiState) {
 
 /// 当前采样窗（屏幕坐标）：视频位置 → 去掉黑边 → 当前布局的 ROI
 fn vision_box(ui: &mut UiState) -> Option<gifa_vision::SampleBox> {
+    /* --game：直接采游戏窗口的客户区。
+     * 真机验证时页面根本不参与，ROI 是相对游戏窗口的比例。 */
+    if let Some(g) = ui.game_rect {
+        let roi = ui.layouts.active().roi;
+        let cx = g.x as f64 + roi.cx * g.w as f64;
+        let cy = g.y as f64 + roi.cy * g.h as f64;
+        let side = (roi.r * g.w as f64 * 2.0 * 0.62).clamp(48.0, 320.0) as i32;
+        return Some(gifa_vision::SampleBox {
+            x: (cx - side as f64 / 2.0) as i32,
+            y: (cy - side as f64 / 2.0) as i32,
+            w: side,
+            h: side,
+        });
+    }
     let s = gifa_shell::snapshot()?;
     // 浮窗被盖住时，截屏截到的是压在上面的窗口（比如独占全屏的游戏），
     // 这时候识别出来的"方位"是假的 —— 直接暂停，宁可不报。
@@ -1717,7 +1785,11 @@ fn vision_box(ui: &mut UiState) -> Option<gifa_vision::SampleBox> {
     let probe_y = s.float_rect.y + s.stage.y + s.stage.h / 2;
     // 沉浸模式会开点击穿透（WS_EX_TRANSPARENT），`WindowFromPoint` 直接跳过自己的窗，
     // 遮挡判定会永远失败 —— 这时不能用它当判据。
-    if !ui.synth && !gifa_shell::click_through() && !gifa_shell::float_on_top_at(probe_x, probe_y) {
+    if !ui.synth
+        && ui.game_rect.is_none()
+        && !gifa_shell::click_through()
+        && !gifa_shell::float_on_top_at(probe_x, probe_y)
+    {
         ui.covered_logged = true;
         ui.covered_detail = format!(
             "({probe_x},{probe_y}) 命中={:?} hwnd=0x{:X}",
@@ -1826,6 +1898,18 @@ fn pump_vision(ui: &mut UiState) {
         ui.vision_count += 1;
         ui.vision_capture_sum += ev.capture.as_secs_f64() * 1000.0;
         ui.vision_detect_sum += ev.detect.as_secs_f64() * 1000.0;
+        if let Some(a) = ev.result.arrow {
+            if let Some(prev) = ui.game_arrow.last() {
+                let d = ((a - prev + 540.0) % 360.0 - 180.0).abs();
+                if d > 90.0 {
+                    ui.game_jumps += 1;
+                }
+            }
+            ui.game_arrow.push(a);
+        }
+        if ev.result.view.is_some() {
+            ui.game_view += 1;
+        }
         ui.vision_last = Some(ev);
         let (arrow_out, view_deg, view_conf, view_w) = filter_event(ui, &ev);
         send_overlay(arrow_out, view_deg, view_conf, view_w);
@@ -1925,6 +2009,137 @@ fn url_encode(s: &str) -> String {
 }
 
 /// 合成地图自检：整条链路 + 已知角度对拍
+/* ---------------------------------------------------------------- 真机验证
+ *
+ * 和视频模式的区别：采样窗来自**游戏窗口的客户区**，页面完全不参与。
+ * ROI 是相对游戏窗口的比例（换分辨率要重标一次）。
+ */
+fn game_step(ui: &mut UiState) {
+    if ui.im_started.is_none() {
+        ui.im_started = Some(Instant::now());
+        let Some((hwnd, rect)) = gifa_shell::find_window_by_class("UnityWndClass") else {
+            println!("[game] 没找到游戏窗口（UnityWndClass）—— 游戏开着吗？");
+            std::thread::spawn(|| {
+                std::thread::sleep(Duration::from_millis(300));
+                gifa_shell::close();
+            });
+            return;
+        };
+        ui.game_rect = Some(rect);
+        // 浮窗挡住小地图就没法截了：直接藏起来，只留叠加层
+        gifa_shell::hide();
+        // 自动定心：先按当前 ROI 猜，再在大范围里找最亮的青色块纠正
+        if std::env::args().any(|a| a == "--autocenter") {
+            let cur = ui.layouts.active().roi;
+            match gifa_vision::autocenter(rect.x, rect.y, rect.w, rect.h, (cur.cx, cur.cy, cur.r)) {
+                Some(c) => {
+                    println!(
+                        "[game] 自动定心：cx={:.4} cy={:.4} r={:.4}（青色峰值 {}，箭头 {}px）",
+                        c.cx, c.cy, c.r, c.peak, c.arrow_px
+                    );
+                    if let Some(roi) = gifa_core::Roi::new(c.cx, c.cy, c.r) {
+                        ui.layouts.create("auto".into(), "自动定心", roi).ok();
+                        ui.layouts.select("auto").ok();
+                    }
+                }
+                None => println!("[game] 自动定心失败：这块区域找不到青色箭头"),
+            }
+        }
+        let roi = ui.layouts.active().roi;
+        let cx = rect.x + (roi.cx * rect.w as f64) as i32;
+        let cy = rect.y + (roi.cy * rect.h as f64) as i32;
+        let radius = (roi.r * rect.w as f64 * 1.2) as i32;
+        println!(
+            "[game] 窗口 hwnd=0x{hwnd:X} {w}×{h} @({x},{y})  小地图 ≈({cx},{cy}) 半径 {radius}",
+            w = rect.w,
+            h = rect.h,
+            x = rect.x,
+            y = rect.y
+        );
+        // --vision-csv 在 game 模式也要生效
+        if let Some(dir) = std::env::args()
+            .position(|a| a == "--vision-csv")
+            .and_then(|i| std::env::args().nth(i + 1))
+        {
+            if let Ok(f) = std::fs::File::create(std::path::PathBuf::from(dir)) {
+                use std::io::Write;
+                let mut f = f;
+                let _ = writeln!(
+                    f,
+                    "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF,rej,noseGap,angMargin"
+                );
+                ui.vision_csv = Some(f);
+            }
+        }
+        // --dump-frame 在 game 模式也要生效
+        if let Some(dir) = std::env::args()
+            .position(|a| a == "--dump-frame")
+            .and_then(|i| std::env::args().nth(i + 1))
+        {
+            ui.dump_frame = Some(std::path::PathBuf::from(dir));
+            ui.dump_left = std::env::args()
+                .position(|a| a == "--dump-count")
+                .and_then(|i| std::env::args().nth(i + 1))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6);
+        }
+        match gifa_shell::overlay_init(radius.max(40), Some((cx, cy))) {
+            Ok(()) => println!("[game] 叠加层已就位"),
+            Err(e) => println!("[game] 叠加层失败：{e}"),
+        }
+        start_vision(ui);
+        return;
+    }
+    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let secs: f64 = std::env::args()
+        .position(|a| a == "--game")
+        .and_then(|i| std::env::args().nth(i + 1))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20.0);
+    // 游戏窗口可能被移动/切分辨率：每秒重新取一次
+    if ui.ticks.is_multiple_of(4) {
+        if let Some((_, r)) = gifa_shell::find_window_by_class("UnityWndClass") {
+            ui.game_rect = Some(r);
+        }
+    }
+    if el >= secs {
+        let n = ui.vision_count.max(1);
+        let arrow = ui.game_arrow.len();
+        let mut steps: Vec<f64> = ui
+            .game_arrow
+            .windows(2)
+            .map(|w| ((w[1] - w[0] + 540.0) % 360.0 - 180.0).abs())
+            .collect();
+        steps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let med = steps.get(steps.len() / 2).copied().unwrap_or(0.0);
+        println!("\n============ 真机验证 ============");
+        println!("[1] 抓到帧                    {} 帧（{secs:.0}s）", ui.vision_count);
+        println!(
+            "[2] 箭头有效                   {arrow} / {n}（{:.0}%）",
+            100.0 * arrow as f64 / n as f64
+        );
+        println!(
+            "[3] 视锥有效                   {} / {n}（{:.0}%）",
+            ui.game_view,
+            100.0 * ui.game_view as f64 / n as f64
+        );
+        println!("[4] 帧间角度中位                {med:.2}°");
+        println!("[5] >90° 跳变                  {} 次", ui.game_jumps);
+        if let Some(last) = ui.vision_last.as_ref() {
+            println!(
+                "[6] 耗时                       截帧 {:.1}ms / 检测 {:.1}ms",
+                last.capture.as_secs_f64() * 1000.0,
+                last.detect.as_secs_f64() * 1000.0
+            );
+        }
+        println!("----------------------------------");
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(600));
+            gifa_shell::close();
+        });
+    }
+}
+
 fn synth_test_step(ui: &mut UiState) {
     if ui.im_started.is_none() {
         ui.im_started = Some(Instant::now());

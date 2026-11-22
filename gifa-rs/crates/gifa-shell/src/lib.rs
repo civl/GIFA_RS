@@ -23,6 +23,7 @@ pub use shell::{
     set_hover_fade, set_immersion, DiscState, OverlayState,
     player_state, post_tick, reassert_topmost, run, set_bounds,
     set_interactive, set_opacity, show_inactive, snapshot, start_ticks, webview2_version,
+    find_window_by_class, list_windows,
     ShellConfig, WEBVIEW2_MIN_MAJOR,
 };
 pub use shell::{parse_version, runtime_ok};

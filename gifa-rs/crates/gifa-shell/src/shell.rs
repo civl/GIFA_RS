@@ -1369,6 +1369,111 @@ pub fn set_interactive(on: bool) {
     with_shell(|s| s.interactive = on);
 }
 
+/// 找游戏主窗口：按窗口类名精确匹配，返回 (hwnd, 客户区屏幕矩形)。
+///
+/// 原神的窗口类是 `UnityWndClass`（标题 `YuanShen`）。取**客户区**而不是整窗：
+/// 无边框全屏时两者相同，窗口模式下客户区才是画面区域。
+pub fn find_window_by_class(class: &str) -> Option<(isize, RectI)> {
+    use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
+    use windows::Win32::Graphics::Gdi::ClientToScreen;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetClassNameW, GetClientRect, IsWindowVisible,
+    };
+
+    struct Ctx {
+        target: Vec<u16>,
+        found: Vec<(isize, RectI)>,
+    }
+
+    unsafe extern "system" fn cb(h: HWND, l: LPARAM) -> windows::core::BOOL {
+        let ctx = &mut *(l.0 as *mut Ctx);
+        let mut buf = [0u16; 256];
+        let n = GetClassNameW(h, &mut buf);
+        if n <= 0 {
+            return true.into();
+        }
+        if &buf[..n as usize] != ctx.target.as_slice() {
+            return true.into();
+        }
+        if !IsWindowVisible(h).as_bool() {
+            return true.into();
+        }
+        let mut rc = RECT::default();
+        if GetClientRect(h, &mut rc).is_err() {
+            return true.into();
+        }
+        let mut tl = POINT { x: 0, y: 0 };
+        let mut br = POINT {
+            x: rc.right,
+            y: rc.bottom,
+        };
+        let _ = ClientToScreen(h, &mut tl);
+        let _ = ClientToScreen(h, &mut br);
+        let r = RectI {
+            x: tl.x,
+            y: tl.y,
+            w: br.x - tl.x,
+            h: br.y - tl.y,
+        };
+        if r.w > 200 && r.h > 200 {
+            ctx.found.push((h.0 as isize, r));
+        }
+        true.into()
+    }
+
+    let mut ctx = Ctx {
+        target: class.encode_utf16().collect(),
+        found: Vec::new(),
+    };
+    unsafe {
+        let _ = EnumWindows(Some(cb), LPARAM(&mut ctx as *mut Ctx as isize));
+    }
+    // 同类名可能有多份（多开/残留）：取面积最大的
+    ctx.found.sort_by_key(|(_, r)| -(r.w as i64 * r.h as i64));
+    ctx.found.into_iter().next()
+}
+
+/// 诊断：列出可见的顶层窗口（类名 / 标题 / 尺寸），排查"找不到游戏窗口"
+pub fn list_windows() -> Vec<(String, String, RectI)> {
+    use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetClassNameW, GetClientRect, GetWindowTextW, IsWindowVisible,
+    };
+
+    unsafe extern "system" fn cb(h: HWND, l: LPARAM) -> windows::core::BOOL {
+        let out = &mut *(l.0 as *mut Vec<(String, String, RectI)>);
+        if !IsWindowVisible(h).as_bool() {
+            return true.into();
+        }
+        let mut cb_buf = [0u16; 256];
+        let n = GetClassNameW(h, &mut cb_buf);
+        let class = String::from_utf16_lossy(&cb_buf[..n.max(0) as usize]);
+        let mut t_buf = [0u16; 256];
+        let tn = GetWindowTextW(h, &mut t_buf);
+        let title = String::from_utf16_lossy(&t_buf[..tn.max(0) as usize]);
+        let mut rc = RECT::default();
+        if GetClientRect(h, &mut rc).is_ok() && rc.right > 300 && rc.bottom > 300 {
+            out.push((
+                class,
+                title,
+                RectI {
+                    x: 0,
+                    y: 0,
+                    w: rc.right,
+                    h: rc.bottom,
+                },
+            ));
+        }
+        true.into()
+    }
+
+    let mut out: Vec<(String, String, RectI)> = Vec::new();
+    unsafe {
+        let _ = EnumWindows(Some(cb), LPARAM(&mut out as *mut _ as isize));
+    }
+    out
+}
+
 /// 诊断：屏幕坐标处 WindowFromPoint 返回的 HWND 裸值
 pub fn window_at(x: i32, y: i32) -> isize {
     use windows::Win32::Foundation::POINT;

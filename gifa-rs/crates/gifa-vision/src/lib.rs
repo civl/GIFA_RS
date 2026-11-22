@@ -9,6 +9,7 @@
 //! `webview-preload.js`，凭理解先写一版反而会把对拍基线搞乱。
 
 pub mod arrow;
+pub mod autocenter;
 pub mod color;
 pub mod filter;
 pub mod template;
@@ -20,6 +21,7 @@ pub mod result;
 pub mod screen;
 
 pub use arrow::{analyze, to_compass, ArrowResult, ArrowWorkspace, Corner};
+pub use autocenter::{autocenter, Centered};
 pub use cone::{analyze_cone, ConeResult, ConeWorkspace};
 pub use filter::{view_payload, AbFilter, ConeObs, ViewOut, ViewSource, ViewState};
 pub use template::{fit_arrow, Fit};

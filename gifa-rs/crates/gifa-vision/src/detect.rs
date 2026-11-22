@@ -98,7 +98,29 @@ pub fn detect_window(
     cws: &mut crate::cone::ConeWorkspace,
 ) -> Detect {
     let mut out = Detect::default();
-    let arrow = crate::arrow::analyze(rgba, size, 1, aws);
+    /* 箭头的采样窗要比视锥小一圈。
+     *
+     * `analyze` 里有一道 `p99 < 100 ⇒ 判"这一帧没有小地图"` 的闸（原版用来跳过
+     * 转场/菜单）。它要求箭头在窗口里占 1% 以上。真机 2560×1440 实测：小地图直径
+     * ~260px、箭头只有 ~40px，用 253px 的窗口时 p99 = 73 → 直接被判"没有小地图"，
+     * 而同一帧的视锥通道 100% 有效。
+     *
+     * 所以两个通道用两个窗口：视锥用整窗（它要看到扇形边缘），箭头用中心 55% 的
+     * 裁切（箭头占 8% 左右，p99 稳定过线）。不额外截屏，只是同一块像素里换窗口。 */
+    let arrow_side = ((size as f64 * 0.55) as usize).clamp(48, size) & !1;
+    let crop_off = (size - arrow_side) / 2;
+    let arrow = if arrow_side + 8 < size {
+        let mut crop = vec![0u8; arrow_side * arrow_side * 4];
+        for y in 0..arrow_side {
+            let src = ((y + crop_off) * size + crop_off) * 4;
+            let dst = y * arrow_side * 4;
+            crop[dst..dst + arrow_side * 4]
+                .copy_from_slice(&rgba[src..src + arrow_side * 4]);
+        }
+        crate::arrow::analyze(&crop, arrow_side, 1, aws)
+    } else {
+        crate::arrow::analyze(rgba, size, 1, aws)
+    };
     let nose_gap = arrow
         .nose_deg
         .map(|n| ((n - arrow.angle + 540.0) % 360.0 - 180.0).abs() as f32);
