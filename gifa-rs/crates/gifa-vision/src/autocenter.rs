@@ -61,11 +61,18 @@ pub fn autocenter(
         w: base_w,
         h: base_h,
     };
-    if let Some(c) = scan(area, base) {
+    let probe_r = Probe { r: probe.2 };
+    if let Some(c) = scan(area, base, probe_r) {
         return Some(c);
     }
     // 猜测点周围没有：扫整块基准区域
-    scan(base, base)
+    scan(base, base, probe_r)
+}
+
+/// 半径沿用当前布局（不靠箭头反推，见调用处注释）
+#[derive(Clone, Copy)]
+struct Probe {
+    r: f64,
 }
 
 /// 矩形：截屏区域与"基准区域"都用它
@@ -78,7 +85,7 @@ struct Rect {
 }
 
 /// 在一张截屏里找箭头并换算成比例
-fn scan(area: Rect, base: Rect) -> Option<Centered> {
+fn scan(area: Rect, base: Rect, probe: Probe) -> Option<Centered> {
     let Rect { x, y, w, h } = area;
     let frame = crate::screen::capture_screen(x, y, w, h).ok()?;
     let fw = frame.width.max(1) as usize;
@@ -109,6 +116,9 @@ fn scan(area: Rect, base: Rect) -> Option<Centered> {
         }
     }
     let thr = ((p995 as f64) * 0.8).max(120.0) as i32;
+    if std::env::var_os("GIFA_DEBUG").is_some() {
+        eprintln!("[autocenter] p99.5={p995} → 阈值 {thr}");
+    }
     let mut mask = vec![0u8; fw * fh];
     for i in 0..(fw * fh) {
         if scores[i] >= thr {
@@ -154,7 +164,7 @@ fn scan(area: Rect, base: Rect) -> Option<Centered> {
                 }
             }
         }
-        if !(80..=20000).contains(&n) {
+        if !(40..=20000).contains(&n) {
             continue;
         }
         let bw = (x1 - x0 + 1) as f64;
@@ -170,6 +180,16 @@ fn scan(area: Rect, base: Rect) -> Option<Centered> {
         cands.push((score, px as i32, py as i32, bw.max(bh) as i32));
     }
     cands.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    if std::env::var_os("GIFA_DEBUG").is_some() {
+        eprintln!(
+            "[autocenter] 区域 {}×{} 阈值 {} 候选 {} 个: {:?}",
+            w,
+            h,
+            thr,
+            cands.len(),
+            cands.iter().take(5).map(|c| (c.3, c.1, c.2)).collect::<Vec<_>>()
+        );
+    }
 
     // 3) 逐个交给真正的箭头检测器验收
     let mut ws = crate::arrow::ArrowWorkspace::default();
@@ -182,6 +202,12 @@ fn scan(area: Rect, base: Rect) -> Option<Centered> {
         };
         let side = f.width.min(f.height).max(8) as usize;
         let r = crate::arrow::analyze(&f.data, side, 1, &mut ws);
+        if std::env::var_os("GIFA_DEBUG").is_some() {
+            eprintln!(
+                "[autocenter] 候选 ({}px, 窗口 {win}) → valid={} angle={:.1} margin={:.1}",
+                size, r.valid, r.angle, r.ang_margin
+            );
+        }
         if !r.valid {
             continue;
         }
@@ -190,8 +216,10 @@ fn scan(area: Rect, base: Rect) -> Option<Centered> {
         if !(0.0..=1.0).contains(&cx_frac) || !(0.0..=1.0).contains(&cy_frac) {
             continue;
         }
-        // 箭头宽度 ≈ 小地图直径的 0.32 → 半径 ≈ size/0.64
-        let r_frac = ((size as f64 / 0.64) / base.w as f64).clamp(0.02, 0.35);
+        /* 半径不在这里定：它同时受"小地图缩放"和"显示器宽度"影响，
+         * 单看箭头反推会跑偏（实测 0.05~0.20 都出现过）。
+         * 这里只负责**圆心**；调用方拿圆心去匹配最接近的内置预设，用那个预设的半径。 */
+        let r_frac = probe.r;
         return Some(Centered {
             cx: cx_frac,
             cy: cy_frac,

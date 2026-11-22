@@ -125,6 +125,10 @@ struct UiState {
     boot_at: Option<Instant>,
     /// 是否已经做过自动定心
     autocentered: bool,
+    /// 自动定心已尝试次数
+    auto_tries: u32,
+    /// 自动定心的候选结果（多次聚类，防误检）
+    auto_hits: Vec<(f64, f64, f64, i32)>,
     /// --game 统计：有效箭头/视锥帧数、帧间角度、跨帧跳变
     game_arrow: Vec<f64>,
     game_view: u32,
@@ -1336,8 +1340,14 @@ fn bearing_step(ui: &mut UiState) {
     let el = ui.bearing_since.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
 
     // --autocenter：视频路径也支持（ROI 漂移时用它修）
-    if std::env::args().any(|a| a == "--autocenter") && !ui.autocentered && el > 1.5 {
-        ui.autocentered = true;
+    /* --autocenter：视频里"这一刻有没有箭头"是随机的（菜单/转场/看别处都没有），
+     * 所以每隔 1.5 秒试一次，最多 6 次（9 秒）。找到就停。 */
+    let try_auto = std::env::args().any(|a| a == "--autocenter")
+        && !ui.autocentered
+        && ui.auto_tries < 10
+        && el > 1.0 + 1.2 * ui.auto_tries as f64;
+    if try_auto {
+        ui.auto_tries += 1;
         if let (Some(snap), Some(vr)) = (gifa_shell::snapshot(), ui.video_rect.as_ref()) {
             let k = vr.dpr;
             let elem = (
@@ -1356,16 +1366,72 @@ fn bearing_step(ui: &mut UiState) {
                 (cur.cx, cur.cy, cur.r),
             ) {
                 Some(a) => {
-                    println!(
-                        "[vision] 自动定心：cx={:.4} cy={:.4} r={:.4}（峰值 {}，箭头 {}px）",
-                        a.cx, a.cy, a.r, a.peak, a.arrow_px
-                    );
-                    if let Some(roi) = gifa_core::Roi::new(a.cx, a.cy, a.r) {
-                        ui.layouts.create("auto".into(), "自动定心", roi).ok();
-                        ui.layouts.select("auto").ok();
+                    /* 单次结果不可靠（实测会锁到画面中间的青色特效）。
+                     * 真小地图**不会动**，误检会漂 —— 所以攒几次，两次落在同一处才采纳。 */
+                    ui.auto_hits.push((a.cx, a.cy, a.r, a.arrow_px));
+                    let hits = ui.auto_hits.clone();
+                    let mut agreed: Option<(f64, f64, f64)> = None;
+                    for i in 0..hits.len() {
+                        for j in (i + 1)..hits.len() {
+                            let (dx, dy) = (hits[i].0 - hits[j].0, hits[i].1 - hits[j].1);
+                            if (dx * dx + dy * dy).sqrt() < 0.02 {
+                                agreed = Some((
+                                    (hits[i].0 + hits[j].0) / 2.0,
+                                    (hits[i].1 + hits[j].1) / 2.0,
+                                    (hits[i].2 + hits[j].2) / 2.0,
+                                ));
+                            }
+                        }
+                    }
+                    /* 候选本来就贴着当前布局 → 这是"微调"，一次就够（低风险）。
+                     * 只有离得远（比如换了个作者的视频）才要求两次一致。 */
+                    let cur = ui.layouts.active().roi;
+                    let near = ((a.cx - cur.cx).powi(2) + (a.cy - cur.cy).powi(2)).sqrt() < 0.05;
+                    if near && agreed.is_none() {
+                        agreed = Some((a.cx, a.cy, a.r));
+                    }
+                    match agreed {
+                        Some((cx, cy, r)) => {
+                            ui.autocentered = true;
+                            let _ = &r;
+                            println!(
+                                "[vision] 自动定心：cx={cx:.4} cy={cy:.4} r={r:.4}（{} 次结果一致）",
+                                ui.auto_hits.len()
+                            );
+                            /* 半径取"圆心最接近的内置预设"：本机实测视频素材
+                             * 圆心 ≈(0.149,0.248)，正好贴着内置「你的影月月」(0.1469,0.2463)，
+                             * 用它 0.14375 的半径窗口 250px，标注语料上有效率 96%。
+                             * 都不接近就沿用当前布局的半径。 */
+                            let mut best_r = r;
+                            let mut best_d = f64::MAX;
+                            for l in ui.layouts.layouts.iter() {
+                                let d = ((l.roi.cx - cx).powi(2) + (l.roi.cy - cy).powi(2)).sqrt();
+                                if d < best_d && l.built_in {
+                                    best_d = d;
+                                    best_r = l.roi.r;
+                                }
+                            }
+                            if let Some(roi) = gifa_core::Roi::new(cx, cy, best_r) {
+                                println!(
+                                    "[vision] 自动定心采用半径 {best_r:.5}（最近内置预设差 {best_d:.4}）"
+                                );
+                                ui.layouts.create("auto".into(), "自动定心", roi).ok();
+                                ui.layouts.select("auto").ok();
+                            }
+                        }
+                        None => println!(
+                            "[vision] 自动定心：第 {} 次找到候选 ({:.3},{:.3})，等下一次确认",
+                            ui.auto_hits.len(),
+                            a.cx,
+                            a.cy
+                        ),
                     }
                 }
-                None => println!("[vision] 自动定心失败：找不到青色箭头"),
+                None => {
+                    if ui.auto_tries >= 10 {
+                        println!("[vision] 自动定心失败：试了 10 次都没找到青色箭头");
+                    }
+                }
             }
         }
     }
