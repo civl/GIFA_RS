@@ -2253,6 +2253,19 @@ fn game_step(ui: &mut UiState) {
         );
         println!("[4] 帧间角度中位                {med:.2}°");
         println!("[5] >90° 跳变                  {} 次", ui.game_jumps);
+        /* 孤立的翻转 = 检测错误；连续的转动 = 玩家真在转身。
+         * 判据：这一帧和前后两帧都差 >90°，而前后两帧彼此接近 —— 典型的"翻一下就回来"。 */
+        let angles: Vec<f64> = ui.game_arrow.clone();
+        let mut flips = 0;
+        for i in 1..angles.len().saturating_sub(1) {
+            let d_prev = ((angles[i] - angles[i - 1] + 540.0) % 360.0 - 180.0).abs();
+            let d_next = ((angles[i + 1] - angles[i] + 540.0) % 360.0 - 180.0).abs();
+            let d_ends = ((angles[i + 1] - angles[i - 1] + 540.0) % 360.0 - 180.0).abs();
+            if d_prev > 90.0 && d_next > 90.0 && d_ends < 45.0 {
+                flips += 1;
+            }
+        }
+        println!("[5b] 其中孤立翻转（检测错）        {flips} 次，其余为真实转身");
         if let Some(last) = ui.vision_last.as_ref() {
             println!(
                 "[6] 耗时                       截帧 {:.1}ms / 检测 {:.1}ms",
