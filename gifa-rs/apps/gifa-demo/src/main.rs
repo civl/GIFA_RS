@@ -818,7 +818,16 @@ fn arg_value(args: &[String], flag: &str) -> Option<String> {
 /// * 短链（b23.tv / bili2233.cn）→ **原样交给浏览器**跳转，agent 会把落地地址报回来，
 ///   再由 `pending_short` 接管。这样不用引 HTTP 栈，也不会漏掉 B 站自己的风控跳转。
 fn resolve(text: &str) -> String {
-    let part = gifa_player::extract_part(text).unwrap_or(1);
+    resolve_part(text, None)
+}
+
+/// 同 [`resolve`]，但允许调用方显式指定分 P（历史/收藏里存的是 `bvid` + `part` 两个字段，
+/// 原文里没有 `?p=`；不传这个就会落回第 1 P —— 用户报过"点收藏跳到第一集"）。
+fn resolve_part(text: &str, forced: Option<i32>) -> String {
+    let part = forced
+        .filter(|p| *p > 0)
+        .or_else(|| gifa_player::extract_part(text))
+        .unwrap_or(1);
     match gifa_player::extract_id(text) {
         Some(id) => gifa_player::video_url(&id, part),
         None => text.to_string(),
@@ -1122,6 +1131,29 @@ fn on_tick() {
             }
         }
 
+        /* --probe-part：打印播放器上报的 bvid/分P 和历史第一条，用来查"收藏跳不回原页" */
+        if std::env::args().any(|a| a == "--probe-part") && ui.ticks % 20 == 0 && ui.ticks > 0 {
+            let (bvid, part, title) = ui
+                .state
+                .as_ref()
+                .map(|s| (s.bvid.clone(), s.part, s.title.clone()))
+                .unwrap_or_default();
+            let h = ui.store.as_ref().map(|s| {
+                s.history
+                    .first()
+                    .map(|e| format!("{}|P{}|{}", e.text, e.part, e.title))
+                    .unwrap_or_default()
+            });
+            println!("[probe] ticks={} bvid={bvid:?} part={part} title={title:?} 历史首条={h:?}", ui.ticks);
+        }
+
+        /* --load-test：模拟"点历史/收藏条目"—— 带上 part 载入，验证不会跳回第 1 P */
+        if std::env::args().any(|a| a == "--load-test") && ui.ticks == 12 {
+            gifa_shell::eval_chrome(
+                "post({t:'load', text:'BV1xx411c7mD', part:3})",
+            );
+        }
+
         /* --fav-test：走真实链路验证收藏 —— 页面 post({t:'favorite-toggle'}) → Rust 落盘
          * → 状态回推 → 页面星标变实心。 */
         if std::env::args().any(|a| a == "--fav-test") {
@@ -1147,14 +1179,39 @@ fn on_tick() {
                     ui.im_phase = 1;
                     ui.im_started = Some(Instant::now());
                 }
+                2 if ui.im_started.is_some_and(|t| t.elapsed().as_millis() > 6000) => {
+                    let (bvid, part, title) = ui
+                        .state
+                        .as_ref()
+                        .map(|s| (s.bvid.clone(), s.part, s.title.clone()))
+                        .unwrap_or_default();
+                    println!("[fav-test] 载入后 bvid={bvid:?} part={part} title={title:?}");
+                    ui.im_phase = 3;
+                    ui.im_started = Some(Instant::now());
+                }
                 1 if ui.im_started.is_some_and(|t| t.elapsed().as_millis() > 800) => {
                     let n = ui.store.as_ref().map(|s| s.favorites.len()).unwrap_or(0);
                     let ok = n != fav_before_n; // 星标是开关：条数必须变
+                    let top = ui
+                        .store
+                        .as_ref()
+                        .and_then(|s| s.favorites.first().cloned())
+                        .map(|e| format!("{}|P{}|{}", e.text, e.part, e.title))
+                        .unwrap_or_default();
                     println!(
-                        "[fav-test] 点击前 {fav_before_n} 条 → 点击后 {n} 条 → {}",
+                        "[fav-test] 点击前 {fav_before_n} 条 → 点击后 {n} 条 → {}（首条 {top}）",
                         if ok { "PASS" } else { "FAIL" }
                     );
                     println!("RESULT {}/1", usize::from(ok));
+                    // 再模拟"点收藏条目"：用刚才存下的 text/part 载入
+                    if let Some(e) = ui.store.as_ref().and_then(|s| s.favorites.first().cloned()) {
+                        let js = format!(
+                            "post({{t:'load', text:{:?}, part:{}}})",
+                            e.text, e.part
+                        );
+                        gifa_shell::eval_chrome(&js);
+                        println!("[fav-test] 点收藏 → 载入 {:?} P{}", e.text, e.part);
+                    }
                     ui.im_phase = 2;
                 }
                 _ => {}
@@ -3671,8 +3728,20 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
             }
             ui.pending_short =
                 gifa_player::is_short_link(text) && gifa_player::extract_id(text).is_none();
-            let url = resolve(text);
+            let forced = v
+                .get("part")
+                .and_then(|x| x.as_i64())
+                .map(|p| p as i32)
+                .filter(|p| *p > 1);
+            let url = resolve_part(text, forced);
             ui.logs.push(format!("载入 {url}"));
+            println!(
+                "[gifa] 载入 {url}（原文 {text:?}{}）",
+                match forced {
+                    Some(p) => format!("，指定分 P {p}"),
+                    None => String::new(),
+                }
+            );
             gifa_shell::navigate_stage(&url);
             if let Some(id) = gifa_player::extract_id(text) {
                 gifa_shell::player_command(PlayerCommand::FetchView { id });
@@ -3680,8 +3749,10 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
             // 记历史（标题稍后拿到再补上）
             if let Some(store) = ui.store.as_mut() {
                 let part = store.last_part;
+                // 只存 bvid：长链接里的 spm_id_from / vd_source 存了也没用
+                let key = gifa_player::extract_id(text).unwrap_or_else(|| text.to_string());
                 store.push_history(gifa_core::RecentEntry::new(
-                    text,
+                    key,
                     String::new(),
                     part,
                     now_ms(),
@@ -4278,6 +4349,17 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn resolve_part_honours_explicit_part() {
+        // 历史/收藏里存的是 bvid + part，原文没带 ?p=
+        assert!(resolve_part("BV1xx411c7mD", Some(3)).contains("p=3"));
+        assert!(resolve_part("BV1xx411c7mD", None).contains("p=1"));
+        // 原文自带分 P，但调用方显式指定 → 以显式的为准
+        assert!(resolve_part("BV1xx411c7mD?p=2", Some(5)).contains("p=5"));
+        // part=1 不用特殊处理（默认就是 1）
+        assert!(resolve_part("BV1xx411c7mD", Some(1)).contains("p=1"));
+    }
 
     #[test]
     fn resolve_handles_all_input_forms() {

@@ -474,3 +474,29 @@ for f in ["web/chrome.html", "web/app.js", "web/style.css"] {
 
 还有一个日志噪音：外壳对**每一条**应用层消息都 `shell_log!("外壳未处理的消息…")`。
 现在只有 `t` 确实是外壳的（layout/drag/resize/opacity/close）而字段不对时才报。
+
+
+## 点收藏/历史跳到第一集
+
+用户给的例子：`.../BV1PyxQ6sEbH/?...&p=2` 收藏后，点收藏跳到**不带 p** 的那个地址。
+
+两处原因，都要修：
+
+1. **条目里只存了 `text`，没把分 P 传回去**。历史/收藏存的是 `bvid` + `part` 两个字段，
+   点条目时如果只发 `text`，`resolve()` 按原文解析 → 原文里没 `?p=` → 落回第 1 P。
+   → 点条目时带上 `part`，Rust 侧用 `resolve_part(text, Some(part))` 显式指定。
+2. **老数据里 part 一直是 1**（早期只用原文记，分 P 没单独存）。
+   → `Settings::normalize()` 里做一次修复：`part <= 1` 且原文里有 `p=N` 就补成 N。
+
+顺带：
+- 新记的条目只存 **bvid**（长链接里的 `spm_id_from` / `vd_source` 存着没用，还会干扰阅读）
+- `--fav-test` 现在完整走一遍「收藏 → 点收藏条目 → 校验载入后的 bvid/part/标题」
+
+实测（用用户给的那个四 P 视频）：
+
+```
+[fav-test] 点击前 0 条 → 点击后 1 条 → PASS（首条 BV1PyxQ6sEbH|P2|大枢纽…）
+[fav-test] 点收藏 → 载入 "BV1PyxQ6sEbH" P2
+[gifa] 载入 https://www.bilibili.com/video/BV1PyxQ6sEbH/?p=2&autoplay=1
+[fav-test] 载入后 bvid="BV1PyxQ6sEbH" part=2 title="大枢纽 共4个(1-4)…"
+```

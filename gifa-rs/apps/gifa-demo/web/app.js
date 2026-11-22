@@ -167,7 +167,8 @@ function renderUrlList() {
     row.append(main, del);
     row.addEventListener('click', () => {
       closeUrlList();
-      post({ t: 'load', text: e.text });
+      // 带上分 P：历史里存的是 bvid + part 两个字段，光发 text 会落回第 1 P
+      post({ t: 'load', text: e.text, part: e.part || 1 });
     });
     box.appendChild(row);
   }

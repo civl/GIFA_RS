@@ -328,6 +328,30 @@ impl Settings {
         self.playback_rate = clamp(self.playback_rate, 0.25, 3.0);
         self.hold_playback_rate = snap_rate(self.hold_playback_rate, &HOLD_PLAYBACK_RATES);
         self.last_part = self.last_part.max(1);
+        /* 老数据修复：早期只存了原文（`?p=2` 在 URL 里），part 字段是 1。
+         * 这里把 part 从原文里补出来，免得"点收藏跳回第一集"。 */
+        for list in [&mut self.history, &mut self.favorites] {
+            for e in list.iter_mut() {
+                if e.part <= 1 {
+                    for key in ["?p=", "&p="] {
+                        if let Some(i) = e.text.find(key) {
+                            let n: String = e.text[i + key.len()..]
+                                .chars()
+                                .take_while(|c| c.is_ascii_digit())
+                                .collect();
+                            if let Ok(v) = n.parse::<i32>() {
+                                if v > 1 {
+                                    e.part = v;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                e.part = e.part.max(1);
+            }
+        }
+
         // 历史/收藏：去重（保留新的那条）+ 截断
         for (list, cap) in [
             (&mut self.history, HISTORY_CAP),
