@@ -576,6 +576,54 @@ fn main() {
             gifa_player::is_short_link(&text) && gifa_player::extract_id(&text).is_none();
     });
 
+    /* 老配置的一次性纠正：540×340 那种 2:1 扁条（画面上下被压得只剩一条）。
+     * 只在 `aspect != 2`（用户从没手动拉过）且宽度 < 720 时做一次，之后写回 aspect=2。 */
+    let mut aspect_fixed = false;
+    let mut bounds_now = saved_bounds;
+    if bounds_now.aspect != 2 && bounds_now.width < 720 {
+        let work = gifa_shell::primary_work_area();
+        let max_w = (work.w as f64 * 0.8) as i32;
+        let w = 896.min(max_w).max(320);
+        let h = ((w as f64 / 16.0) * 9.0) as i32 + 64; // 标题栏 30 + 控制条 34
+        println!(
+            "[gifa] 老配置 {}×{} 一次性纠正为 {w}×{h}",
+            bounds_now.width, bounds_now.height
+        );
+        bounds_now.width = w;
+        bounds_now.height = h;
+        bounds_now.aspect = 2;
+        aspect_fixed = true;
+    }
+    let startup_bounds = {
+        let (mut bw, mut bh) = (bounds_now.width.max(320), bounds_now.height.max(200));
+        if let Some(sz) = arg_value(&args, "--size") {
+            if let Some((w, h)) = sz.split_once('x') {
+                bw = w.parse().unwrap_or(W);
+                bh = h.parse().unwrap_or(H);
+            }
+        }
+        let (dx, dy) = match (bounds_now.x, bounds_now.y) {
+            (Some(x), Some(y)) => (x, y),
+            _ => (40, 40),
+        };
+        let mut b = Bounds::new(dx, dy, bw, bh);
+        if let Some(pos) = arg_value(&args, "--pos") {
+            if let Some((x, y)) = pos.split_once(',') {
+                b.x = x.trim().parse().unwrap_or(b.x);
+                b.y = y.trim().parse().unwrap_or(b.y);
+            }
+        }
+        b
+    };
+    if aspect_fixed {
+        UI.with(|ui| {
+            if let Some(store) = ui.borrow_mut().store.as_mut() {
+                store.bounds.aspect = 2;
+                store.save();
+            }
+        });
+    }
+
     gifa_shell::create(ShellConfig {
         chrome_url: None,
         chrome_html: chrome_page(),
@@ -584,34 +632,7 @@ fn main() {
         user_data_dir: Some(data_root.join("webview2")),
         player_tx: Some(player_tx),
         chrome_tx: Some(chrome_tx),
-        bounds: {
-            // 优先用上次记住的位置/尺寸（用户手动调过就照原样恢复）
-            let (mut bw, mut bh) = (saved_bounds.width.max(320), saved_bounds.height.max(200));
-            if let Some(sz) = arg_value(&args, "--size") {
-                if let Some((w, h)) = sz.split_once('x') {
-                    bw = w.parse().unwrap_or(W);
-                    bh = h.parse().unwrap_or(H);
-                }
-            }
-            {
-                // 没存过位置就贴左下角（不压游戏左上角的小地图）
-                let (dx, dy) = match (saved_bounds.x, saved_bounds.y) {
-                    (Some(x), Some(y)) => (x, y),
-                    _ => gifa_shell::list_windows()
-                        .first()
-                        .map(|_| (40, 40))
-                        .unwrap_or((40, 40)),
-                };
-                let mut b = Bounds::new(dx, dy, bw, bh);
-                if let Some(pos) = arg_value(&args, "--pos") {
-                    if let Some((x, y)) = pos.split_once(',') {
-                        b.x = x.trim().parse().unwrap_or(b.x);
-                        b.y = y.trim().parse().unwrap_or(b.y);
-                    }
-                }
-                b
-            }
-        },
+        bounds: startup_bounds,
         clamp_bounds: saved_bounds.x.is_none(),
         opacity: 255,
         title: "GIFA 跟跑浮窗".to_string(),

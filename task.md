@@ -424,7 +424,7 @@ gifa-rs/
 - **验收**：✅ 二次启动唤回；✅ `startup.log` 有版本/模式/提权/WebView2；
   ✅ release 清单含 requireAdministrator（UAC 由清单触发，无需代码再弹）
 
-### M1 窗口基座 `8d` [P0] ✅ 骨架完成（spike 1d + 实现 3d，剩 4d 收尾）
+### M1 窗口基座 `8d` [P0] ✅ **完成**（spike 1d + 实现 3d + 收尾）
 
 - [x] 前置 spike：`gifa-rs/spikes/dual-webview`（5/5），结论见 `FINDINGS.md`
 - [x] 两层窗口实现：`crates/gifa-shell`（舞台窗 + 顶层 chrome 玻璃窗）
@@ -438,10 +438,14 @@ gifa-rs/
 - [x] 透明度：舞台窗 `LWA_ALPHA`；chrome 侧改页面 `opacity`（用 LWA 会破坏逐像素透明）
 - [x] 位置钳制：`layout::clamp_to_work` / `default_bounds`（含 4 条单测）
 - [x] 非激活显示：`SW_SHOWNOACTIVATE` + chrome 的 `WS_EX_NOACTIVATE` / `WM_MOUSEACTIVATE→MA_NOACTIVATE`
-- [ ] 置顶巡检接到定时器（`reassert_topmost` 已实现，等应用层 2.5s 定时调用）
-- [ ] 移动/缩放落盘（`bounds()` 已实现，等设置层接入）
-- [ ] 旧配置 `aspect != 2 && width < 720` 的一次性 16:9 纠正
-- [ ] 多显示器增删（`WM_DISPLAYCHANGE`）时重新钳制
+- [x] 置顶巡检接到定时器：应用层每 10 个 tick（2.5s）调 `reassert_topmost`
+- [x] 移动/缩放落盘：tick 里比对 `bounds()`，变化就写回 `settings.json`；
+      启动后前 2 秒不记（那是程序自己按比例摆的）
+- [x] 旧配置 `aspect != 2 && width < 720` 的一次性 16:9 纠正
+      ↳ 实测 540×340 → **896×568**，并把 `aspect=2` 写回，以后不再干预
+- [x] 多显示器增删（`WM_DISPLAYCHANGE`）时重新钳制
+      ↳ 实测把窗口挪到 (4200,300)（屏幕外）再发 `WM_DISPLAYCHANGE` → **回到 (1624,300)**
+      （= 工作区右边界 - 宽 - 40，正是 `clamp_to_work` 的规则）
 - **锚点**：`main.js:653-700`（clampBounds）、`686-700`（applyPin）、`701-810`（createWindow）
 - **验收**：`cargo run -p shell-demo` 6/6；`--drag-test` PASS；`--hold --urlbar` 截图为区域 5 块、舞台 464
 - **已知取舍**：边缘缩放目前只有右下角 grip（与原版 `#grip` 一致）；`WM_NCHITTEST` 的边框命中已实现，

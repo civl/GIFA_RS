@@ -1503,6 +1503,28 @@ pub fn list_windows() -> Vec<(String, String, RectI)> {
     out
 }
 
+/// 主屏工作区（应用层算默认窗口尺寸/位置时用）
+pub fn primary_work_area() -> RectI {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    };
+    let mut rc = windows::Win32::Foundation::RECT::default();
+    unsafe {
+        let _ = SystemParametersInfoW(
+            SPI_GETWORKAREA,
+            0,
+            Some(&mut rc as *mut _ as *mut _),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        );
+    }
+    RectI {
+        x: rc.left,
+        y: rc.top,
+        w: rc.right - rc.left,
+        h: rc.bottom - rc.top,
+    }
+}
+
 /// 取走一个待处理的系统电源事件（应用层在 tick 里调）
 pub fn take_power_event() -> Option<PowerEvent> {
     with_shell(|s| s.power.take()).flatten()
@@ -2207,8 +2229,45 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             windows::Win32::Foundation::LRESULT(1) // TRUE = 已处理
         }
 
-        // ---- 显示器增删/分辨率变化：沉浸模式重新贴合
+        /* ---- 显示器增删/分辨率变化
+         *
+         * 两件事：沉浸模式重新贴合；非沉浸时把窗口**钳回工作区** ——
+         * 拔掉副屏后窗口可能整个落在不存在的坐标上，用户看到"程序还在跑但找不到窗口"。
+         */
         WM_DISPLAYCHANGE => {
+            if !with_shell(|s| s.immersion).unwrap_or(false) {
+                if let Some(f) = float_hwnd() {
+                    let work = win32::work_area(f);
+                    let rect = win32::window_rect(f);
+                    let b = layout::clamp_to_work(
+                        Bounds::new(
+                            rect.left,
+                            rect.top,
+                            rect.right - rect.left,
+                            rect.bottom - rect.top,
+                        ),
+                        WorkArea {
+                            x: work.left,
+                            y: work.top,
+                            w: work.right - work.left,
+                            h: work.bottom - work.top,
+                        },
+                    );
+                    if b.x != rect.left || b.y != rect.top {
+                        unsafe {
+                            let _ = SetWindowPos(
+                                f,
+                                None,
+                                b.x,
+                                b.y,
+                                b.w,
+                                b.h,
+                                SWP_NOACTIVATE | SWP_NOZORDER,
+                            );
+                        }
+                    }
+                }
+            }
             if with_shell(|s| s.immersion).unwrap_or(false) {
                 // 用当前比例重算（先取现有窗口比例作为近似，真实比例由应用层下次进入时提供）
                 let r = with_shell(|s| win32::window_rect(s.float));

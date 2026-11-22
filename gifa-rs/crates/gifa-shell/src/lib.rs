@@ -22,9 +22,9 @@ pub use shell::{
     overlay_drawn_log, overlay_drew_arc, overlay_init, overlay_move_center, overlay_placing,
     overlay_rect, overlay_set_placing, overlay_set_radius, overlay_size, overlay_update,
     overlay_view_stale, overlay_visible, player_command, player_state, popup_open, post_tick,
-    prevent_suspension, reassert_topmost, relaunch_elevated, run, set_bounds, set_click_through,
-    set_hover_fade, set_immersion, set_interactive, set_opacity, show_inactive, snapshot,
-    start_ticks, take_power_event, try_single_instance, webview2_version, window_at, DiscState,
-    OverlayState, PowerEvent, ShellConfig, WEBVIEW2_MIN_MAJOR,
+    prevent_suspension, primary_work_area, reassert_topmost, relaunch_elevated, run, set_bounds,
+    set_click_through, set_hover_fade, set_immersion, set_interactive, set_opacity, show_inactive,
+    snapshot, start_ticks, take_power_event, try_single_instance, webview2_version, window_at,
+    DiscState, OverlayState, PowerEvent, ShellConfig, WEBVIEW2_MIN_MAJOR,
 };
 pub use shell::{parse_version, runtime_ok};
