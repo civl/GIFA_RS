@@ -83,8 +83,12 @@ where
                 let side = win.w.min(win.h).max(8) as usize;
                 let result = detect_window(&frame.data, side, &mut ws, &mut cws);
                 // 只 dump「画面里有东西」的帧：没有小地图的转场/作者卡存下来没意义
-                let interesting =
-                    result.arrow.is_some() || result.view.is_some() || result.cyan_frac > 0.0005;
+                // GIFA_DUMP_ALL=1 时每帧都存（做帧间位移/时序实验要连续序列）
+                let dump_all = std::env::var_os("GIFA_DUMP_ALL").is_some();
+                let interesting = dump_all
+                    || result.arrow.is_some()
+                    || result.view.is_some()
+                    || result.cyan_frac > 0.0005;
                 if dump_left > 0 && interesting {
                     dump_left -= 1;
                     if let Some(dir) = &dump_dir {

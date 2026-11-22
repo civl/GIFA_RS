@@ -524,7 +524,9 @@ fn main() {
             ui.seek_to = seek_to;
             if let Some(p) = &dump {
                 ui.dump_frame = Some(data_root.join(p));
-                ui.dump_left = 6;
+                ui.dump_left = arg_value(&args, "--dump-count")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(6);
             }
             if let Some(p) = &csv_path {
                 let path = data_root.join(p);
@@ -534,7 +536,7 @@ fn main() {
                         println!("[vision] 逐帧 CSV → {}", path.display());
                         let _ = &mut ui.vision_csv.as_mut().map(|f| {
                             use std::io::Write;
-                            let _ = writeln!(f, "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF");
+                            let _ = writeln!(f, "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF,rej");
                         });
                     }
                     Err(e) => println!("[vision] CSV 创建失败：{e}"),
@@ -1805,7 +1807,7 @@ fn pump_vision(ui: &mut UiState) {
             // seq,cyan,arrow(raw),arrowConf,view(raw),viewConf,capMs,detMs,arrowF,viewF
             let _ = writeln!(
                 f,
-                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2},{:?},{:?}",
+                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2},{:?},{:?},{}",
                 ev.seq,
                 ev.result.cyan_frac,
                 ev.result.arrow,
@@ -1815,7 +1817,8 @@ fn pump_vision(ui: &mut UiState) {
                 ev.capture.as_secs_f64() * 1000.0,
                 ev.detect.as_secs_f64() * 1000.0,
                 arrow_out,
-                view_deg
+                view_deg,
+                ev.result.reject_reason
             );
         }
         ui.vision_count += 1;

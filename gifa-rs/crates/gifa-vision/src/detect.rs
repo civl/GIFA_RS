@@ -64,6 +64,10 @@ pub struct Detect {
     pub rejected_axis: bool,
     /// 第二意见（凸包+凹口模型）的角度与两模型差角，调试用
     pub cross_check: Option<(f64, f64)>,
+    /// view 是否来自真视锥（而不是占位）
+    pub view_is_cone: bool,
+    /// 0=没被挡 1=鼻子不在轴上 2=两模型分歧 3=与视锥不共线
+    pub reject_reason: u8,
 }
 
 /// 屏幕/浮窗坐标 → 帧内坐标的偏移
@@ -107,6 +111,11 @@ pub fn detect_window(
     }
     out.map_present = true;
 
+    if cone.valid {
+        out.view = Some(crate::cone::to_compass(cone.deg));
+        out.view_conf = cone.conf as f32;
+        out.view_is_cone = true;
+    }
     if arrow.valid {
         // 原版给的是 atan2 角，叠加层要罗盘角。
         // 额外过一道"鼻子在轴上"的检查：小地图背景的青色混进连通块时，
@@ -124,16 +133,22 @@ pub fn detect_window(
             // 拿不到第二意见（没有明显凹口）就不拦：以 v1 + 鼻子闸为准
             None => true,
         };
-        if crate::arrow::axis_consistent(&arrow) && agree {
+        /* 视锥互证**不成立**，已撤：原神的移动是"镜头相对"的，按 A/D 横移时
+         * 箭头（行进）与视锥（镜头）本来就**垂直**；按 S 倒走时还差 180°。
+         * 实测在蒙德素材上它会误挡 16/290 帧。留在文档里当结论。 */
+
+        /* v2 只记录、不拦截：真实视频上它和 v1 有 74% 的帧分歧 >16°，
+         * 说明 v2 还不够稳（在 2 张真机静态图上表现好，不代表序列上可靠）。
+         * 等它准了再把 agree 加回判据。 */
+        let _ = agree;
+        let axis_ok = crate::arrow::axis_consistent(&arrow);
+        if axis_ok {
             out.arrow = Some(crate::arrow::to_compass(arrow.angle));
             out.arrow_conf = arrow.conf as f32;
         } else {
             out.rejected_axis = true;
+            out.reject_reason = 1;
         }
-    }
-    if cone.valid {
-        out.view = Some(crate::cone::to_compass(cone.deg));
-        out.view_conf = cone.conf as f32;
     }
     out
 }

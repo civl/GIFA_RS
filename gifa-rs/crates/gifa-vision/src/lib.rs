@@ -48,6 +48,9 @@ pub mod params {
     pub const RADIUS_MAX: f64 = 0.5;
     /// 小地图存在性门控（青色像素占比）
     pub const MAP_CYAN_FRAC_MIN: f64 = 0.0015;
+    /// 箭头与视锥允许的最大分歧（跑动时两者基本一致；站定转视角时本来就不同，
+    /// 所以这里取宽 —— 只用来否决"明显指反/指歪"的帧）
+    pub const ARROW_VIEW_MAX_DEG: f64 = 35.0;
 }
 
 #[cfg(test)]
