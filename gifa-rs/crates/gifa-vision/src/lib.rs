@@ -11,6 +11,7 @@
 pub mod arrow;
 pub mod color;
 pub mod filter;
+pub mod template;
 pub mod cone;
 pub mod detect;
 pub mod pipeline;
@@ -21,6 +22,7 @@ pub mod screen;
 pub use arrow::{analyze, to_compass, ArrowResult, ArrowWorkspace, Corner};
 pub use cone::{analyze_cone, ConeResult, ConeWorkspace};
 pub use filter::{view_payload, AbFilter, ConeObs, ViewOut, ViewSource, ViewState};
+pub use template::{fit_arrow, Fit};
 pub use detect::{detect_simple, detect_window, Detect, Origin, SampleBox};
 pub use frame::{Frame, FrameSource, Roi};
 pub use pipeline::{start as start_pipeline, start_with_dump as start_pipeline_dump, VisionEvent};

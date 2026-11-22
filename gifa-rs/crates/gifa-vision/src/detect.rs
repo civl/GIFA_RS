@@ -62,6 +62,8 @@ pub struct Detect {
     pub map_present: bool,
     /// 箭头因"鼻子不在轴上"被挡掉（背景青色污染，原版会给出 10° 以上的错误角度）
     pub rejected_axis: bool,
+    /// 第二意见（凸包+凹口模型）的角度与两模型差角，调试用
+    pub cross_check: Option<(f64, f64)>,
 }
 
 /// 屏幕/浮窗坐标 → 帧内坐标的偏移
@@ -109,7 +111,20 @@ pub fn detect_window(
         // 原版给的是 atan2 角，叠加层要罗盘角。
         // 额外过一道"鼻子在轴上"的检查：小地图背景的青色混进连通块时，
         // 原版仍会判有效、但角度能偏 10° 以上（实测见 NOSE_AXIS_MAX_DEG 文档）。
-        if crate::arrow::axis_consistent(&arrow) {
+        /* 第二意见：凸包 + 凹口定位（结构完全不同的模型）。
+         * 两个模型在干净帧上差 ~10°，在"背景青色混进连通块"的帧上差 35° ——
+         * 差得太多就说明这一帧的形状被污染了，宁可不上报。 */
+        let second = crate::template::fit_arrow(rgba, size);
+        let agree = match second {
+            Some(f) => {
+                let d = ((f.angle - arrow.angle + 540.0) % 360.0 - 180.0).abs();
+                out.cross_check = Some((f.angle, d));
+                d <= crate::template::MAX_DISAGREE_DEG
+            }
+            // 拿不到第二意见（没有明显凹口）就不拦：以 v1 + 鼻子闸为准
+            None => true,
+        };
+        if crate::arrow::axis_consistent(&arrow) && agree {
             out.arrow = Some(crate::arrow::to_compass(arrow.angle));
             out.arrow_conf = arrow.conf as f32;
         } else {
