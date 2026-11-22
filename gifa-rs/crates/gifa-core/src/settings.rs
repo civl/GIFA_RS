@@ -157,6 +157,12 @@ pub struct Settings {
     pub last_page_count: i32,
     pub last_watched_at: i64,
     pub resume_on_launch: bool,
+    /// 最近打开过的视频（新的在前，最多 [`HISTORY_CAP`] 条）
+    #[serde(default)]
+    pub history: Vec<RecentEntry>,
+    /// 收藏的视频
+    #[serde(default)]
+    pub favorites: Vec<RecentEntry>,
     /// 动作 key → 加速器
     pub hotkeys: BTreeMap<String, String>,
     pub bearing: BearingSettings,
@@ -164,6 +170,73 @@ pub struct Settings {
     /// 未知字段（版本兼容）
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
+}
+
+/// 历史/收藏里的一条。只存"重新载入需要的最少信息"。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecentEntry {
+    /// 用户当时输入的原文（BV 号 / 链接 / 短链都行，载入时再解析）
+    pub text: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default = "one")]
+    pub part: i32,
+    /// 打开时间（毫秒时间戳），只用于排序/显示
+    #[serde(default)]
+    pub at: i64,
+}
+
+fn one() -> i32 {
+    1
+}
+
+/// 历史上限（超过就丢最旧的）
+pub const HISTORY_CAP: usize = 50;
+/// 收藏上限
+pub const FAVORITES_CAP: usize = 200;
+
+impl RecentEntry {
+    pub fn new(text: impl Into<String>, title: impl Into<String>, part: i32, at: i64) -> Self {
+        Self {
+            text: text.into(),
+            title: title.into(),
+            part: part.max(1),
+            at,
+        }
+    }
+
+    /// 去重用的键：同一个视频的同一 P 算一条
+    fn key(&self) -> (String, i32) {
+        (self.text.trim().to_ascii_lowercase(), self.part.max(1))
+    }
+}
+
+impl Settings {
+    /// 记一条历史：同一视频同一 P 只保留最新的那条，放到最前
+    pub fn push_history(&mut self, entry: RecentEntry) {
+        let key = entry.key();
+        self.history.retain(|e| e.key() != key);
+        self.history.insert(0, entry);
+        self.history.truncate(HISTORY_CAP);
+    }
+
+    /// 切换收藏（收藏里已有的删掉，没有的加上），返回现在是否已收藏
+    pub fn toggle_favorite(&mut self, entry: RecentEntry) -> bool {
+        let key = entry.key();
+        if let Some(pos) = self.favorites.iter().position(|e| e.key() == key) {
+            self.favorites.remove(pos);
+            false
+        } else {
+            self.favorites.insert(0, entry);
+            self.favorites.truncate(FAVORITES_CAP);
+            true
+        }
+    }
+
+    pub fn is_favorite(&self, text: &str, part: i32) -> bool {
+        let key = (text.trim().to_ascii_lowercase(), part.max(1));
+        self.favorites.iter().any(|e| e.key() == key)
+    }
 }
 
 impl Default for Settings {
@@ -187,6 +260,8 @@ impl Default for Settings {
             last_page_count: 0,
             last_watched_at: 0,
             resume_on_launch: true,
+            history: Vec::new(),
+            favorites: Vec::new(),
             hotkeys: default_hotkeys(),
             bearing: BearingSettings::default(),
             gamepad: GamepadSettings::default(),
@@ -253,6 +328,15 @@ impl Settings {
         self.playback_rate = clamp(self.playback_rate, 0.25, 3.0);
         self.hold_playback_rate = snap_rate(self.hold_playback_rate, &HOLD_PLAYBACK_RATES);
         self.last_part = self.last_part.max(1);
+        // 历史/收藏：去重（保留新的那条）+ 截断
+        for (list, cap) in [
+            (&mut self.history, HISTORY_CAP),
+            (&mut self.favorites, FAVORITES_CAP),
+        ] {
+            let mut seen = std::collections::HashSet::new();
+            list.retain(|e| !e.text.trim().is_empty() && seen.insert(e.key()));
+            list.truncate(cap);
+        }
         if !matches!(self.bounds.aspect, 1 | 2) {
             self.bounds.aspect = 1;
         }

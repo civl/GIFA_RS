@@ -1639,6 +1639,17 @@ fn tray_menu(hwnd: HWND) {
     }
 }
 
+/// 把鼠标挪到工作区角落（自检用：验证"鼠标不动就自动隐藏"时，先确保它不在窗口上）
+pub fn park_cursor() {
+    let work = primary_work_area();
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetCursorPos(
+            work.x + work.w - 2,
+            work.y + work.h - 2,
+        );
+    }
+}
+
 /// 取走托盘菜单的动作（应用层在 tick 里调）
 pub fn take_tray_action() -> Option<TrayAction> {
     with_shell(|s| s.tray_action.take()).flatten()

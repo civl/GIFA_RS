@@ -20,6 +20,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GIFA_NO_ADMIN");
     println!("cargo:rerun-if-env-changed=GIFA_RC");
     println!("cargo:rerun-if-changed=assets/icon.ico");
+    /* 页面资源是 `include_str!` 编进去的。不在这里声明依赖的话，改了 CSS/JS
+     * cargo 不会重编这个 crate —— 表现是"改了半天没生效"，极难察觉。 */
+    for f in ["web/chrome.html", "web/app.js", "web/style.css"] {
+        println!("cargo:rerun-if-changed={f}");
+    }
 
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let release = std::env::var("PROFILE").unwrap_or_default() == "release";

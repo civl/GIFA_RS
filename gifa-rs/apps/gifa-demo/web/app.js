@@ -64,6 +64,8 @@ function reportLayout() {
    * 不把它加进来，那一片会被裁掉 —— 表现就是"点开设置，面板被视频盖住"。 */
   const hk = $('hkPanel');
   if (hk && !hk.classList.contains('hidden')) overlay.push(rectPx(hk));
+  const ul = $('urlList');
+  if (ul && !ul.classList.contains('hidden')) overlay.push(rectPx(ul));
   if (state.calibOpen) overlay.push(rectPx($('calib')));
   const toast = $('toast');
   if (toast.classList.contains('show')) overlay.push(rectPx(toast));
@@ -103,6 +105,86 @@ const fmt = (s) => {
  * 后面 renderParts/renderLayouts 全被跳过（界面看起来像"控件没渲染"）。 */
 let recording = null;
 let lastHotkeys = [];
+/* 历史 / 收藏：由 Rust 推过来（applyState），下拉只负责渲染 */
+let historyList = [];
+let favoritesList = [];
+let urlListMode = null; // 'history' | 'favorites'
+
+function fmtAgo(ms) {
+  if (!ms) return '';
+  const d = Math.max(0, Date.now() - ms);
+  const m = Math.floor(d / 60000);
+  if (m < 1) return '刚刚';
+  if (m < 60) return m + ' 分钟前';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' 小时前';
+  return Math.floor(h / 24) + ' 天前';
+}
+
+function renderUrlList() {
+  const box = $('urlListBody');
+  if (!box) return;
+  const list = urlListMode === 'favorites' ? favoritesList : historyList;
+  $('urlListTitle').textContent = urlListMode === 'favorites' ? '收藏' : '历史';
+  $('urlListClear').classList.toggle('hidden', urlListMode === 'favorites');
+  box.innerHTML = '';
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ul-empty';
+    empty.textContent = urlListMode === 'favorites'
+      ? '还没有收藏。打开一个视频后点右边的 ☆'
+      : '还没有历史记录';
+    box.appendChild(empty);
+    reportLayout();
+    return;
+  }
+  for (const e of list) {
+    const row = document.createElement('div');
+    row.className = 'ul-row';
+    const main = document.createElement('div');
+    main.className = 'ul-main';
+    const title = document.createElement('div');
+    title.className = 'ul-title';
+    title.textContent = e.title || e.text;
+    const meta = document.createElement('div');
+    meta.className = 'ul-meta';
+    meta.textContent = [e.part > 1 ? 'P' + e.part : '', e.text, fmtAgo(e.at)]
+      .filter(Boolean)
+      .join(' · ');
+    main.append(title, meta);
+    const del = document.createElement('button');
+    del.className = 'ul-del';
+    del.textContent = urlListMode === 'favorites' ? '移除' : '删除';
+    del.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      post(urlListMode === 'favorites'
+        ? { t: 'favorite-remove', text: e.text, part: e.part }
+        : { t: 'history-remove', text: e.text, part: e.part });
+      if (urlListMode === 'favorites') favoritesList = favoritesList.filter((x) => !(x.text === e.text && x.part === e.part));
+      else historyList = historyList.filter((x) => !(x.text === e.text && x.part === e.part));
+      renderUrlList();
+    });
+    row.append(main, del);
+    row.addEventListener('click', () => {
+      closeUrlList();
+      post({ t: 'load', text: e.text });
+    });
+    box.appendChild(row);
+  }
+  reportLayout();
+}
+
+function openUrlList(mode) {
+  urlListMode = mode;
+  $('urlList').classList.remove('hidden');
+  renderUrlList();
+}
+
+function closeUrlList() {
+  urlListMode = null;
+  $('urlList').classList.add('hidden');
+  reportLayout();
+}
 
 /* ---------------- 快捷键面板 ----------------
  * 点「改」进入录制态：页面发 {t:'capture',on:true}，Rust 那边把所有热键都挡住，
@@ -194,6 +276,58 @@ $('hkClose').addEventListener('click', () => {
   reportLayout();
 });
 
+/* ---------------- 历史 / 收藏 ---------------- */
+function currentTarget() {
+  return {
+    text: ($('urlInput').value || '').trim() || (state.v.bvid || ''),
+    title: state.v.title || '',
+    part: state.v.part || 1,
+  };
+}
+function syncStar() {
+  const t = currentTarget();
+  if (!t.text) {
+    $('btnStar').classList.remove('on');
+    return;
+  }
+  const key = t.text.toLowerCase();
+  const on = favoritesList.some(
+    (e) => (e.text || '').toLowerCase() === key && (e.part || 1) === t.part,
+  );
+  $('btnStar').classList.toggle('on', on);
+  $('btnStar').textContent = on ? '★' : '☆';
+}
+
+$('btnLink').addEventListener('click', () => {
+  // 打开时把当前视频填进去，"收藏"才知道收藏的是哪一个
+  const inp = $('urlInput');
+  if (!inp.value && state.v.bvid) inp.value = state.v.bvid;
+  syncStar();
+});
+$('btnHistory').addEventListener('click', () => {
+  if (urlListMode === 'history') closeUrlList();
+  else openUrlList('history');
+});
+$('btnFav').addEventListener('click', () => {
+  if (urlListMode === 'favorites') closeUrlList();
+  else openUrlList('favorites');
+});
+$('urlListClose').addEventListener('click', closeUrlList);
+$('urlListClear').addEventListener('click', () => {
+  post({ t: 'history-clear' });
+  historyList = [];
+  renderUrlList();
+});
+$('btnStar').addEventListener('click', () => {
+  const t = currentTarget();
+  if (!t.text) {
+    toast('先载入一个视频');
+    return;
+  }
+  post({ t: 'favorite-toggle', text: t.text, title: t.title, part: t.part });
+});
+$('urlInput').addEventListener('input', syncStar);
+
 function applyState(s) {
   if (!s || typeof s !== 'object') return;
   const v = state.v;
@@ -206,6 +340,10 @@ function applyState(s) {
   v.muted = !!s.muted;
   v.hasVideo = !!s.hasVideo;
   v.pages = Array.isArray(s.pages) ? s.pages : [];
+  if (Array.isArray(s.history)) historyList = s.history;
+  if (Array.isArray(s.favorites)) favoritesList = s.favorites;
+  if (urlListMode) renderUrlList();
+  syncStar();
   // 快捷键面板：收到新映射就重绘（录制中不覆盖"按下…"提示）
   if (Array.isArray(s.hotkeys)) {
     lastHotkeys = s.hotkeys;
@@ -517,6 +655,9 @@ window.gifaState = applyState;
 // 自检/截图用：把最新热键表重绘一遍
 window.__gifaRenderHotkeys = () => renderHotkeys(lastHotkeys);
 window.__gifaHkCount = () => (lastHotkeys || []).length;
+// 自检/截图用
+window.__gifaOpenUrlList = (mode) => openUrlList(mode === 'favorites' ? 'favorites' : 'history');
+window.__gifaReportLayout = () => reportLayout();
 
 document.addEventListener('DOMContentLoaded', () => {
   // URL 条默认收起：标记里没写 hidden，必须在这里收，否则舞台一开始就被顶下去

@@ -12,5 +12,5 @@ pub mod state;
 pub use action::Action;
 pub use bearing::{content_rect, roi_from_pixels, Layout, LayoutError, Layouts, Roi};
 pub use hotkey::{plan_swap, Accelerator, Mod, ParseError, SwapPlan};
-pub use settings::{Bounds, Settings};
+pub use settings::{Bounds, RecentEntry, Settings, FAVORITES_CAP, HISTORY_CAP};
 pub use state::{toggle_opacity, HoldSpeed};

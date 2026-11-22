@@ -642,7 +642,8 @@ fn main() {
             }
         }
         let (dx, dy) = match (bounds_now.x, bounds_now.y) {
-            (Some(x), Some(y)) => (x, y),
+            // -32000 是最小化时的哨兵，别当成用户摆的位置
+            (Some(x), Some(y)) if x > -30000 && y > -30000 => (x, y),
             _ => (40, 40),
         };
         let mut b = Bounds::new(dx, dy, bw, bh);
@@ -865,8 +866,12 @@ fn on_tick() {
             .boot_at
             .map(|t| t.elapsed().as_secs_f64() > 2.0)
             .unwrap_or(false);
-        if !ui.immersion && booted {
+        /* 最小化时 `GetWindowRect` 给的是 (-32000, -32000) 那个哨兵坐标 —— 直接落盘的话，
+         * 下次启动窗口就"在屏幕外"（实测踩过：再启动变成最小化状态、320×200 在 -32000）。 */
+        let minimized = !gifa_shell::visible();
+        if !ui.immersion && booted && !minimized {
             if let Some(b) = gifa_shell::bounds() {
+                if b.x > -30000 && b.y > -30000 {
                 if let Some(store) = ui.store.as_mut() {
                     let same = store.bounds.x == Some(b.x)
                         && store.bounds.y == Some(b.y)
@@ -879,6 +884,7 @@ fn on_tick() {
                         store.bounds.height = b.h;
                         store.save();
                     }
+                }
                 }
             }
         }
@@ -1084,6 +1090,46 @@ fn on_tick() {
                     std::thread::sleep(Duration::from_millis(400));
                     gifa_shell::close();
                 });
+            }
+        }
+
+        /* --fav-test：走真实链路验证收藏 —— 页面 post({t:'favorite-toggle'}) → Rust 落盘
+         * → 状态回推 → 页面星标变实心。 */
+        if std::env::args().any(|a| a == "--fav-test") {
+            if ui.ticks == 14 {
+                gifa_shell::eval_chrome(
+                    "post({t:'favorite-toggle', text:'BV1xx411c7mD', title:'字幕君交流场所', part:1})",
+                );
+            }
+            if ui.ticks == 22 {
+                let n = ui.store.as_ref().map(|s| s.favorites.len()).unwrap_or(0);
+                let on = ui
+                    .store
+                    .as_ref()
+                    .map(|s| s.is_favorite("BV1xx411c7mD", 1))
+                    .unwrap_or(false);
+                println!("[fav-test] favorites={n} 命中={on} → {}", if on { "PASS" } else { "FAIL" });
+                println!("RESULT {}/1", usize::from(on));
+            }
+        }
+
+        // --url-list=history|favorites：打开历史/收藏下拉（自检/截图用）
+        if ui.ticks == 10 {
+            let which = std::env::args()
+                .collect::<Vec<_>>()
+                .windows(2)
+                .find(|w| w[0] == "--url-list")
+                .map(|w| w[1].clone())
+                .unwrap_or_default();
+            if !which.is_empty() {
+                let mode = if which == "favorites" { "favorites" } else { "history" };
+                // 连 URL 条一起打开，截图才看得出按钮的位置
+                let js = format!(
+                    "(function(){{var b=document.getElementById('urlbar'); if(b){{b.classList.remove('hidden');}} \
+                     window.__gifaReportLayout && window.__gifaReportLayout(); \
+                     window.__gifaOpenUrlList && window.__gifaOpenUrlList('{mode}');}})()"
+                );
+                gifa_shell::eval_chrome(&js);
             }
         }
 
@@ -1995,6 +2041,14 @@ fn live_log(ui: &mut UiState, kind: &str, detail: &str) {
 }
 
 /// 不引 chrono：用系统时间算时分秒
+/// 毫秒时间戳（历史/收藏排序用）
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 fn chrono_like_now() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
@@ -2236,12 +2290,16 @@ fn ui_test_step(ui: &mut UiState) {
             ));
             ui.im_phase = 3;
         }
-        3 if el > 5.0 => {
-            // 自动隐藏：静止 2.6s 后 body 应去掉 .ui
-            gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
+        3 if el > 3.4 => {
+            // 自动隐藏：先把鼠标挪开（否则它会停在标题栏上，永远不算"静止"）
+            gifa_shell::park_cursor();
             ui.im_phase = 4;
         }
-        4 if el > 5.4 => {
+        4 if el > 6.0 => {
+            gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
+            ui.im_phase = 5;
+        }
+        5 if el > 6.4 => {
             let p = ui.probe.clone().unwrap_or_default();
             let has_ui = p.get("hasUi").and_then(|x| x.as_bool()).unwrap_or(true);
             ui.ui_rows.push((
@@ -2258,11 +2316,11 @@ fn ui_test_step(ui: &mut UiState) {
             gifa_shell::eval_chrome("document.getElementById('btnLink').click()");
             ui.im_phase = 45;
         }
-        45 if el > 5.8 => {
+        45 if el > 6.8 => {
             gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
-            ui.im_phase = 5;
+            ui.im_phase = 6;
         }
-        5 if el > 6.4 => {
+        6 if el > 7.4 => {
             let stage_y = gifa_shell::snapshot().map(|s| s.stage.y).unwrap_or(0);
             let titlebar = 30;
             let bar_shown = ui
@@ -3571,6 +3629,66 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
             if let Some(id) = gifa_player::extract_id(text) {
                 gifa_shell::player_command(PlayerCommand::FetchView { id });
             }
+            // 记历史（标题稍后拿到再补上）
+            if let Some(store) = ui.store.as_mut() {
+                let part = store.last_part;
+                store.push_history(gifa_core::RecentEntry::new(
+                    text,
+                    String::new(),
+                    part,
+                    now_ms(),
+                ));
+                store.save();
+            }
+        }
+        /* 历史 / 收藏 */
+        "favorite-toggle" => {
+            let text = v.get("text").and_then(|x| x.as_str()).unwrap_or("").trim();
+            if text.is_empty() {
+                return;
+            }
+            let title = ui
+                .state
+                .as_ref()
+                .map(|s| s.title.clone())
+                .unwrap_or_default();
+            let part = ui.store.as_ref().map(|s| s.last_part).unwrap_or(1);
+            let entry = gifa_core::RecentEntry::new(text, title, part, now_ms());
+            if let Some(store) = ui.store.as_mut() {
+                let on = store.toggle_favorite(entry);
+                store.save();
+                ui.toast = if on { "已收藏" } else { "已取消收藏" }.to_string();
+            }
+            let payload = ui_payload(ui);
+            ui.last_push = payload.clone();
+            gifa_shell::eval_chrome(&format!("window.gifaState && window.gifaState({payload})"));
+        }
+        "favorite-remove" => {
+            let text = v.get("text").and_then(|x| x.as_str()).unwrap_or("").trim();
+            let part = v.get("part").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
+            if let Some(store) = ui.store.as_mut() {
+                store
+                    .favorites
+                    .retain(|e| !(e.text.eq_ignore_ascii_case(text) && e.part == part));
+                store.save();
+            }
+        }
+        "history-clear" => {
+            if let Some(store) = ui.store.as_mut() {
+                store.history.clear();
+                store.save();
+                ui.toast = "历史已清空".into();
+            }
+        }
+        "history-remove" => {
+            let text = v.get("text").and_then(|x| x.as_str()).unwrap_or("").trim();
+            let part = v.get("part").and_then(|x| x.as_i64()).unwrap_or(1) as i32;
+            if let Some(store) = ui.store.as_mut() {
+                store
+                    .history
+                    .retain(|e| !(e.text.eq_ignore_ascii_case(text) && e.part == part));
+                store.save();
+            }
         }
         /* 输入态：页面在输入框里打字时，单键热键要让路，否则用户打不出这个字符。
          * 组合键（带 Ctrl/Alt）不冲突，照常生效。 */
@@ -3778,6 +3896,35 @@ fn ui_payload(ui: &UiState) -> String {
         }),
         "typing": ui.typing,
         "capturing": ui.capturing,
+        // 历史 / 收藏：页面直接渲染下拉，不用每次来回问
+        "history": ui
+            .store
+            .as_ref()
+            .map(|s| {
+                s.history
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "text": e.text, "title": e.title, "part": e.part, "at": e.at
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+        "favorites": ui
+            .store
+            .as_ref()
+            .map(|s| {
+                s.favorites
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "text": e.text, "title": e.title, "part": e.part, "at": e.at
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
     })
     .to_string()
 }

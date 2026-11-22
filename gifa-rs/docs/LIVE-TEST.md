@@ -424,3 +424,35 @@ agent 里的 handler 却写成了 `seekBy`（camelCase）。`dispatch` 找不到
 **加了回归测试** `every_command_has_an_agent_handler`：
 遍历所有 `PlayerCommand`，从 JSON 里抠出 `cmd` 字段，再去 agent 源码里确认有同名 handler。
 故意把名字改回去验证过：测试立刻失败并指出哪个指令缺 handler。
+
+
+## 改 CSS/JS 不生效：`include_str!` 不是构建依赖
+
+页面资源是 `include_str!` 编进二进制的，但 `build.rs` 里没声明 `rerun-if-changed`。
+结果是**改了 CSS 根本不会重编**——调试时表现为"改了半天没反应"，会往错误的方向找原因
+（我一度以为是窗口区域裁剪算错了）。
+
+修法：`build.rs` 里补三行
+
+```
+for f in ["web/chrome.html", "web/app.js", "web/style.css"] {
+    println!("cargo:rerun-if-changed={f}");
+}
+```
+
+## 最小化时把窗口位置写坏了
+
+窗口最小化时 `GetWindowRect` 返回 `(-32000, -32000)` 这个哨兵。位置持久化没判断，
+就把哨兵写进了设置 —— 下次启动窗口"在屏幕外"，实际表现是**起来就是最小化状态、320×200**。
+
+修法两处：
+1. 落盘时跳过：不可见 / 坐标 ≤ -30000
+2. 启动时也把这种坐标当"没存过"，回落到默认位置
+
+## 一个反复犯的坑：函数写在 init 里，`applyState` 看不见
+
+`applyState` 是模块作用域，`syncStar` / `renderHotkeys` 却写在初始化函数内部 →
+一调用就 ReferenceError，**并且会打断 applyState 后续所有渲染**（标题/分P/布局全不更新）。
+
+这已经是第二次。`--ui-test` 的 [2] 两次都是第一时间抓到的（`layouts=0`），
+所以这条自检不要动。经验：**页面里凡是 `applyState` 会调到的函数，一律放模块作用域。**

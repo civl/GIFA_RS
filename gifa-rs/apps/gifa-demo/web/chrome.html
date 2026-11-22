@@ -37,7 +37,16 @@
 
       <div id="urlbar">
         <input id="urlInput" type="text" spellcheck="false" placeholder="粘贴 B 站链接 / BV 号，回车载入" />
+        <button id="btnHistory" class="ghost" title="最近打开过的视频">历史</button>
+        <button id="btnFav" class="ghost" title="收藏的视频">收藏</button>
+        <button id="btnStar" class="ghost star" title="收藏当前视频">☆</button>
         <button id="btnLoad" class="primary">载入</button>
+      </div>
+
+      <!-- 历史 / 收藏下拉：点外面或按 Esc 关掉 -->
+      <div id="urlList" class="hidden" role="listbox">
+        <div class="ul-head"><span id="urlListTitle">历史</span><button id="urlListClear" class="ghost">清空</button><button id="urlListClose" class="tb">✕</button></div>
+        <div id="urlListBody" class="ul-body"></div>
       </div>
 
       <main id="stage">
