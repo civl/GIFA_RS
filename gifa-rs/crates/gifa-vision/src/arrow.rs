@@ -50,6 +50,9 @@ pub struct ArrowResult {
     pub nose_deg: Option<f64>,
     /// 前一版算法的角度（质心方向），只用于诊断
     pub a1: f64,
+    /// 最大青色块的质心（窗口坐标），重试策略用来判"是不是贴着窗口中心"
+    pub bc_x: f64,
+    pub bc_y: f64,
 }
 
 /// 复用的缓冲区（对应原版的 `BEARING.mask/lbl/stack`）
@@ -84,7 +87,7 @@ fn deg_of(ux: f64, uy: f64) -> f64 {
 }
 
 #[inline]
-fn ang_diff(a: f64, b: f64) -> f64 {
+pub fn ang_diff(a: f64, b: f64) -> f64 {
     ((a - b + 540.0) % 360.0) - 180.0
 }
 
@@ -556,6 +559,8 @@ pub fn analyze_with(
         corners,
         nose_deg: ch.nose.map(|n| n.deg),
         a1,
+        bc_x: best_cx,
+        bc_y: best_cy,
     }
 }
 

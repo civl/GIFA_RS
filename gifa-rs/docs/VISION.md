@@ -468,6 +468,40 @@ python scripts/label-report.py apps/gifa-demo/data/label/labels.json
 
 原因：r 同时受"小地图缩放"和"显示器宽度"影响，单看箭头反推必然跑偏。
 
+## 重试策略（recovery）与"页面侧不留识别"
+
+### 重试策略
+
+移植 `analyzeArrowWithRecovery` / `analyzeConeWithRecovery`（`webview-preload.js:1569-1614`）：
+
+```
+主判据失败 → 窗口往里缩 2.5% → 8 个方向各偏移一次 → 每个跑一遍检测
+          → 按角度聚簇（±12°）→ 只有"≥3 票且过半"的簇才采纳，角度取簇内均值、conf 封顶 0.68
+```
+
+单次重试容易被噪声带偏，**簇投票**才是重点：孤立的伪峰凑不出 3 票。
+
+约束都照原版搬：`conf ≥0.5`、`tipFrac ≤0.28`、质心离窗口中心 ≤0.1×边长、面积 ≤10%。
+视锥那支要求 `size ≥ 380` 才重试 —— 我们的采样窗 126~311，所以它实际上不会触发（与原版一致）。
+
+回归：`recovery_does_not_lose_frames` —— 主判据已经有效的帧，重试**不许**把它改判成无效。
+
+### 页面侧不留识别
+
+原版是在 preload 里跑 `tickBearing` 的。我们改成 Rust 之后必须确认没把那段 JS 带进来，
+否则两套并行：白烧一份 CPU，两边结果还会打架。
+
+现状：注入页面的只有两个脚本 —— `player-agent.js`（播放器控制）和 `overlay.html`
+（叠加层动画，里面的 rAF 只做补间）。两个都不含视觉代码。
+
+`--check` 新增一行把这件事钉住：
+
+```
+[1] 页面侧没有识别循环   PASS  注入的两个脚本里都没有 tickBearing/analyzeCone
+```
+
+它直接对 `include_str!` 进来的源码做子串检查 —— 以后谁把原版 preload 粘进来，这一行立刻变红。
+
 ## 还差什么
 
 | 项 | 状态 |

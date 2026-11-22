@@ -29,6 +29,17 @@ pub struct ConeResult {
     pub conf: f64,
     pub width: f64,
     pub cyan_frac: f64,
+    /// 两条边里较弱那条的 α（原版 `dbg.rise`/`dbg.fall` 的较小者）。
+    /// 重试策略用它判"当前识别的把握够不够"。
+    pub rise: f64,
+    pub fall: f64,
+}
+
+impl ConeResult {
+    /// 两条边里较弱那条的强度
+    pub fn edge_min(&self) -> f64 {
+        self.rise.min(self.fall)
+    }
 }
 
 #[derive(Default)]
@@ -442,6 +453,8 @@ pub fn analyze_cone(rgba: &[u8], size: usize, step: usize, ws: &mut ConeWorkspac
         conf,
         width: 90.0,
         cyan_frac,
+        rise: b_rise,
+        fall: b_fall,
     }
 }
 

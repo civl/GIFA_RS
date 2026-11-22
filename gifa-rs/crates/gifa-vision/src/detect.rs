@@ -143,15 +143,21 @@ pub fn detect_window(
             crop[dst..dst + arrow_side * 4]
                 .copy_from_slice(&rgba[src..src + arrow_side * 4]);
         }
-        crate::arrow::analyze_with(&crop, arrow_side, 1, aws, &arrow_params())
+        crate::recovery::analyze_arrow_with_recovery(&crop, arrow_side, 1, aws, &arrow_params())
     } else {
-        crate::arrow::analyze_with(rgba, size, 1, aws, &arrow_params())
+        crate::recovery::analyze_arrow_with_recovery(rgba, size, 1, aws, &arrow_params())
     };
     let nose_gap = arrow
         .nose_deg
         .map(|n| ((n - arrow.angle + 540.0) % 360.0 - 180.0).abs() as f32);
     let ang_margin = Some(arrow.ang_margin as f32);
-    let cone = crate::cone::analyze_cone(rgba, size, 1, cws);
+    let cone = crate::recovery::analyze_cone_with_recovery(
+        rgba,
+        size,
+        1,
+        cws,
+        params::MAP_CYAN_FRAC_MIN,
+    );
 
     out.samples = arrow.cyans;
     out.nose_gap = nose_gap;

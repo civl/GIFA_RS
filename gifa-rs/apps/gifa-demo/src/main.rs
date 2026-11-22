@@ -3220,7 +3220,35 @@ fn report_check() {
         println!("============ M3 自检（解析 + 登录态 + 真页面）============");
         match s {
             Some(s) => {
+                /* 页面侧不允许跑识别：原版是在 preload 里跑 tickBearing 的，
+                 * 我们改成 Rust 之后必须确认没有把那段 JS 带进来（否则两套并行、
+                 * 白烧一份 CPU，而且两边结果还会打架）。 */
+                let injected = [
+                    include_str!("../../../crates/gifa-player/assets/player-agent.js"),
+                    include_str!("../../../crates/gifa-shell/assets/overlay.html"),
+                ];
+                let vision_js = ["tickBearing", "cyanScore", "analyzeCone", "BEARING.roi"];
+                let found: Vec<&str> = injected
+                    .iter()
+                    .flat_map(|src| {
+                        vision_js
+                            .iter()
+                            .filter(|k| src.contains(**k))
+                            .copied()
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+
                 let rows: Vec<(&str, bool, String)> = vec![
+                    (
+                        "页面侧没有识别循环",
+                        found.is_empty(),
+                        if found.is_empty() {
+                            "注入的两个脚本里都没有 tickBearing/analyzeCone".into()
+                        } else {
+                            format!("发现残留：{found:?}")
+                        },
+                    ),
                     (
                         "找到 <video> 且有元数据",
                         s.has_video && s.video_w > 0 && s.duration > 0.0,
