@@ -91,6 +91,26 @@ impl Detect {
 ///
 /// 行为分支和原版一致：`analyze` 说无效就**不报箭头**（不拿视角顶替），
 /// 视角暂时仍用质心占位（扇形通道还没移植）。
+/// 箭头拟合参数（真机实测标定）。
+///
+/// 原版：bis_err ≤15°、ang_margin ≥4。
+/// 真机 2560×1440 绿地 39 帧人工真值实测：
+///
+/// | 配置 | 覆盖率 | 误差中位 | 坏帧（>30°） |
+/// |---|---|---|---|
+/// | 原版（15/4） | 0/39 | — | — |
+/// | bisErr 25 / margin 4 | 35/39 | 9.7° | 7 帧（偏 118°）|
+/// | bisErr 25 / **margin 18** | **28/39** | **9.7°** | **0** |
+///
+/// 视频素材（138 帧标注）上这套参数**完全等价于原版**：有效帧 138/138、
+/// 误差中位 0.03°、最大 2.35°（原版 angMargin 最小 20.3，18 这条线碰不到它）。
+fn arrow_params() -> crate::arrow::ArrowParams {
+    crate::arrow::ArrowParams {
+        bis_err_max: 25.0,
+        ang_margin_min: 18.0,
+    }
+}
+
 pub fn detect_window(
     rgba: &[u8],
     size: usize,
@@ -121,9 +141,9 @@ pub fn detect_window(
             crop[dst..dst + arrow_side * 4]
                 .copy_from_slice(&rgba[src..src + arrow_side * 4]);
         }
-        crate::arrow::analyze(&crop, arrow_side, 1, aws)
+        crate::arrow::analyze_with(&crop, arrow_side, 1, aws, &arrow_params())
     } else {
-        crate::arrow::analyze(rgba, size, 1, aws)
+        crate::arrow::analyze_with(rgba, size, 1, aws, &arrow_params())
     };
     let nose_gap = arrow
         .nose_deg
@@ -156,6 +176,12 @@ pub fn detect_window(
         // 原版给的是 atan2 角，叠加层要罗盘角。
         // 额外过一道"鼻子在轴上"的检查：小地图背景的青色混进连通块时，
         // 原版仍会判有效、但角度能偏 10° 以上（实测见 NOSE_AXIS_MAX_DEG 文档）。
+        /* 撒手不管的两个旧闸：
+         * · `axis_consistent`（|鼻子−轴| ≤8°）—— 真机实测**反了**：
+         *   好帧 24.0~24.5°，坏帧 18~22.6°。它只会把对的挡掉。
+         * · v2（凸包+凹口）—— 真机序列上 74% 的帧与 v1 分歧，不可靠。
+         * 现在靠 `ang_margin` 区分好坏（见 arrow_params 的注释）。 */
+
         /* 第二意见：凸包 + 凹口定位（结构完全不同的模型）。
          * 两个模型在干净帧上差 ~10°，在"背景青色混进连通块"的帧上差 35° ——
          * 差得太多就说明这一帧的形状被污染了，宁可不上报。 */
@@ -177,8 +203,7 @@ pub fn detect_window(
          * 说明 v2 还不够稳（在 2 张真机静态图上表现好，不代表序列上可靠）。
          * 等它准了再把 agree 加回判据。 */
         let _ = agree;
-        let axis_ok = crate::arrow::axis_consistent(&arrow);
-        if axis_ok {
+        if true {
             out.arrow = Some(crate::arrow::to_compass(arrow.angle));
             out.arrow_conf = arrow.conf as f32;
         } else {

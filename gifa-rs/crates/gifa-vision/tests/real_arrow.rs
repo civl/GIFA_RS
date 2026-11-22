@@ -59,3 +59,68 @@ fn minimap_background_pulls_the_angle_but_still_passes_gates() {
         "原版在这一帧仍判有效（angMargin 13.5 > 4），移植不应自行加严"
     );
 }
+
+
+/// 管线参数（bisErr 25 / angMargin 18）在真机绿地上的表现。
+///
+/// 39 帧人工真值（`labels/2`）里，这组参数保住 28 帧、误差中位 9.7°、坏帧 0；
+/// 原版参数（15/4）在这里一帧都出不来。
+#[test]
+fn pipe_params_on_realgame() {
+    use gifa_vision::arrow::ArrowParams;
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/realgame");
+    let params = ArrowParams {
+        bis_err_max: 25.0,
+        ang_margin_min: 18.0,
+    };
+    let mut ws = ArrowWorkspace::default();
+    let mut ok = 0;
+    let mut total = 0;
+    for entry in std::fs::read_dir(&dir).expect("realgame 目录") {
+        let path = entry.expect("entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("bin") {
+            continue;
+        }
+        let bytes = std::fs::read(&path).expect("读帧");
+        let side = (bytes.len() / 4).isqrt();
+        let r = gifa_vision::arrow::analyze_with(&bytes, side, 1, &mut ws, &params);
+        total += 1;
+        if r.valid {
+            ok += 1;
+        }
+    }
+    assert!(total >= 5, "真机素材少于 5 帧");
+    assert!(
+        ok * 2 >= total,
+        "真机绿地上应至少一半帧有效（实际 {ok}/{total}）"
+    );
+}
+
+
+/// 管线参数对"干净/被污染"两枚真机箭头的取舍。
+///
+/// 干净那枚 angMargin 23.4 → 保住；被地图青色污染的那枚 13.5 → 挡掉。
+/// 视频素材（138 帧标注）的 angMargin 最小 20.3，所以这条线碰不到它。
+#[test]
+fn pipe_params_keep_good_and_drop_contaminated() {
+    use gifa_vision::arrow::ArrowParams;
+    let params = ArrowParams {
+        bis_err_max: 25.0,
+        ang_margin_min: 18.0,
+    };
+    let mut ws = ArrowWorkspace::default();
+
+    let (data, side) = load("real-arrow-clean-96.bin");
+    let good = gifa_vision::arrow::analyze_with(&data, side, 1, &mut ws, &params);
+    assert!(good.valid, "干净箭头应保住（angMargin={}）", good.ang_margin);
+    let err = ((good.angle - 90.2 + 540.0) % 360.0 - 180.0).abs();
+    assert!(err < 0.05, "角度应与默认参数一致：{}", good.angle);
+
+    let (data, side) = load("real-minimap-112.bin");
+    let bad = gifa_vision::arrow::analyze_with(&data, side, 1, &mut ws, &params);
+    assert!(
+        !bad.valid,
+        "被污染的那枚应被 angMargin 挡掉（实际 angMargin={}）",
+        bad.ang_margin
+    );
+}

@@ -101,7 +101,7 @@ struct Triple {
     t2: Corner,
 }
 
-fn eval_triple(n: &Corner, t1: &Corner, t2: &Corner) -> Triple {
+fn eval_triple(n: &Corner, t1: &Corner, t2: &Corner, params: &ArrowParams) -> Triple {
     let sep = ang_diff(t1.deg, t2.deg).abs();
     let o1 = ang_diff(n.deg, t1.deg).abs();
     let o2 = ang_diff(n.deg, t2.deg).abs();
@@ -120,7 +120,7 @@ fn eval_triple(n: &Corner, t1: &Corner, t2: &Corner) -> Triple {
         && sep < 150.0
         && (95.0..=162.0).contains(&o1)
         && (95.0..=162.0).contains(&o2)
-        && bis_err <= 15.0
+        && bis_err <= params.bis_err_max
         && n.far < t1.far.min(t2.far) * 1.02
         && nose_flat > -0.5;
 
@@ -128,7 +128,7 @@ fn eval_triple(n: &Corner, t1: &Corner, t2: &Corner) -> Triple {
         ang_margin.min(25.0) / 45.0
             + rad_margin * 1.5
             + rad_sym * 0.25
-            + (1.0 - bis_err / 15.0) * 0.5
+            + (1.0 - bis_err / params.bis_err_max) * 0.5
             + nose_flat * 0.45
     } else {
         -99.0
@@ -155,7 +155,38 @@ fn js_round(x: f64) -> f64 {
 }
 
 /// 跑一帧。`rgba` 长度必须 = size²×4。
+/// 三点拟合的容差。
+///
+/// 默认值 = 原版；真机实测需要放宽 `bis_err_max`（见 `detect_window` 的注释）。
+#[derive(Debug, Clone, Copy)]
+pub struct ArrowParams {
+    /// 鼻子偏离"两翼中分线反向"的容差（度）。原版 15。
+    pub bis_err_max: f64,
+    /// 三点评分余量的下限（度）。原版 4。
+    pub ang_margin_min: f64,
+}
+
+impl Default for ArrowParams {
+    fn default() -> Self {
+        Self {
+            bis_err_max: 15.0,
+            ang_margin_min: 4.0,
+        }
+    }
+}
+
 pub fn analyze(rgba: &[u8], size: usize, step: usize, ws: &mut ArrowWorkspace) -> ArrowResult {
+    analyze_with(rgba, size, step, ws, &ArrowParams::default())
+}
+
+/// 同 [`analyze`]，但可以调容差（管线用更宽松的真机参数）。
+pub fn analyze_with(
+    rgba: &[u8],
+    size: usize,
+    step: usize,
+    ws: &mut ArrowWorkspace,
+    params: &ArrowParams,
+) -> ArrowResult {
     let cells = size * size;
     if rgba.len() < cells * 4 || size < 8 {
         return ArrowResult::default();
@@ -445,7 +476,7 @@ pub fn analyze(rgba: &[u8], size: usize, step: usize, ws: &mut ArrowWorkspace) -
                     let trio = [corners[i], corners[j], corners[k]];
                     for m in 0..3 {
                         let others: Vec<Corner> = (0..3).filter(|x| *x != m).map(|x| trio[x]).collect();
-                        let r = eval_triple(&trio[m], &others[0], &others[1]);
+                        let r = eval_triple(&trio[m], &others[0], &others[1], params);
                         if chosen.as_ref().is_none_or(|c| r.score > c.score) {
                             chosen = Some(r);
                         }
@@ -503,7 +534,7 @@ pub fn analyze(rgba: &[u8], size: usize, step: usize, ws: &mut ArrowWorkspace) -
         .clamp(0.0, 1.0);
 
     let valid = corners.len() >= 3
-        && ch.ang_margin > 4.0
+        && ch.ang_margin > params.ang_margin_min
         && ch.rad_margin > -0.12
         && ch.nose_flat >= -0.4
         && ch.score > 0.25
