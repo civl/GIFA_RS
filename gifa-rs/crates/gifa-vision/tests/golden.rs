@@ -10,6 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use gifa_vision::arrow::{analyze, ArrowWorkspace};
+use gifa_vision::cone::{analyze_cone, ConeWorkspace};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -20,8 +21,14 @@ struct Case {
     #[allow(dead_code)]
     theta: Option<f64>,
     arrow: Expected,
-    #[allow(dead_code)]
-    cone: serde_json::Value,
+    cone: ConeExpected,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConeExpected {
+    valid: bool,
+    deg: f64,
+    conf: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +76,7 @@ fn matches_javascript_reference_on_golden_frames() {
     let mut checked = 0;
     let mut max_angle_err = 0.0f64;
     let mut max_conf_err = 0.0f64;
+    let mut max_cone_err = 0.0f64;
 
     for c in &cases {
         let bytes = std::fs::read(dir.join(&c.name)).unwrap_or_else(|e| panic!("读 {}: {e}", c.name));
@@ -107,6 +115,33 @@ fn matches_javascript_reference_on_golden_frames() {
             c.arrow.conf
         );
 
+        // ---- 视锥通道
+        let mut cws = ConeWorkspace::default();
+        let cone = analyze_cone(&bytes, c.size, 1, &mut cws);
+        assert_eq!(
+            cone.valid, c.cone.valid,
+            "{}: cone valid 不一致（Rust {} / JS {}）",
+            c.name, cone.valid, c.cone.valid
+        );
+        if c.cone.valid {
+            let err = ang_diff(cone.deg, c.cone.deg).abs();
+            max_cone_err = max_cone_err.max(err);
+            assert!(
+                err < 0.05,
+                "{}: cone 角度差 {err:.4}°（Rust {:.4} / JS {:.4}）",
+                c.name,
+                cone.deg,
+                c.cone.deg
+            );
+        }
+        assert!(
+            (cone.conf - c.cone.conf).abs() < 1e-3,
+            "{}: cone conf 差（Rust {:.6} / JS {:.6}）",
+            c.name,
+            cone.conf,
+            c.cone.conf
+        );
+
         // 余量字段也一起比：它们是 valid 的判据，差了说明中间步骤有分歧
         assert!(
             (got.tip_frac - c.arrow.tip_frac).abs() < 1e-3,
@@ -140,6 +175,6 @@ fn matches_javascript_reference_on_golden_frames() {
     }
 
     println!(
-        "对拍 {checked} 帧全部一致：最大角度差 {max_angle_err:.4}°，最大 conf 差 {max_conf_err:.2e}"
+        "对拍 {checked} 帧全部一致：箭头最大角度差 {max_angle_err:.4}°，视锥最大角度差 {max_cone_err:.4}°，最大 conf 差 {max_conf_err:.2e}"
     );
 }

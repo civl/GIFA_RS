@@ -10,6 +10,7 @@
 
 pub mod arrow;
 pub mod color;
+pub mod cone;
 pub mod detect;
 pub mod pipeline;
 pub mod frame;
@@ -17,6 +18,7 @@ pub mod result;
 pub mod screen;
 
 pub use arrow::{analyze, to_compass, ArrowResult, ArrowWorkspace, Corner};
+pub use cone::{analyze_cone, ConeResult, ConeWorkspace};
 pub use detect::{detect_simple, detect_window, Detect, Origin, SampleBox};
 pub use frame::{Frame, FrameSource, Roi};
 pub use pipeline::{start as start_pipeline, VisionEvent};

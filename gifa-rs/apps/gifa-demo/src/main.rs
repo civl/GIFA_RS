@@ -1715,6 +1715,11 @@ fn synth_test_step(ui: &mut UiState) {
     }
     let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
 
+    // 合成自检要截自己的窗口：先抢到最前，否则截到的是别人
+    if el > 0.3 && el < 0.6 {
+        gifa_shell::reassert_topmost();
+        gifa_shell::focus_float();
+    }
     if ui.vision_box.is_none() && el > 1.2 {
         if let Some(b) = vision_box(ui) {
             let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));

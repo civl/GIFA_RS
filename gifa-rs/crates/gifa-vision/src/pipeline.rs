@@ -16,6 +16,7 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 
 use crate::arrow::ArrowWorkspace;
+use crate::cone::ConeWorkspace;
 use crate::detect::{detect_window, Detect, SampleBox};
 use crate::screen;
 
@@ -42,6 +43,7 @@ where
         .spawn(move || {
             let mut seq = 0u64;
             let mut ws = ArrowWorkspace::default();
+            let mut cws = ConeWorkspace::default();
             let mut next = Instant::now();
             loop {
                 next += interval;
@@ -62,7 +64,7 @@ where
                 let t1 = Instant::now();
                 // 截的就是采样窗本身，正方形，直接喂给箭头算法
                 let side = win.w.min(win.h).max(8) as usize;
-                let result = detect_window(&frame.data, side, &mut ws);
+                let result = detect_window(&frame.data, side, &mut ws, &mut cws);
                 let t2 = Instant::now();
                 seq += 1;
                 if tx

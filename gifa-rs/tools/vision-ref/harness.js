@@ -113,12 +113,14 @@ function synthFrame({ size, theta, phi, decoys = 0, seed = 1 }) {
   // 屏幕坐标：x 右、y 下；罗盘角 0=北、顺时针 → 单位向量 (sin, -cos)
   const dir = (deg) => [Math.sin(rad(deg)), -Math.cos(rad(deg))];
 
-  // 白扇（先画，箭头压在上面）
+  // 白膜扇形（先画，箭头压在上面）。
+  // 关键：cone 算法认的是**半透明白膜** `dst = src + α·(255−src)`，α 随半径衰减
+  // （实测 0.17R≈0.35 → 0.72R≈0.12），不是实心白。画成实心白会解出 α≈1 被 A_MAX 否掉。
+  // 张角 90°（两条半径边在 ±45°），这是算法配对时用的固定关系。
   if (phi != null) {
     const [ux, uy] = dir(phi);
-    const half = rad(27);
-    const rIn = size * 0.12;
-    const rOut = size * 0.46;
+    const rIn = size * 0.16;
+    const rOut = size * 0.48;
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const dx = x - c;
@@ -126,9 +128,12 @@ function synthFrame({ size, theta, phi, decoys = 0, seed = 1 }) {
         const dist = Math.hypot(dx, dy);
         if (dist < rIn || dist > rOut) continue;
         const cosang = (dx * ux + dy * uy) / (dist || 1);
-        if (Math.acos(Math.max(-1, Math.min(1, cosang))) <= half) {
-          put(x, y, 245, 245, 240);
-        }
+        if (Math.acos(Math.max(-1, Math.min(1, cosang))) > rad(45)) continue;
+        const i = (y * size + x) * 4;
+        const a = 0.35 - 0.25 * ((dist - rIn) / (rOut - rIn));
+        d[i] = Math.min(255, d[i] + a * (255 - d[i]));
+        d[i + 1] = Math.min(255, d[i + 1] + a * (255 - d[i + 1]));
+        d[i + 2] = Math.min(255, d[i + 2] + a * (255 - d[i + 2]));
       }
     }
   }
