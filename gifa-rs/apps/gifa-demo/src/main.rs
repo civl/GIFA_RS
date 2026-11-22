@@ -573,7 +573,7 @@ fn main() {
                         println!("[vision] 逐帧 CSV → {}", path.display());
                         let _ = &mut ui.vision_csv.as_mut().map(|f| {
                             use std::io::Write;
-                            let _ = writeln!(f, "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF,rej,noseGap,angMargin");
+                            let _ = writeln!(f, "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF,rej,noseGap,angMargin,src");
                         });
                     }
                     Err(e) => println!("[vision] CSV 创建失败：{e}"),
@@ -2000,7 +2000,7 @@ fn pump_vision(ui: &mut UiState) {
             // seq,cyan,arrow(raw),arrowConf,view(raw),viewConf,capMs,detMs,arrowF,viewF
             let _ = writeln!(
                 f,
-                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2},{:?},{:?},{},{:?},{:?}",
+                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2},{:?},{:?},{},{:?},{:?},{}",
                 ev.seq,
                 ev.result.cyan_frac,
                 ev.result.arrow,
@@ -2013,7 +2013,8 @@ fn pump_vision(ui: &mut UiState) {
                 view_deg,
                 ev.result.reject_reason,
                 ev.result.nose_gap,
-                ev.result.ang_margin
+                ev.result.ang_margin,
+                ev.result.arrow_source
             );
         }
         ui.vision_count += 1;
@@ -2187,7 +2188,7 @@ fn game_step(ui: &mut UiState) {
                 let mut f = f;
                 let _ = writeln!(
                     f,
-                    "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF,rej,noseGap,angMargin"
+                    "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs,arrowF,viewF,rej,noseGap,angMargin,src"
                 );
                 ui.vision_csv = Some(f);
             }

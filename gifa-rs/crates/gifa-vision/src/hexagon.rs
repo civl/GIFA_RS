@@ -34,6 +34,15 @@
 
 use std::collections::VecDeque;
 
+/* 试过但**撤掉**的闸：要求两个凹点相对尖端轴对称（差 ≤45°）。
+ *
+ * 动机：人工真值里"兜底翻错"那帧的对称差是 70°，而好帧 30.5° —— 看着能分。
+ * 但那份真值的 39 帧几乎全是**同一帧的重复**（连通块像素数都是 412），
+ * 真机连跑 60 秒时这条闸把覆盖率从 99% 砍到 31%（753 帧里只剩 64 帧走兜底）。
+ *
+ * 结论：单帧样本上调出来的阈值不可信。翻转交给时序层处理（实测吃掉 89%）。
+ */
+
 /// 结果
 #[derive(Debug, Clone, Copy)]
 pub struct HexDirection {
@@ -245,6 +254,7 @@ pub fn direction(rgba: &[u8], size: usize) -> Option<HexDirection> {
     if dx.abs() < 1e-9 && dy.abs() < 1e-9 {
         return None;
     }
+
     let deg = (90.0 - dy.atan2(dx).to_degrees()).rem_euclid(360.0);
     Some(HexDirection {
         deg,
