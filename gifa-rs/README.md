@@ -15,7 +15,8 @@ gifa-rs/
 │  ├─ SETTINGS.md               # 数据目录、原子写、防抖、旧版迁移
 │  ├─ VISION.md                 # 识别骨架：截屏、采样窗、占位检测、门控
 │  ├─ FLOAT-UI.md               # 浮窗界面移植：桥接、交互、自检
-│  └─ LIVE-TEST.md              # 实战联调：真实游戏里抓到并修掉的 7 个问题
+│  ├─ LIVE-TEST.md              # 实战联调：真实游戏里抓到并修掉的 7 个问题
+│  └─ PACKAGING.md              # 打包：清单注入、单文件、校验和、WebView2 检查
 ├─ crates/
 │  ├─ gifa-core/                # 纯领域：设置 / 方位布局 / 快捷键解析 / 播放状态机
 │  │  ├─ src/settings.rs        #   与原版 settings.json 同构 + 深合并 + 钳位
@@ -297,6 +298,22 @@ GDI 截屏 → 采样窗（`r×2.4`）→ 占位检测（青素质心/白像素�
 浮窗被遮挡时截屏截到的是上面那个窗口，会报出**假方位**（现已加遮挡保护，宁可暂停）。
 
 详见 `docs/LIVE-TEST.md`。
+
+## M12：打包（2026-11-22）
+
+```powershell
+cd gifa-rs
+powershell -ExecutionPolicy Bypass -File scripts/build.ps1   # → dist/GIFA-0.2.6-win-x64.zip
+```
+
+- **单文件 exe**（1.7 MB）：页面/样式/脚本编译期内联，不需要附带资源文件
+- **清单注入**：`requireAdministrator`（release）+ PerMonitorV2 + longPathAware，走链接器
+  `/MANIFESTINPUT`，不依赖 `rc.exe`
+- **debug 不提权**：否则自检一跑就要 UAC；`GIFA_NO_ADMIN=1 cargo build --release` 可出不提权的
+  release 用来验证二进制本身
+- 数据目录：release 走 `resolve_data_dir`（安装版 `%APPDATA%` / 绿色版 `<exe>\data`）
+- WebView2 缺失或 <110：弹框给下载地址后退出
+- 未做：NSIS 安装器（本机无 `makensis`）、exe 图标与版本资源（本机无 `rc.exe`）
 
 ## 库分层（#2 骨架）
 

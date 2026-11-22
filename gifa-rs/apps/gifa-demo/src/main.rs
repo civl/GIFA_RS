@@ -337,6 +337,22 @@ fn chrome_page() -> String {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version") {
+        println!("GIFA {}（构建 {}）", env!("CARGO_PKG_VERSION"), env!("GIFA_MANIFEST_LEVEL"));
+        return;
+    }
+    // 正式包启动前先确认 WebView2：没有它连窗口都创建不出来
+    if !cfg!(debug_assertions)
+        && !args.iter().any(|a| a == "--runtime")
+        && !gifa_shell::runtime_ok(&gifa_shell::webview2_version().unwrap_or_default())
+    {
+        gifa_shell::message_box(
+            "缺少 WebView2 运行时",
+            "本程序需要 Microsoft Edge WebView2 运行时（≥110）。\n\n\
+             请安装后再启动：\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
+        );
+        return;
+    }
     if args.iter().any(|a| a == "--runtime") {
         report_runtime();
         return;
@@ -354,7 +370,21 @@ fn main() {
     let live = args.iter().any(|a| a == "--live");
 
     // ---- 设置 + 「上次看到」
-    let data_root = std::env::current_dir().unwrap_or_default().join("data");
+    // debug/cwd：自检依赖固定路径；正式包：安装版 %APPDATA%，绿色版 <exe>\data
+    let data_root = if cfg!(debug_assertions) {
+        std::env::current_dir().unwrap_or_default().join("data")
+    } else {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_default();
+        let appdata = std::env::var_os("APPDATA")
+            .map(|p| std::path::PathBuf::from(p).join("原神跟跑助手"))
+            .unwrap_or_else(|| exe_dir.join("data"));
+        let dir = gifa_store::resolve_data_dir(&exe_dir, &appdata, true);
+        println!("[gifa] 数据目录 {}（{:?}）", dir.path.display(), dir.mode);
+        dir.path
+    };
     let store = Store::open(&data_root);
 
     let synth_mode = args.iter().any(|a| a == "--vision-synth");
@@ -1262,6 +1292,11 @@ fn ui_test_step(ui: &mut UiState) {
     let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
     match ui.im_phase {
         0 if el > 1.0 => {
+            // 等页面真的开始播（release 冷启动比 debug 慢），否则"播放态"会假失败
+            let ready = ui.state.as_ref().map(|s| s.duration > 0.0).unwrap_or(false);
+            if !ready && el < 9.0 {
+                return;
+            }
             gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
             ui.im_phase = 1;
         }

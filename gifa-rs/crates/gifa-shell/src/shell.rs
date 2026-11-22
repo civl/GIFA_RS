@@ -1379,6 +1379,16 @@ pub fn float_on_top_at(x: i32, y: i32) -> bool {
     )
 }
 
+/// 弹一个系统消息框（WebView2 缺失这类"跑不起来"的情况，页面还没建）
+pub fn message_box(title: &str, text: &str) {
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+    let t = wide(title);
+    let m = wide(text);
+    unsafe {
+        MessageBoxW(None, PCWSTR(m.as_ptr()), PCWSTR(t.as_ptr()), MB_OK | MB_ICONERROR);
+    }
+}
+
 /// 前台窗口诊断：类名 + 是否铺满屏幕（判断"游戏是不是独占全屏"）
 pub fn foreground_info() -> (String, bool) {
     use windows::Win32::UI::WindowsAndMessaging::{

@@ -645,15 +645,24 @@ gifa-rs/
 6. 被遮挡时截屏截到"上面的窗口"，报出假方位
 7. 置顶被游戏抢走，需无条件重新抬起
 
-### M12 打包与分发 `5d` [P0]
+### M12 打包与分发 `5d` [P0] 🟡 绿色版完成，安装器待补
 
-- [ ] `cargo build --release` + 清单注入（管理员 + `PerMonitorV2` + `longPathAware`）
-- [ ] 图标/版本信息资源（`icon.ico`、`installerSidebar.bmp`、`installerHeader.bmp` 复用原版 `build/`）
-- [ ] NSIS 安装器：可选安装目录、开始菜单/桌面快捷方式、开机自启（`HKCU\...\Run`）、卸载保留数据选项、旧绿色版 `data\` 迁移
-- [ ] 绿色版 zip：`GIFA-<ver>-win-x64.zip`，顶层 `GIFA/`，主程序 `GIFA.exe` + `data/`
-- [ ] `SHA256SUMS.txt`
-- [ ] 许可打包：`resources/licenses/` 下 `LICENSE-GIFA.txt`、`NOTICE-GIFA.txt`、`LICENSE-MIT-LEGACY-GIFA.txt`、WebView2 运行时声明
-- **验收**：干净 Win11 上双击安装 → 起；卸载默认保留 `%APPDATA%` 数据
+- [x] `cargo build --release` + **清单注入**（管理员 + `PerMonitorV2` + `longPathAware` + Common-Controls）
+      用链接器 `/MANIFESTINPUT`，不依赖 `rc.exe`
+- [x] 单文件 exe（页面/样式/脚本编译期内联）1.7 MB
+- [x] 绿色版 zip：`dist/GIFA-0.2.6-win-x64.zip`（0.7 MB），顶层 `GIFA-0.2.6-win-x64/`，
+      含 `GIFA.exe` + `data/` + `licenses/` + `README.txt`
+- [x] `SHA256SUMS.txt`（逐文件）
+- [x] 许可打包：`LICENSE-GIFA.txt`、`NOTICE-GIFA.txt`、`LICENSE-LGPL-3.0.txt`
+- [x] 数据目录：release 走 `resolve_data_dir`（安装版 `%APPDATA%` / 绿色版 `<exe>\data`）
+- [x] WebView2 运行时检查：缺失或 <110 时弹框给下载地址后退出
+- [x] 构建脚本 `scripts/build.ps1`（构建 → 组装 → 校验和 → zip）
+- [ ] NSIS 安装器（本机无 `makensis`；原版 `build/installer.nsh` 与素材已就位）
+- [ ] exe 图标/版本资源（本机无 `rc.exe`，MSYS `windres` 预处理失败）
+- **验收（已验证部分）**：release 清单含 `requireAdministrator`×2；no-admin release 变体
+  `--version` 正常、`--settings-test` 7/7、`--ui-test` 5/5
+- **待验收**：干净 Win10 22H2 上双击 → UAC → 起窗 → 加载视频 → 热键生效
+- **详见**：`gifa-rs/docs/PACKAGING.md`
 
 ### M13 测试与对拍 `8d` [P0]
 

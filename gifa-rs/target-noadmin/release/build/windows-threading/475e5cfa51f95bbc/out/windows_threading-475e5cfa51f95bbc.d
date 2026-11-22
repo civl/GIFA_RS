@@ -1,0 +1,10 @@
+G:\Code\GenshinImpact\GIFA\gifa-rs\target-noadmin\release\build\windows-threading/475e5cfa51f95bbc\out\windows_threading-475e5cfa51f95bbc.d: C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\lib.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\bindings.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\pool.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\../readme.md
+
+G:\Code\GenshinImpact\GIFA\gifa-rs\target-noadmin\release\build\windows-threading/475e5cfa51f95bbc\out\libwindows_threading-475e5cfa51f95bbc.rlib: C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\lib.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\bindings.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\pool.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\../readme.md
+
+G:\Code\GenshinImpact\GIFA\gifa-rs\target-noadmin\release\build\windows-threading/475e5cfa51f95bbc\out\libwindows_threading-475e5cfa51f95bbc.rmeta: C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\lib.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\bindings.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\pool.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\../readme.md
+
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\lib.rs:
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\bindings.rs:
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\pool.rs:
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\windows-threading-0.2.1\src\../readme.md:

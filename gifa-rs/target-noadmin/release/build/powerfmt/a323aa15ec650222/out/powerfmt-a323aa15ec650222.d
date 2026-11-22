@@ -1,0 +1,11 @@
+G:\Code\GenshinImpact\GIFA\gifa-rs\target-noadmin\release\build\powerfmt/a323aa15ec650222\out\powerfmt-a323aa15ec650222.d: C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\lib.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\buf.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\ext.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display_impls.rs
+
+G:\Code\GenshinImpact\GIFA\gifa-rs\target-noadmin\release\build\powerfmt/a323aa15ec650222\out\libpowerfmt-a323aa15ec650222.rlib: C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\lib.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\buf.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\ext.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display_impls.rs
+
+G:\Code\GenshinImpact\GIFA\gifa-rs\target-noadmin\release\build\powerfmt/a323aa15ec650222\out\libpowerfmt-a323aa15ec650222.rmeta: C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\lib.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\buf.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\ext.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display.rs C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display_impls.rs
+
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\lib.rs:
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\buf.rs:
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\ext.rs:
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display.rs:
+C:\Users\Zhou\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\powerfmt-0.2.1\src\smart_display_impls.rs:

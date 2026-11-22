@@ -1,0 +1,76 @@
+原神跟跑助手 / GI-Follow-Assist (GIFA)
+Copyright (c) 2026 FinalLawer
+SPDX-License-Identifier: GPL-3.0-only
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 only.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see https://www.gnu.org/licenses/gpl-3.0.html.
+The complete license is in LICENSE in the source repository and
+resources/licenses/LICENSE-GIFA.txt in application distributions.
+
+Source code and build scripts: https://github.com/FinalLawer/GIFA
+For a binary release, obtain the corresponding source from the tag or
+commit identified with that release, including src/, scripts/, build/,
+package.json and package-lock.json. Distributors of modified binaries
+must also provide their corresponding source as required by GPLv3.
+
+Project license policy and historical releases
+----------------------------------------------
+GIFA is offered under GPL-3.0-only, and future releases will follow this
+same license policy. On 2026-11-16, FinalLawer also grants GPL-3.0-only
+permission for the GIFA code and original resources that FinalLawer owns
+in these existing releases, including their published application files:
+
+v0.2.4: b65a27063e2652424ddf7be732fc66ec1f7b3f22
+Source: https://github.com/FinalLawer/GIFA/tree/b65a27063e2652424ddf7be732fc66ec1f7b3f22
+v0.2.5: bc89ba0dfb5d41531bafc9e9606a7d6196205909
+Source: https://github.com/FinalLawer/GIFA/tree/bc89ba0dfb5d41531bafc9e9606a7d6196205909
+
+This grants a GPLv3 licensing option for those historical versions; it
+does not revoke previously granted MIT permissions. Recipients of code
+previously released under MIT may still choose that original license.
+MIT notices embedded in the original release files record their first
+publication and do not prevent this additional GPLv3 grant.
+
+The original MIT notice is preserved in LICENSES/MIT-legacy.txt in the
+source repository and resources/licenses/LICENSE-MIT-LEGACY-GIFA.txt
+in application distributions as a historical record. It does not grant MIT permission
+for later GPL-only changes. This policy does not relicense third-party
+components or unrelated projects from the repository's earlier history.
+
+Third-party components
+-----------------------
+Third-party components retain their own copyright and license terms.
+Electron and uiohook-napi's binding are distributed under MIT. The
+libUIOHook library linked into uiohook-napi is LGPL-3.0-or-later;
+its copyright, full license and corresponding source information are
+supplied as libuiohook-NOTICE.txt and LGPL-3.0.txt. Chromium and other
+bundled components carry their own notices. See resources/licenses/ for
+LICENSE.electron.txt, LICENSES.chromium.html and these library notices;
+MIT dependency notices also remain with the modules in app.asar or
+app.asar.unpacked. These component licenses do not replace GIFA's
+GPL-3.0-only license.
+
+中文说明（便于阅读，具体权利义务以随附的 GPLv3 正文为准）
+--------------------------------------------------------
+1. 当前项目采用 GNU GPL 第 3 版，仅第 3 版（GPL-3.0-only）。允许商用和
+   收费分发；分发程序或修改版本时，应遵守 GPLv3 的许可和对应源码提供要求。
+   程序不提供任何担保，法律另有规定的除外。
+2. 项目当前及后续版本统一采用 GPL-3.0-only。版权方也为其持有版权的
+   v0.2.4、v0.2.5 历史版本及已发布程序新增提供同一 GPLv3 授权，源码提交
+   见上文；不覆盖第三方组件或仓库更早的其他项目。
+3. 历史版本新增 GPLv3 授权不撤回既有 MIT 权利；已按 MIT 发布的代码仍可
+   选择原 MIT 许可。旧附件内的 MIT 声明是首次发布记录，不影响新增 GPLv3 授权。
+4. 本项目是非官方的个人辅助工具，与米哈游、哔哩哔哩无任何关联；
+   不含游戏客户端文件、不修改游戏内存、不注入游戏进程。
+5. 功能所需的管理员权限用于全局热键（Windows UIPI 机制）。
+6. 绿色版的数据保存在程序目录 data\，安装版保存在
+   %APPDATA%\原神跟跑助手\；卸载安装版默认保留设置与标定。
