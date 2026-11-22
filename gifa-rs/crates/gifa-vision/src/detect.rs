@@ -24,7 +24,10 @@ pub struct SampleBox {
 
 impl SampleBox {
     /// 由归一化 ROI + 视频像素尺寸算出采样窗。
-    /// 窗口边长取 `r × 2 × 2.4`（原版的采样窗比 ROI 大一圈，保证箭头尖端在内）。
+    /// 原版 `grabCenter(roi, scale=0.62, cap=320)`：窗口边长 = `r × 2 × 0.62`，上限 320。
+    ///
+    /// 这个系数很关键：窗口开大了，箭头在采样点里的占比掉到 1% 以下，
+    /// `analyze` 的 `p99 < 100` 就会判"这一帧没有小地图" —— 实测就是这样把真箭头漏掉的。
     pub fn from_roi(roi: crate::frame::Roi, video_w: i32, video_h: i32) -> Option<Self> {
         if !roi.is_valid() || video_w <= 0 || video_h <= 0 {
             return None;
@@ -32,7 +35,7 @@ impl SampleBox {
         let cx = (roi.cx * video_w as f64).round() as i32;
         let cy = (roi.cy * video_h as f64).round() as i32;
         let r = (roi.r * video_w as f64).round() as i32;
-        let side = ((r.max(8) as f64) * 2.4).round().max(32.0) as i32;
+        let side = ((r.max(8) as f64) * 2.0 * 0.62).round().clamp(32.0, 320.0) as i32;
         Some(Self {
             x: cx - side / 2,
             y: cy - side / 2,

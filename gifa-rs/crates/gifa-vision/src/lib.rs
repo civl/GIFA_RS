@@ -21,7 +21,7 @@ pub use arrow::{analyze, to_compass, ArrowResult, ArrowWorkspace, Corner};
 pub use cone::{analyze_cone, ConeResult, ConeWorkspace};
 pub use detect::{detect_simple, detect_window, Detect, Origin, SampleBox};
 pub use frame::{Frame, FrameSource, Roi};
-pub use pipeline::{start as start_pipeline, VisionEvent};
+pub use pipeline::{start as start_pipeline, start_with_dump as start_pipeline_dump, VisionEvent};
 pub use screen::capture_screen;
 pub use result::{Arrow, Bearing, Cone};
 

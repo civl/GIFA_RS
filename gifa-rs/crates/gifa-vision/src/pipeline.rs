@@ -38,6 +38,21 @@ pub fn start<F>(window_of: F, interval: Duration, tx: Sender<VisionEvent>) -> st
 where
     F: Fn() -> Option<SampleBox> + Send + 'static,
 {
+    start_with_dump(window_of, interval, tx, None)
+}
+
+/// 同上，但可以把前 `dump_n` 帧的采样窗原样存到 `dump_dir`（离线看 ROI 是否对）。
+pub fn start_with_dump<F>(
+    window_of: F,
+    interval: Duration,
+    tx: Sender<VisionEvent>,
+    dump: Option<(std::path::PathBuf, u32)>,
+) -> std::io::Result<()>
+where
+    F: Fn() -> Option<SampleBox> + Send + 'static,
+{
+    let mut dump_left = dump.as_ref().map(|d| d.1).unwrap_or(0);
+    let dump_dir = dump.map(|d| d.0);
     std::thread::Builder::new()
         .name("gifa-vision".into())
         .spawn(move || {
@@ -65,6 +80,22 @@ where
                 // 截的就是采样窗本身，正方形，直接喂给箭头算法
                 let side = win.w.min(win.h).max(8) as usize;
                 let result = detect_window(&frame.data, side, &mut ws, &mut cws);
+                // 只 dump「画面里有东西」的帧：没有小地图的转场/作者卡存下来没意义
+                let interesting =
+                    result.arrow.is_some() || result.view.is_some() || result.cyan_frac > 0.0005;
+                if dump_left > 0 && interesting {
+                    dump_left -= 1;
+                    if let Some(dir) = &dump_dir {
+                        let _ = std::fs::create_dir_all(dir);
+                        let name = format!("f{:03}-{}", seq + 1, side);
+                        let _ = std::fs::write(dir.join(format!("{name}.bin")), &frame.data);
+                        let _ = std::fs::write(
+                            dir.join(format!("{name}.json")),
+                            format!("{{\"w\":{},\"h\":{},\"cyan\":{:.5}}}", frame.width, frame.height, result.cyan_frac),
+                        );
+                        eprintln!("[vision] dump {name} cyan={:.5}", result.cyan_frac);
+                    }
+                }
                 let t2 = Instant::now();
                 seq += 1;
                 if tx

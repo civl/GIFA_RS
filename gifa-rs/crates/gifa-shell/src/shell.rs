@@ -492,6 +492,8 @@ pub fn open_popup(url: &str, title: &str, width: i32, height: i32) -> Result<(),
     // 已经开着就只把它提到前面
     let existing = with_shell(|s| s.popup.as_ref().map(|p| p.hwnd)).flatten();
     if let Some(h) = existing {
+        // 舞台窗是置顶的，弹窗必须也置顶，否则会被自己的浮窗压在下面（实测踩过）
+        win32::topmost(h);
         unsafe {
             let _ = ShowWindow(h, SW_SHOW);
             let _ = SetForegroundWindow(h);
@@ -542,6 +544,12 @@ pub fn open_popup(url: &str, title: &str, width: i32, height: i32) -> Result<(),
     })
     .ok_or_else(|| "外壳尚未初始化".to_string())??;
 
+    // 舞台窗是置顶的，弹窗必须也置顶，否则会被自己的浮窗压在下面（实测踩过）
+    win32::topmost(hwnd);
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_SHOW);
+        let _ = SetForegroundWindow(hwnd);
+    }
     with_shell(|s| s.popup = Some(Popup { hwnd, wv }));
 
     unsafe {
@@ -2167,6 +2175,10 @@ pub fn reassert_topmost() {
     with_shell(|s| {
         win32::topmost(s.float);
         win32::topmost(s.chrome);
+        // 弹窗（登录/扫码）必须在最后抬：否则巡检会把它重新压到浮窗下面
+        if let Some(p) = s.popup.as_ref() {
+            win32::topmost(p.hwnd);
+        }
     });
 }
 

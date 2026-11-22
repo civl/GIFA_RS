@@ -115,11 +115,17 @@ struct UiState {
     /// 浮窗被盖住过（只用日志，不参与逻辑）
     covered_logged: bool,
     covered_detail: String,
+    /// `--login`：到点后在 UI 线程开登录弹窗（后台线程拿不到 TLS 里的外壳状态）
+    login_at: Option<Instant>,
     /// 视觉冒烟：跑 N 秒后出结论（M13）
     bearing_since: Option<Instant>,
     bearing_secs: f64,
     bearing_angles: std::collections::BTreeSet<i64>,
     bearing_rows: Vec<(String, bool, String)>,
+    dump_frame: Option<std::path::PathBuf>,
+    dump_left: u32,
+    /// 逐帧 CSV（真实语料对拍用）
+    vision_csv: Option<std::fs::File>,
     /// 实战模式：热键管理器 + 日志文件
     hotkeys: Option<gifa_input::hotkey::Hotkeys>,
     live_log: Option<std::fs::File>,
@@ -431,6 +437,30 @@ fn main() {
     UI.with(|ui| {
         let mut ui = ui.borrow_mut();
         ui.layouts = store.bearing.layouts.clone();
+        // --roi cx,cy,r：直接指定 ROI（真实语料调参用）
+        if let Some(v) = arg_value(&args, "--roi") {
+            let parts: Vec<f64> = v.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            if parts.len() == 3 {
+                let roi = gifa_core::Roi::new(parts[0], parts[1], parts[2]);
+                match roi {
+                    Some(r) => {
+                        ui.layouts.create("probe".into(), "探针", r).ok();
+                        ui.layouts.select("probe").ok();
+                        println!("[gifa] ROI 探针 cx={} cy={} r={}", parts[0], parts[1], parts[2]);
+                    }
+                    None => println!("[gifa] ROI 非法：{v}"),
+                }
+            } else {
+                println!("[gifa] --roi 需要 cx,cy,r");
+            }
+        }
+        // --layout <id>：强制使用某个布局（真实语料测试时要跳过上次标定的自定义布局）
+        if let Some(id) = arg_value(&args, "--layout") {
+            match ui.layouts.select(&id) {
+                Ok(()) => println!("[gifa] 布局 → {id}"),
+                Err(e) => println!("[gifa] 布局 {id} 切换失败：{:?}", e.code()),
+            }
+        }
         ui.store = Some(store);
         ui.pending_short = gifa_player::is_short_link(&text) && gifa_player::extract_id(&text).is_none();
     });
@@ -443,7 +473,16 @@ fn main() {
         user_data_dir: Some(data_root.join("webview2")),
         player_tx: Some(player_tx),
         chrome_tx: Some(chrome_tx),
-        bounds: Bounds::new(80, 80, W, H),
+        bounds: {
+            let (mut bw, mut bh) = (W, H);
+            if let Some(sz) = arg_value(&args, "--size") {
+                if let Some((w, h)) = sz.split_once('x') {
+                    bw = w.parse().unwrap_or(W);
+                    bh = h.parse().unwrap_or(H);
+                }
+            }
+            Bounds::new(80, 80, bw, bh)
+        },
         opacity: 255,
         title: "GIFA 跟跑浮窗".to_string(),
         interactive: true,
@@ -465,18 +504,38 @@ fn main() {
         }
     }
 
-    if auto_login {
-        std::thread::spawn(|| {
-            std::thread::sleep(Duration::from_millis(2000));
-            gifa_shell::eval_chrome("document.getElementById('btnLogin').click()");
-        });
-    }
+
+    let csv_path = arg_value(&args, "--vision-csv");
+    let dump = arg_value(&args, "--dump-frame");
     if let Some(secs) = arg_value(&args, "--bearing") {
         let secs = secs.parse::<f64>().unwrap_or(30.0).clamp(3.0, 120.0);
         UI.with(|ui| {
             let mut ui = ui.borrow_mut();
+            if let Some(p) = &dump {
+                ui.dump_frame = Some(data_root.join(p));
+                ui.dump_left = 6;
+            }
+            if let Some(p) = &csv_path {
+                let path = data_root.join(p);
+                match std::fs::File::create(&path) {
+                    Ok(f) => {
+                        ui.vision_csv = Some(f);
+                        println!("[vision] 逐帧 CSV → {}", path.display());
+                        let _ = &mut ui.vision_csv.as_mut().map(|f| {
+                            use std::io::Write;
+                            let _ = writeln!(f, "seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs");
+                        });
+                    }
+                    Err(e) => println!("[vision] CSV 创建失败：{e}"),
+                }
+            }
             ui.bearing_secs = secs;
             ui.logs.push(format!("视觉冒烟 {secs}s"));
+        });
+    }
+    if auto_login {
+        UI.with(|ui| {
+            ui.borrow_mut().login_at = Some(Instant::now() + Duration::from_millis(2500));
         });
     }
     if live {
@@ -554,6 +613,22 @@ fn on_tick() {
         if std::env::args().any(|a| a == "--overlay-test") {
             overlay_test_step(&mut ui);
         }
+        // 2.5) --login：到点在 UI 线程开弹窗
+        if let Some(t) = ui.login_at {
+            if Instant::now() >= t {
+                ui.login_at = None;
+                match gifa_shell::open_popup(
+                    "https://passport.bilibili.com/login",
+                    "B 站登录 · 扫码",
+                    1000,
+                    720,
+                ) {
+                    Ok(()) => println!("[gifa] 登录窗已打开，请扫码"),
+                    Err(e) => println!("[gifa] 登录窗失败：{e}"),
+                }
+            }
+        }
+
         // 2.55) 实战：热键事件 → 动作
         let hk_events = ui
             .hotkeys
@@ -1069,6 +1144,16 @@ fn live_step(ui: &mut UiState) {
         return;
     }
     let Some(b) = vision_box(ui) else { return };
+    if let (Some(vr), Some(s)) = (ui.video_rect.as_ref(), gifa_shell::snapshot()) {
+        println!(
+            "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={} dpr={:.2}",
+            vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit, vr.dpr
+        );
+        println!(
+            "[vision] stage=({},{},{}x{}) float=({},{}) 采样窗=({},{}) {}x{}",
+            s.stage.x, s.stage.y, s.stage.w, s.stage.h, s.float_rect.x, s.float_rect.y, b.x, b.y, b.w, b.h
+        );
+    }
     let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
     start_vision(ui);
     live_log(
@@ -1149,8 +1234,25 @@ fn bearing_step(ui: &mut UiState) {
     }
     let el = ui.bearing_since.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
 
+    // video-rect 会随窗口/布局变化，每秒重取一次；否则沉浸后还在用旧尺寸算采样窗
+    if ui.ticks.is_multiple_of(4) {
+        gifa_shell::player_command(PlayerCommand::VideoRect);
+    }
+
+    // --immerse：进纯视频模式，让视频占满整个浮窗（采样接近原生分辨率）
+    if std::env::args().any(|a| a == "--immerse") && !ui.immersion && ui.video_rect.is_some() {
+        toggle_immersion(ui, true);
+        ui.logs.push("沉浸模式：视频占满浮窗".into());
+    }
+
     if ui.vision_box.is_none() && ui.video_rect.is_some() && el > 0.8 {
         if let Some(b) = vision_box(ui) {
+            if let Some(vr) = ui.video_rect.as_ref() {
+                println!(
+                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={}",
+                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit
+                );
+            }
             let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
         }
         start_vision(ui);
@@ -1547,7 +1649,9 @@ fn vision_box(ui: &mut UiState) -> Option<gifa_vision::SampleBox> {
     // 这时候识别出来的"方位"是假的 —— 直接暂停，宁可不报。
     let probe_x = s.float_rect.x + s.client.0 / 2;
     let probe_y = s.float_rect.y + s.stage.y + s.stage.h / 2;
-    if !ui.synth && !gifa_shell::float_on_top_at(probe_x, probe_y) {
+    // 沉浸模式会开点击穿透（WS_EX_TRANSPARENT），`WindowFromPoint` 直接跳过自己的窗，
+    // 遮挡判定会永远失败 —— 这时不能用它当判据。
+    if !ui.synth && !gifa_shell::click_through() && !gifa_shell::float_on_top_at(probe_x, probe_y) {
         ui.covered_logged = true;
         ui.covered_detail = format!(
             "({probe_x},{probe_y}) 命中={:?} hwnd=0x{:X}",
@@ -1562,7 +1666,8 @@ fn vision_box(ui: &mut UiState) -> Option<gifa_vision::SampleBox> {
         let (sw, sh) = (s.stage.w as f64, s.stage.h as f64);
         let cx = s.float_rect.x as f64 + s.stage.x as f64 + roi.cx * sw;
         let cy = s.float_rect.y as f64 + s.stage.y as f64 + roi.cy * sh;
-        let side = (roi.r * sw * 2.4).clamp(48.0, 512.0) as i32;
+        // 与原版 grabCenter 一致：r × 2 × 0.62，上限 320
+        let side = (roi.r * sw * 2.0 * 0.62).clamp(48.0, 320.0) as i32;
         return Some(gifa_vision::SampleBox {
             x: (cx - side as f64 / 2.0) as i32,
             y: (cy - side as f64 / 2.0) as i32,
@@ -1583,8 +1688,8 @@ fn vision_box(ui: &mut UiState) -> Option<gifa_vision::SampleBox> {
     let cx = content.0 + roi.cx * content.2;
     let cy = content.1 + roi.cy * content.3;
     let r = roi.r * content.2;
-    let side = ((r * 2.4).max(48.0)).round() as i32;
-    let side = side.min(512);
+    // 与原版 grabCenter 一致：r × 2 × 0.62，上限 320
+    let side = (r * 2.0 * 0.62).clamp(48.0, 320.0).round() as i32;
     Some(gifa_vision::SampleBox {
         x: (cx - side as f64 / 2.0).round() as i32,
         y: (cy - side as f64 / 2.0).round() as i32,
@@ -1602,10 +1707,12 @@ fn start_vision(ui: &mut UiState) {
     let feed = shared.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     let interval = std::time::Duration::from_millis(100);
-    match gifa_vision::start_pipeline(
+    let dump = ui.dump_frame.clone().filter(|_| ui.dump_left > 0).map(|p| (p, ui.dump_left));
+    match gifa_vision::start_pipeline_dump(
         move || feed.lock().ok().and_then(|g| *g),
         interval,
         tx,
+        dump,
     ) {
         Ok(()) => {
             ui.vision_box = Some(shared);
@@ -1627,6 +1734,22 @@ fn pump_vision(ui: &mut UiState) {
         }
     });
     for ev in events {
+        if let Some(f) = ui.vision_csv.as_mut() {
+            use std::io::Write;
+            // seq,cyan,arrow,arrowConf,view,viewConf,capMs,detMs
+            let _ = writeln!(
+                f,
+                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2}",
+                ev.seq,
+                ev.result.cyan_frac,
+                ev.result.arrow,
+                ev.result.arrow_conf,
+                ev.result.view,
+                ev.result.view_conf,
+                ev.capture.as_secs_f64() * 1000.0,
+                ev.detect.as_secs_f64() * 1000.0
+            );
+        }
         ui.vision_count += 1;
         ui.vision_capture_sum += ev.capture.as_secs_f64() * 1000.0;
         ui.vision_detect_sum += ev.detect.as_secs_f64() * 1000.0;
@@ -1722,6 +1845,12 @@ fn synth_test_step(ui: &mut UiState) {
     }
     if ui.vision_box.is_none() && el > 1.2 {
         if let Some(b) = vision_box(ui) {
+            if let Some(vr) = ui.video_rect.as_ref() {
+                println!(
+                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={}",
+                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit
+                );
+            }
             let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
         }
         start_vision(ui);
@@ -1792,6 +1921,12 @@ fn vision_test_step(ui: &mut UiState) {
     // 拿到视频矩形后的第一帧：起管线 + 摆好叠加层
     if ui.vision_box.is_none() && ui.video_rect.is_some() && el > 0.6 {
         if let Some(b) = vision_box(ui) {
+            if let Some(vr) = ui.video_rect.as_ref() {
+                println!(
+                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={}",
+                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit
+                );
+            }
             let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
         }
         start_vision(ui);
