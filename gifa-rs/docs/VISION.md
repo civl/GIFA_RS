@@ -311,6 +311,48 @@ v1 给角度（干净帧上准），v2 当独立第二意见；两者差 **>16°
 真实像素回归：`crates/gifa-vision/tests/real_arrow.rs` 用这两枚真机箭头钉住行为
 （cyans 331 / 角数 4 与 5 / 角度 90.2 与 101.8，均与原版 JS 一致）。
 
+## 标注工具与标定流程（用来定阈值）
+
+单帧能加的判据已经加完了，剩下的分歧只能靠**真实语料的人工真值**来裁定。
+
+### 用法
+
+```powershell
+cd gifa-rs
+
+# 1) 采一段语料（每帧都落盘 + 逐帧 CSV）
+$env:GIFA_DUMP_ALL=1
+apps\gifa-demo\..\target\debug\gifa-demo.exe --open "https://www.bilibili.com/video/BV1oa4y1H7b5/?p=3" `
+  --size 1400x820 --immerse --layout builtin --bearing 60 `
+  --dump-frame labelseq --dump-count 150 --vision-csv label.csv
+$env:GIFA_DUMP_ALL=$null
+
+# 2) 打包成单文件标注页
+python scripts/label-tool.py apps/gifa-demo/data/labelseq apps/gifa-demo/data/label.csv apps/gifa-demo/data/label
+
+# 3) 双击 apps/gifa-demo/data/label/label.html，标完点「导出」
+# 4) 出报告
+python scripts/label-report.py apps/gifa-demo/data/label/labels.json
+```
+
+### 标注约定（重要）
+
+**从这个窗口的圆心，往青色箭头尖端拖一条线**。
+
+* 工具自己把拖动向量换算成罗盘角（0=北、90=东……），不需要你心算角度
+* 方向对就按 `空格` 接受算法值（多数帧只需这一步）
+* 看不出（被特效盖住 / 这张图里没有小地图）按 `U`
+* 拖动必须够长才生效，防误点；每帧自动存 localStorage，刷新不丢
+
+### 报告会回答什么
+
+1. 算法在人标过的帧上多准（中位 / p90 误差、>10° 的比例、反相帧数）
+2. 人能看出但算法没输出的帧有多少（漏检）
+3. 反相（差 ~180°）的帧具体是哪几帧
+
+拿到 200 帧左右的标注后，就能把 `NOSE_AXIS_MAX_DEG`（现在 8°）从一个
+"估计值"变成一个"用数据选出来的值"，也能判断要不要按地图类型分阈值。
+
 ## 还差什么
 
 | 项 | 状态 |

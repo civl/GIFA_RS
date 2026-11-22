@@ -66,8 +66,12 @@ pub struct Detect {
     pub cross_check: Option<(f64, f64)>,
     /// view 是否来自真视锥（而不是占位）
     pub view_is_cone: bool,
-    /// 0=没被挡 1=鼻子不在轴上 2=两模型分歧 3=与视锥不共线
+    /// 0=没被挡 1=鼻子不在轴上
     pub reject_reason: u8,
+    /// |鼻子角 − 输出轴角|（标定时用来看闸门余量）
+    pub nose_gap: Option<f32>,
+    /// 原版的三点评分余量（越大越可信）
+    pub ang_margin: Option<f32>,
 }
 
 /// 屏幕/浮窗坐标 → 帧内坐标的偏移
@@ -95,9 +99,15 @@ pub fn detect_window(
 ) -> Detect {
     let mut out = Detect::default();
     let arrow = crate::arrow::analyze(rgba, size, 1, aws);
+    let nose_gap = arrow
+        .nose_deg
+        .map(|n| ((n - arrow.angle + 540.0) % 360.0 - 180.0).abs() as f32);
+    let ang_margin = Some(arrow.ang_margin as f32);
     let cone = crate::cone::analyze_cone(rgba, size, 1, cws);
 
     out.samples = arrow.cyans;
+    out.nose_gap = nose_gap;
+    out.ang_margin = ang_margin;
     out.cyan_frac = if size > 0 {
         arrow.cyans as f32 / (size * size) as f32
     } else {
