@@ -1,12 +1,19 @@
 # Rust 构建产物
-gifa-rs/target/
+target/
+target-noadmin/
 
 # 运行数据（WebView2 profile、settings.json）
-gifa-rs/apps/*/data/
+apps/*/data/
 data/
 
 # 原版参考仓库（单独 clone，不属于本仓库内容）
 reference/
+
+# 构建产物（由 scripts/build.ps1 生成，不入库）
+dist/
+
+# 视觉对拍素材（由 scripts/vision-golden.ps1 生成）
+tools/vision-ref/frames/
 
 # 临时文件
 *.log

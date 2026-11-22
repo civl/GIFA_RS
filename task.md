@@ -34,9 +34,9 @@
 | 资源 | 内存 24→25MB、CPU 2.7% 单核、无泄漏 |
 | 门禁 | 18 项全过；`cargo test` 130 通过 |
 
-发布说明见 `gifa-rs/docs/RELEASE.md`，实现细节见 `gifa-rs/README.md` 与各 `docs/*.md`。
+发布说明见 `docs/RELEASE.md`，实现细节见 `README.md` 与各 `docs/*.md`。
 
-**与原方案的三处偏离**（都有实测数据支撑，见 `gifa-rs/docs/VISION.md`）：
+**与原方案的三处偏离**（都有实测数据支撑，见 `docs/VISION.md`）：
 
 1. **视觉没留在页面 JS**：D2 原本约定"一期识别留页面、二期再移植"，实际在二期直接
    完成了 Rust 移植并与原版逐帧对拍（33 帧 0.0000°）。收益：识别与播放解耦，
@@ -52,7 +52,7 @@
 |---|---|---|---|
 | **D1** | **路线 A**：Rust 外壳（tao/wry + WebView2 + 原生 Win32）+ 复用原版 HTML/CSS 与页面代理（GPL 同源） | 2026-11-21 | 不评估 libmpv 路线；§3.1 的 B/C 仅作背景保留 |
 | **D2** | **视觉一期留在页面 JS**：`player-agent.js` 沿用原版识别逻辑，只把外壳换成 Rust；`gifa-vision` 二期再移植 | 2026-11-21 | 一期不定义帧传输；`gifa-vision` 一期只落 `trait FrameSource` 空壳；黄金回归随二期 |
-| **D3** | **浮窗 = 两层窗口**：「舞台窗」（只有 B 站 WebView2）+「独立顶层 chrome 玻璃窗」（`DwmExtendFrameIntoClientArea(-1)` + `SetWindowRgn` 挖空） | 2026-11-21（spike 实测） | chrome 层不能做成子窗；详见 `gifa-rs/spikes/dual-webview/FINDINGS.md` |
+| **D3** | **浮窗 = 两层窗口**：「舞台窗」（只有 B 站 WebView2）+「独立顶层 chrome 玻璃窗」（`DwmExtendFrameIntoClientArea(-1)` + `SetWindowRgn` 挖空） | 2026-11-21（spike 实测） | chrome 层不能做成子窗；详见 `spikes/dual-webview/FINDINGS.md` |
 
 **D2 带来的第一条硬约束（很容易被"顺手重构"破坏）**：
 
@@ -66,7 +66,7 @@
 
 **一期真正的头号风险**因此变成 **R7（多 WebView2 同窗的层级/命中测试）** 与 **R3（透明分层窗的驱动兼容）**——两者都是"能不能把原版的窗口行为一比一还原"的问题，建议 P0 阶段就先用一个最小 demo 打穿，不要留到集成时。
 
-> ✅ **该 spike 已于 2026-11-21 完成并跑通**：`gifa-rs/spikes/dual-webview`（5/5 通过，含截图）。
+> ✅ **该 spike 已于 2026-11-21 完成并跑通**：`spikes/dual-webview`（5/5 通过，含截图）。
 > 结论见 **D3** 与 `FINDINGS.md`；R7 因此降级为低/低。
 
 ---
@@ -322,10 +322,10 @@
 
 > **当前进度（2026-11-21）**：`gifa-shell`（外壳）与 `apps/shell-demo`（骨架演示+自检）已落地，
 > 下面树里的 `gifa-core` / `gifa-vision` / `gifa-input` / `gifa-app` 仍是规划。
-> 实际目录见 `gifa-rs/README.md`。
+> 实际目录见 `README.md`。
 
 ```
-gifa-rs/
+
 ├─ Cargo.toml                      # workspace
 ├─ build.rs                        # 清单注入：requireAdministrator + PerMonitorV2 DPI
 ├─ crates/
@@ -439,7 +439,7 @@ gifa-rs/
 
 ### M1 窗口基座 `8d` [P0] ✅ **完成**（spike 1d + 实现 3d + 收尾）
 
-- [x] 前置 spike：`gifa-rs/spikes/dual-webview`（5/5），结论见 `FINDINGS.md`
+- [x] 前置 spike：`spikes/dual-webview`（5/5），结论见 `FINDINGS.md`
 - [x] 两层窗口实现：`crates/gifa-shell`（舞台窗 + 顶层 chrome 玻璃窗）
 - [x] 无边框 + 可缩放：`WM_NCCALCSIZE`（客户区=整窗，最大化时补边）+ `WM_GETMINMAXINFO` 最小尺寸
 - [x] 拖动/缩放入口：页面 `{t:'drag'}` / `{t:'resize'}` → `SendMessage(WM_NCLBUTTONDOWN, HTCAPTION/HTBOTTOMRIGHT)` 走系统模态循环
@@ -737,7 +737,7 @@ gifa-rs/
 
 ### 实战联调（2026-11-22）✅ 功能可用
 
-第一次把整套放进真实游戏跑，抓到并修掉 7 个只在真实环境暴露的问题，详见 `gifa-rs/docs/LIVE-TEST.md`：
+第一次把整套放进真实游戏跑，抓到并修掉 7 个只在真实环境暴露的问题，详见 `docs/LIVE-TEST.md`：
 
 1. 独占全屏不可覆盖（要求窗口化/无边框）
 2. `-webkit-app-region: drag` 在 WebView2 里吞掉标题栏鼠标事件
@@ -769,7 +769,7 @@ gifa-rs/
 - **踩到的坑**：`SetCompressor /SOLID lzma` 的安装包在 `/S` 下直接退出（127ms、什么都不做），
   换非 solid 的 lzma 正常，体积 907 KB（+96 KB）
 - **待验收**：干净 Win10 22H2 上双击安装 → UAC → 起窗 → 加载视频 → 热键生效
-- **详见**：`gifa-rs/docs/PACKAGING.md`
+- **详见**：`docs/PACKAGING.md`
 
 ### M13 测试与对拍 `8d` [P0] ✅ **本期完成**（Win11 本机；Win10 明确不做）
 
@@ -784,7 +784,7 @@ gifa-rs/
 - [x] `startup.log` 故障可诊断：版本 / 模式 / 提权 / 防挂起 / 数据目录 / WebView2 / 电源事件
 - [x] 安装包与绿色版都能起、卸载保留数据（M12 已验）
 - [x] **代码签名**：接入点已就位（`build.ps1` 里 sign → zip → setup → **再** 算哈希），
-      证书方案与代价见 `gifa-rs/docs/SIGNING.md`；本期未购买证书，
+      证书方案与代价见 `docs/SIGNING.md`；本期未购买证书，
       用户侧用「更多信息 → 仍要运行」/ `Unblock-File` / 核对 SHA256，已写进随包 README
 - [x] 旧版 `settings.json` 平滑接管（M11 单测 `installed_flag_wins` 等）
 - [x] **单实例**：第二次双击唤回已开窗口、不新开进程（实测输出「已有实例在运行…已提到前台」）
@@ -915,7 +915,7 @@ gifa-rs/
 | R4 | 提权后 WebView2 与 Edge 进程通信异常（沙箱） | 低 | 高 | WebView2 有自研沙箱，不受 Chromium 提权缺陷影响；但需在 Win10 19045 实测，并保留"关闭沙箱"启动参数兜底 |
 | R5 | 全局钩子在反作弊/杀软下被判可疑 | 中 | 中 | 与原版同一技术（同为 `WH_*_LL`），无额外风险；提供"仅用 RegisterHotKey"模式 |
 | R6 | 硬件解码不可用 → 4K 播放掉帧 | 中 | 中 | WebView2 用 Edge 的解码栈；测试 HEVC/AV1；必要时引导用户装 HEVC 扩展 |
-| R7 | 多 WebView2 同窗的层级/焦点问题返工 | **低** | 中 | ✅ 已被 spike 排除：chrome 层改用独立顶层玻璃窗 + 区域挖空，5/5 通过（`gifa-rs/spikes/dual-webview`） |
+| R7 | 多 WebView2 同窗的层级/焦点问题返工 | **低** | 中 | ✅ 已被 spike 排除：chrome 层改用独立顶层玻璃窗 + 区域挖空，5/5 通过（`spikes/dual-webview`） |
 | R8 | 迁移原版 `settings.json` 时字段语义漂移 | 低 | 中 | 字段逐一对照 §13-A；写迁移单测，用原版真实设置文件做 fixture |
 | R9 | 许可合规（复用了 GPL 前端资源） | 低 | 高 | 整体 GPL-3.0-only；保留 NOTICE 与历史 MIT 说明；**不**引入 GPL 不兼容的第三方（如某些闭源 SDK） |
 
@@ -1080,7 +1080,7 @@ gifa-rs/
 | 手柄状态机 | `src/gamepad-config.js`、`src/gamepad.js` |
 | 叠加层绘制 | `src/overlay/overlay.js`、`src/disc/disc-draw.js` |
 | 已知缺陷与历史决策 | `ISSUES.md`、`AGENTS.md`、`README.md` |
-| **M1 spike（可运行代码 + 结论）** | `gifa-rs/spikes/dual-webview/`、`FINDINGS.md`、`docs/spike-toplevel.png` |
+| **M1 spike（可运行代码 + 结论）** | `spikes/dual-webview/`、`FINDINGS.md`、`docs/spike-toplevel.png` |
 
 ---
 
@@ -1090,7 +1090,7 @@ gifa-rs/
 
 | # | 动作 | 产出 | 判定 |
 |---|---|---|---|
-| 0 | ~~M1 前置 spike：双 WebView2 窗口结构~~ | ✅ `gifa-rs/spikes/dual-webview` | 5/5 通过，结论见 `FINDINGS.md` |
+| 0 | ~~M1 前置 spike：双 WebView2 窗口结构~~ | ✅ `spikes/dual-webview` | 5/5 通过，结论见 `FINDINGS.md` |
 | 1 | ~~按 D3 把 spike 扩成 `gifa-shell` 骨架~~ | ✅ `crates/gifa-shell` + `apps/shell-demo` | 自检 6/6、真实拖角 PASS、单测 9/9 |
 | 2 | ~~建 workspace 全骨架（`gifa-core` / `gifa-vision` / `gifa-input`）~~ | ✅ 三个 crate 已落地，非空壳：设置/布局/热键/手柄状态机 + 视觉帧源抽象 | `cargo test` **60 通过 0 失败**、clippy 0 warning |
 | 2.5 | ~~M2：真 B 站页面 + 播放代理 + IPC 桥~~ | ✅ `crates/gifa-player` + `apps/gifa-demo` | `--check` 6/6 |
