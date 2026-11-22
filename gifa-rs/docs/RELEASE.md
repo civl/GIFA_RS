@@ -69,6 +69,20 @@ Rust 输出与标注比对 —— 不是"看着差不多"。
 
 ---
 
+## 首次运行会弹 SmartScreen
+
+发布包**没有代码签名**，Windows 会对"没签名 + 没有下载量"的新程序弹
+「Windows 已保护你的电脑」。这不是杀毒报毒。
+
+处理方式（任选）：
+
+1. 弹窗里点「更多信息」→「仍要运行」
+2. 先 `Unblock-File .\GIFA.exe` 再运行（以后不再重复弹）
+3. 用 `Get-FileHash .\GIFA.exe -Algorithm SHA256` 与 `SHA256SUMS.txt` 核对
+
+要不要做签名、各自代价（EV / OV / Azure Trusted Signing / SignPath 开源免费），
+见 `docs/SIGNING.md`。
+
 ## 装
 
 * 安装包：`gifa-rs/dist/GIFA-Setup-0.3.0.exe`（当前用户安装，不写 HKLM；

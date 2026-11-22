@@ -783,6 +783,9 @@ gifa-rs/
 - [x] 空闲内存 <200MB（24MB）/ 冷启动 <2.5s（约 0.9s）/ 识别单帧 <8ms（1.0~1.2ms）
 - [x] `startup.log` 故障可诊断：版本 / 模式 / 提权 / 防挂起 / 数据目录 / WebView2 / 电源事件
 - [x] 安装包与绿色版都能起、卸载保留数据（M12 已验）
+- [x] **代码签名**：接入点已就位（`build.ps1` 里 sign → zip → setup → **再** 算哈希），
+      证书方案与代价见 `gifa-rs/docs/SIGNING.md`；本期未购买证书，
+      用户侧用「更多信息 → 仍要运行」/ `Unblock-File` / 核对 SHA256，已写进随包 README
 - [x] 旧版 `settings.json` 平滑接管（M11 单测 `installed_flag_wins` 等）
 - [x] **单实例**：第二次双击唤回已开窗口、不新开进程（实测输出「已有实例在运行…已提到前台」）
 - [x] **提权不是循环**：`--elevated` 标记 + UAC 取消后继续以普通权限运行
