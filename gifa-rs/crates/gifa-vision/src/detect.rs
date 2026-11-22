@@ -68,6 +68,8 @@ pub struct Detect {
     pub view_is_cone: bool,
     /// 0=没被挡 1=鼻子不在轴上
     pub reject_reason: u8,
+    /// 箭头来源：0=v1 三点拟合，2=六边形兜底
+    pub arrow_source: u8,
     /// |鼻子角 − 输出轴角|（标定时用来看闸门余量）
     pub nose_gap: Option<f32>,
     /// 原版的三点评分余量（越大越可信）
@@ -172,6 +174,17 @@ pub fn detect_window(
         out.view_conf = cone.conf as f32;
         out.view_is_cone = true;
     }
+    // v1 不出（或评分余量不够）时，用六边形法兜底 —— 见 hexagon.rs 的实测表
+    let v1_strong = arrow.valid && arrow.ang_margin >= 18.0;
+    if !v1_strong {
+        if let Some(h) = crate::hexagon::direction(rgba, size) {
+            out.arrow = Some(h.deg);
+            out.arrow_conf = 0.5;
+            out.arrow_source = 2; // 六边形兜底
+            return out;
+        }
+    }
+
     if arrow.valid {
         // 原版给的是 atan2 角，叠加层要罗盘角。
         // 额外过一道"鼻子在轴上"的检查：小地图背景的青色混进连通块时，
@@ -206,6 +219,7 @@ pub fn detect_window(
         if true {
             out.arrow = Some(crate::arrow::to_compass(arrow.angle));
             out.arrow_conf = arrow.conf as f32;
+            out.arrow_source = 1;
         } else {
             out.rejected_axis = true;
             out.reject_reason = 1;
