@@ -1833,8 +1833,10 @@ fn filter_event(
     ui: &mut UiState,
     ev: &gifa_vision::VisionEvent,
 ) -> (Option<f64>, Option<f64>, f64, f64) {
+    // 检测给的是罗盘角，时序层内部用数学角（与原版一致），出口再由 view_payload 换回来
+    let to_math = |c: f64| (90.0 - c).rem_euclid(360.0);
     let cone = ev.result.view.map(|v| gifa_vision::ConeObs {
-        deg: v,
+        deg: to_math(v),
         valid: true,
         conf: ev.result.view_conf as f64,
         width: 90.0,
@@ -1843,11 +1845,12 @@ fn filter_event(
     let (view_deg, view_conf, _src, view_w) = gifa_vision::view_payload(view_out, 90.0);
 
     // 箭头：门限挡下的帧不上报（叠加层保持上一次的角度）
-    let arrow_out = ev.result.arrow.and_then(|a| {
+    let cone_math = ev.result.view.map(to_math).unwrap_or(-1.0);
+    let arrow_out = ev.result.arrow.map(to_math).and_then(|a| {
         ui.ab
-            .smooth(a, ev.result.arrow_conf as f64, ev.at_ms, view_deg.unwrap_or(-1.0), view_conf)
+            .smooth(a, ev.result.arrow_conf as f64, ev.at_ms, cone_math, view_conf)
     });
-    (arrow_out, view_deg, view_conf, view_w)
+    (arrow_out.map(to_math), view_deg, view_conf, view_w)
 }
 
 fn send_overlay(arrow: Option<f64>, view: Option<f64>, view_conf: f64, view_w: f64) {
@@ -1879,9 +1882,15 @@ fn synth_page_url() -> String {
  // 粗一点的地形噪声，避免整块纯色
  for(let i=0;i<400;i++){x.fillStyle=i%2?'#22301f':'#1a271c';
    x.fillRect((i*137)%600,(i*251)%400,18,14);}
- // 白扇（朝南）：先画，箭头压在上面
- x.fillStyle='#f4f4ef';
- x.beginPath(); x.moveTo(300,200); x.arc(300,200,60,Math.PI*0.28,Math.PI*0.72); x.closePath(); x.fill();
+ // 白扇（朝南）：先画，箭头压在上面。
+ // 真视锥通道认的是**半透明白膜** dst=src+α(255−src)，α 必须 ≤0.45；
+ // 画成实心白会解出 α≈1 被直接否掉（这就是当初只能拿白像素质心占位的原因）。
+ // 扇形半径要盖住视锥通道的采样环带（0.16~0.48 × 窗口边长），窗口约 300px → 半径 130
+ const wg=x.createRadialGradient(300,200,4,300,200,130);
+ wg.addColorStop(0,'rgba(255,255,255,0.35)');
+ wg.addColorStop(1,'rgba(255,255,255,0.12)');
+ x.fillStyle=wg;
+ x.beginPath(); x.moveTo(300,200); x.arc(300,200,130,Math.PI*0.28,Math.PI*0.72); x.closePath(); x.fill();
  // 青色飞镖（朝东）：钝鼻 + 两个尖尾。
  // 原版算法按"鼻子半径最小、两尾翼夹角 100°"定方向，画成实心三角会判无效。
  const deg=a=>a*Math.PI/180;
@@ -1915,8 +1924,9 @@ fn synth_test_step(ui: &mut UiState) {
     if ui.im_started.is_none() {
         ui.im_started = Some(Instant::now());
         ui.synth = true;
-        // 居中的 ROI：0.5/0.5、r=0.06（约 54px 半径）
-        let roi = gifa_core::Roi::new(0.5, 0.5, 0.06).unwrap();
+        // 居中的 ROI。r 要配合采样窗尺寸（r×2×0.62，上限 320）：
+        // 页面里的飞镖尖端半径 60px，算法期望它在窗口的 0.2 左右 → 窗口约 300px
+        let roi = gifa_core::Roi::new(0.5, 0.5, 0.27).unwrap();
         // 可能已经存在（上次跑完落盘了）：先尝试建，再**强制选中**
         ui.layouts.create("synth".into(), "合成", roi).ok();
         ui.layouts.select("synth").ok();
@@ -2168,6 +2178,16 @@ fn calib_test_step(ui: &mut UiState) {
             gifa_shell::player_command(PlayerCommand::VideoRect);
             gifa_shell::eval_chrome("window.gifaCalib && window.gifaCalib(true)");
             ui.im_phase = 1;
+        }
+        // 页面/视频还没就绪时矩形会落空：每个 tick 重试，最多等 8 秒
+        1 if ui
+            .video_rect
+            .as_ref()
+            .map(|r| !(r.vw > 0 && r.w > 0.0))
+            .unwrap_or(true)
+            && el < 8.0 =>
+        {
+            gifa_shell::player_command(PlayerCommand::VideoRect);
         }
         1 if el > 1.4 => {
             let vr = ui.video_rect.clone();
