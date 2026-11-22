@@ -63,8 +63,21 @@ function reportLayout() {
   if (state.calibOpen) overlay.push(rectPx($('calib')));
   const toast = $('toast');
   if (toast.classList.contains('show')) overlay.push(rectPx(toast));
+  // 拖动区：标题栏减掉右侧工具区（按钮/下拉不参与拖动）
+  const bar = $('titlebar').getBoundingClientRect();
+  const toolsR = document.querySelector('#titlebar .tools');
+  const dragW = toolsR
+    ? Math.max(0, toolsR.getBoundingClientRect().left - bar.left)
+    : bar.width;
+  const k = dpr();
   post({
     t: 'layout',
+    drag: {
+      x: Math.round(bar.left * k),
+      y: Math.round(bar.top * k),
+      w: Math.round(dragW * k),
+      h: Math.round(bar.height * k),
+    },
     titlebar: Math.round($('titlebar').getBoundingClientRect().height * dpr()),
     footer: Math.round($('controls').getBoundingClientRect().height * dpr()),
     urlbar: urlbar.classList.contains('hidden') ? null : rectPx(urlbar),
@@ -348,6 +361,9 @@ function wireUi() {
     reportLayout();
   }, { passive: false });
 
+  document.addEventListener('mousedown', (e) => {
+    post({ t: 'debug', at: 'page-mousedown', x: e.clientX, y: e.clientY, target: (e.target && e.target.id) || '' });
+  }, true);
   document.addEventListener('mousemove', wakeUi);
   window.addEventListener('resize', reportLayout);
 

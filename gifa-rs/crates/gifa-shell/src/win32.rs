@@ -93,6 +93,40 @@ pub fn client_to_screen(hwnd: HWND, x: i32, y: i32) -> (i32, i32) {
     (pt.x, pt.y)
 }
 
+/// 注入左键按下/抬起（自检用：拖动标题栏这类交互需要真实鼠标事件）
+pub fn click_left(down: bool) {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+        MOUSEINPUT,
+    };
+    let inp = INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx: 0,
+                dy: 0,
+                mouseData: 0,
+                dwFlags: if down {
+                    MOUSEEVENTF_LEFTDOWN
+                } else {
+                    MOUSEEVENTF_LEFTUP
+                },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    unsafe {
+        SendInput(&[inp], std::mem::size_of::<INPUT>() as i32);
+    }
+}
+
+/// 左键是否按着（自绘拖拽用，比设鼠标捕获可靠）
+pub fn left_button_down() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+    unsafe { (GetAsyncKeyState(VK_LBUTTON.0 as i32) as u16 & 0x8000) != 0 }
+}
+
 /// 移动系统光标（自检/调试用；正常界面不会调用）
 pub fn move_cursor(x: i32, y: i32) -> bool {
     unsafe { SetCursorPos(x, y).is_ok() }

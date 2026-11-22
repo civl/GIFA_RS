@@ -17,6 +17,8 @@ pub const DEFAULT_FOOTER: i32 = 34;
 pub struct ChromeLayout {
     pub titlebar: i32,
     pub footer: i32,
+    /// 标题栏里"可以拖动窗口"的那一段（排除右侧按钮区）
+    pub drag: Option<RectI>,
     /// URL 条：可见时夹在标题栏与舞台之间，把舞台往下推
     pub urlbar: Option<RectI>,
     /// 除标题栏/底栏/URL 条以外，还需要"存在"的浮动控件：pill、toast、标定环、grip
@@ -28,6 +30,7 @@ impl Default for ChromeLayout {
         Self {
             titlebar: DEFAULT_TITLEBAR,
             footer: DEFAULT_FOOTER,
+            drag: None,
             urlbar: None,
             overlay: Vec::new(),
         }

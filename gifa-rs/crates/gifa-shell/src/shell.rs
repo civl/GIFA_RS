@@ -87,6 +87,9 @@ pub enum ChromeMsg {
         footer: i32,
         #[serde(default)]
         urlbar: Option<RectDe>,
+        /// 标题栏里可拖动的那一段
+        #[serde(default)]
+        drag: Option<RectDe>,
         #[serde(default)]
         overlay: Vec<RectDe>,
     },
@@ -281,6 +284,9 @@ pub fn create(cfg: ShellConfig) -> Result<(), String> {
     let chrome = create_chrome_window(float)?;
     crate::shell_log!("创建 chrome WebView2…");
     let chrome_wv = build_chrome(&chrome, &cfg)?;
+    // 16ms 拖动轮询：不依赖页面事件（WebView2 未激活时不派发 DOM 鼠标事件）
+    let tid = unsafe { SetTimer(Some(float), DRAG_TIMER_ID, 16, None) };
+    crate::shell_log!("拖动轮询定时器 id={tid}");
     crate::shell_log!("首次同步…");
 
     SHELL.with(|slot| {
@@ -377,7 +383,10 @@ fn create_chrome_window(float: HWND) -> Result<HWND, String> {
     // owner = 舞台窗：z 序天然在它上面，随它最小化/销毁
     unsafe {
         let hwnd = CreateWindowExW(
-            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            // 不能加 NOACTIVATE：WebView2 在宿主未被激活时不派发 DOM 鼠标事件，
+            // 表现就是"第一次点击没反应，点一下别的按钮之后就正常了"。
+            // 代价是点浮窗会把焦点从游戏拿走（点回游戏即可恢复）。
+            WS_EX_TOOLWINDOW,
             CLASS_CHROME,
             PCWSTR(title.as_ptr()),
             WS_POPUP,
@@ -609,6 +618,10 @@ pub fn disc_update(state: DiscState) {
 /// 圆盘窗口边长：半径 ×2.24（和原版同一规则，留 12% 余量给扇区文字）
 pub fn disc_size() -> i32 {
     (132.0_f64 * 2.24).round() as i32
+}
+
+fn is_chrome(hwnd: HWND) -> bool {
+    with_shell(|s| s.chrome == hwnd).unwrap_or(false)
 }
 
 fn is_disc(hwnd: HWND) -> bool {
@@ -1129,6 +1142,7 @@ pub fn set_immersion(on: bool, aspect: f64) -> bool {
             s.layout = ChromeLayout {
                 titlebar: 0,
                 footer: 0,
+                drag: None,
                 urlbar: None,
                 overlay: Vec::new(),
             };
@@ -1347,6 +1361,147 @@ pub fn set_interactive(on: bool) {
     with_shell(|s| s.interactive = on);
 }
 
+/// 诊断：屏幕坐标处 WindowFromPoint 返回的 HWND 裸值
+pub fn window_at(x: i32, y: i32) -> isize {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::WindowFromPoint;
+    unsafe { WindowFromPoint(POINT { x, y }).0 as isize }
+}
+
+/// 浮窗在自己的区域上是否真的"露着"（没被别的窗口盖住）。
+///
+/// 截屏是按**屏幕坐标**取的：窗口被独占全屏的游戏盖住时，截到的是游戏画面，
+/// 识别就会把游戏里的青色当成小地图箭头 —— 必须自己挡住这种"看着有数据"的假象。
+pub fn float_on_top_at(x: i32, y: i32) -> bool {
+    matches!(
+        classify_at(x, y),
+        crate::probe::Hit::Float | crate::probe::Hit::Chrome
+    )
+}
+
+/// 前台窗口诊断：类名 + 是否铺满屏幕（判断"游戏是不是独占全屏"）
+pub fn foreground_info() -> (String, bool) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetForegroundWindow, GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN,
+    };
+    unsafe {
+        let fg = GetForegroundWindow();
+        if fg.is_invalid() {
+            return ("(none)".into(), false);
+        }
+        let mut buf = [0u16; 128];
+        let n = GetClassNameW(fg, &mut buf);
+        let class = String::from_utf16_lossy(&buf[..n.max(0) as usize]);
+        let r = win32::window_rect(fg);
+        let (sw, sh) = (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+        let full = (r.right - r.left) >= sw && (r.bottom - r.top) >= sh;
+        (class, full)
+    }
+}
+
+/// 把浮窗（和 chrome）切到前台（自检用）
+pub fn focus_float() {
+    if let Some(h) = float_hwnd() {
+        unsafe {
+            let _ = SetForegroundWindow(h);
+        }
+    }
+}
+
+/// 轮询式拖动：WebView2 在宿主未激活时不派发 DOM 鼠标事件，
+/// 所以不能只靠页面的 mousedown。这里直接看"光标是否在拖动区 + 左键刚按下"。
+fn drag_poll_tick() {
+    static LAST_LOG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let down = win32::left_button_down();
+    // 每秒打一次现场（调试拖动时很有用）
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if now != LAST_LOG.load(std::sync::atomic::Ordering::Relaxed) {
+        LAST_LOG.store(now, std::sync::atomic::Ordering::Relaxed);
+        let (cx, cy) = win32::cursor_pos();
+        let zone = with_shell(|s| s.layout.drag).flatten();
+        crate::shell_log!("drag_poll tick 光标=({cx},{cy}) 按下={down} 区域={zone:?}");
+    }
+    let was = DRAG_WAS_DOWN.swap(down, std::sync::atomic::Ordering::Relaxed);
+    if !down || was {
+        return;
+    }
+    if DRAG_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let Some(zone) = with_shell(|s| s.layout.drag).flatten() else { return };
+    // 页面报的是**窗口内**坐标，要和屏幕光标比，得先加上 chrome 窗原点
+    let Some(origin) = chrome_hwnd().map(win32::window_rect) else { return };
+    let zx = origin.left + zone.x;
+    let zy = origin.top + zone.y;
+    let (cx, cy) = win32::cursor_pos();
+    if cx < zx || cy < zy || cx >= zx + zone.w || cy >= zy + zone.h {
+        return;
+    }
+    // 光标下必须是我们的窗（否则是在点别的窗口）
+    if !matches!(
+        classify_at(cx, cy),
+        crate::probe::Hit::Float | crate::probe::Hit::Chrome
+    ) {
+        return;
+    }
+    crate::shell_log!("drag_poll 命中拖动区 ({cx},{cy})");
+    begin_drag();
+}
+
+static DRAG_WAS_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DRAG_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+const DRAG_TIMER_ID: usize = 0xA2;
+
+/// 自己驱动拖拽：不进入系统的模态移动循环。
+///
+/// 为什么不用 `WM_NCLBUTTONDOWN`：那个循环依赖窗口拿到鼠标捕获，
+/// 而游戏（尤其是带鼠标锁定的窗口化游戏）会把捕获抢走，循环就卡死不跟手。
+/// 这里直接轮询光标 + `SetWindowPos`，只要左键还按着就跟着走。
+fn begin_drag() {
+    DRAG_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+    let Some(h) = float_hwnd() else {
+        DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+        return;
+    };
+    let (mx, my) = win32::cursor_pos();
+    let r = win32::window_rect(h);
+    let (wx, wy) = (r.left, r.top);
+    let raw = h.0 as isize; // HWND 不是 Send，跨线程只传裸值
+    crate::shell_log!("begin_drag from ({mx},{my}) window ({wx},{wy})");
+
+    std::thread::spawn(move || {
+        let start = std::time::Instant::now();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(8));
+            if !win32::left_button_down() {
+                break;
+            }
+            if start.elapsed().as_secs() > 60 {
+                break;
+            }
+            let (cx, cy) = win32::cursor_pos();
+            let nx = wx + (cx - mx);
+            let ny = wy + (cy - my);
+            unsafe {
+                let _ = SetWindowPos(
+                    HWND(raw as *mut _),
+                    None,
+                    nx,
+                    ny,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+                );
+            }
+        }
+        DRAG_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+        crate::shell_log!("begin_drag end");
+    });
+}
+
 /// 最小化（标题栏的最小化按钮）
 pub fn minimize() {
     if let Some(h) = float_hwnd() {
@@ -1530,11 +1685,13 @@ fn on_chrome_message(body: &str) {
                 titlebar,
                 footer,
                 urlbar,
+                drag,
                 overlay,
             } => {
                 let incoming = ChromeLayout {
                     titlebar: titlebar.max(0),
                     footer: footer.max(0),
+                    drag: drag.map(|r| r.to_rect()),
                     urlbar: urlbar.map(|r| r.to_rect()),
                     overlay: overlay.into_iter().map(|r| r.to_rect()).collect(),
                 };
@@ -1692,9 +1849,37 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             windows::Win32::Foundation::LRESULT(0)
         }
 
+        // ---- chrome 被激活：如果这时正按着标题栏，直接把拖动接上
+        WM_ACTIVATE if is_chrome(hwnd) => {
+            let active = (wp.0 & 0xFFFF) != 0;
+            if active && win32::left_button_down() {
+                let (cx, cy) = win32::cursor_pos();
+                let in_zone = with_shell(|s| {
+                    let Some(z) = s.layout.drag else { return false };
+                    let o = win32::window_rect(s.chrome);
+                    cx >= o.left + z.x
+                        && cy >= o.top + z.y
+                        && cx < o.left + z.x + z.w
+                        && cy < o.top + z.y + z.h
+                })
+                .unwrap_or(false);
+                if in_zone {
+                    crate::shell_log!("激活即拖动 ({cx},{cy})");
+                    begin_drag();
+                }
+            }
+            unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
+        }
+
         // ---- 鼠标避让心跳
         WM_TIMER if wp.0 == HOVER_TIMER_ID => {
             hover_tick();
+            windows::Win32::Foundation::LRESULT(0)
+        }
+
+        // ---- 拖动轮询（16ms）
+        WM_TIMER if wp.0 == DRAG_TIMER_ID => {
+            drag_poll_tick();
             windows::Win32::Foundation::LRESULT(0)
         }
 
@@ -1833,7 +2018,8 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             });
             if let Some((p, float)) = pending {
                 match p {
-                    Pending::Drag => start_system_loop(float, HTCAPTION),
+                    // 自绘拖拽：不进系统模态循环，游戏抢鼠标捕获也照样跟手
+                    Pending::Drag => begin_drag(),
                     Pending::Resize => start_system_loop(float, HTBOTTOMRIGHT),
                     Pending::None => {}
                 }
@@ -1966,11 +2152,11 @@ pub fn close() {
 
 /// 定期把舞台窗重新压到最顶层（原版 2.5s 巡检；owned 的 chrome 会跟着走）。
 pub fn reassert_topmost() {
+    // 两个窗都无条件重新抬起：光是"标记为 topmost"不够 ——
+    // 另一个 topmost 窗口后抬起时仍会盖住我们，只有重新 SetWindowPos 才抢回来。
     with_shell(|s| {
-        if !win32::is_topmost(s.float) {
-            win32::topmost(s.float);
-            win32::topmost(s.chrome);
-        }
+        win32::topmost(s.float);
+        win32::topmost(s.chrome);
     });
 }
 

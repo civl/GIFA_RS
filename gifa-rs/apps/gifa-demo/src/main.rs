@@ -112,6 +112,13 @@ struct UiState {
     vision_rows: Vec<(String, bool, String)>,
     /// 合成小地图模式（用页面画一张假地图验证整条链路）
     synth: bool,
+    /// 浮窗被盖住过（只用日志，不参与逻辑）
+    covered_logged: bool,
+    covered_detail: String,
+    /// 实战模式：热键管理器 + 日志文件
+    hotkeys: Option<gifa_input::hotkey::Hotkeys>,
+    live_log: Option<std::fs::File>,
+    live_last_report: Option<Instant>,
     // ---- 界面自检
     probe: Option<serde_json::Value>,
     last_seek: Option<f64>,
@@ -344,6 +351,7 @@ fn main() {
     let check = args.iter().any(|a| a == "--check");
     let auto_login = args.iter().any(|a| a == "--login");
     let gamepad = args.iter().any(|a| a == "--gamepad");
+    let live = args.iter().any(|a| a == "--live");
 
     // ---- 设置 + 「上次看到」
     let data_root = std::env::current_dir().unwrap_or_default().join("data");
@@ -416,6 +424,13 @@ fn main() {
             gifa_shell::eval_chrome("document.getElementById('btnLogin').click()");
         });
     }
+    if live {
+        UI.with(|ui| {
+            let mut ui = ui.borrow_mut();
+            start_live(&mut ui, &data_root);
+        });
+    }
+
     gifa_shell::start_ticks(250);
     gifa_shell::run();
 
@@ -483,10 +498,34 @@ fn on_tick() {
         if std::env::args().any(|a| a == "--overlay-test") {
             overlay_test_step(&mut ui);
         }
+        // 2.55) 实战：热键事件 → 动作
+        let hk_events = ui
+            .hotkeys
+            .as_ref()
+            .map(|h| h.drain())
+            .unwrap_or_default();
+        for ev in hk_events {
+            let (act, phase) = match ev {
+                gifa_input::HotkeyEvent::Fire(a) => (a, None),
+                gifa_input::HotkeyEvent::Down(a) => (a, Some("down")),
+                gifa_input::HotkeyEvent::Up(a) => (a, Some("up")),
+            };
+            live_log(
+                &mut ui,
+                "hotkey",
+                &format!("{} {} {:?}", act.key(), act.label(), phase),
+            );
+            dispatch_action(&mut ui, act, phase);
+        }
+        if ui.live_log.is_some() {
+            live_report(&mut ui);
+        }
+
         // 2.6) 识别：刷新采样窗 + 收事件 → 叠加层
         if ui.vision_box.is_some() {
-            let box_ = vision_box(&ui);
-            if let Some(shared) = ui.vision_box.as_ref() {
+            let box_ = vision_box(&mut ui);
+            let shared = ui.vision_box.clone();
+            if let Some(shared) = shared {
                 if let Ok(mut guard) = shared.lock() {
                     *guard = box_;
                 }
@@ -501,6 +540,12 @@ fn on_tick() {
         }
         if std::env::args().any(|a| a == "--ui-test") {
             ui_test_step(&mut ui);
+        }
+        if std::env::args().any(|a| a == "--live") {
+            live_step(&mut ui);
+        }
+        if std::env::args().any(|a| a == "--drag-test-live") {
+            drag_test_step(&mut ui);
         }
 
         if std::env::args().any(|a| a == "--calib-hold") {
@@ -870,6 +915,9 @@ fn disc_labels(ui: &UiState) -> BTreeMap<String, String> {
 }
 
 fn show_disc(ui: &mut UiState, highlight: Option<String>, hold: bool) {
+    if ui.live_log.is_some() && !ui.disc_shown {
+        live_log(ui, "disc", "圆盘弹出（按住 L3）");
+    }
     ui.disc_shown = true;
     let labels = disc_labels(ui);
     let action = highlight
@@ -886,6 +934,9 @@ fn show_disc(ui: &mut UiState, highlight: Option<String>, hold: bool) {
 fn hide_disc(ui: &mut UiState) {
     if !ui.disc_shown {
         return;
+    }
+    if ui.live_log.is_some() {
+        live_log(ui, "disc", "圆盘收起");
     }
     ui.disc_shown = false;
     gifa_shell::disc_update(gifa_shell::DiscState {
@@ -946,6 +997,258 @@ fn dispatch_action(ui: &mut UiState, action: Action, phase: Option<&str>) {
             ui.logs.push(format!("鼠标穿透：{next}"));
         }
     }
+}
+
+/// 实战模式：视频矩形就绪后把叠加层摆到 ROI 上，并启动识别管线
+fn live_step(ui: &mut UiState) {
+    if ui.vision_box.is_some() {
+        return;
+    }
+    if ui.video_rect.is_none() {
+        // 页面还在加载：每 tick 请求一次，拿到就停
+        gifa_shell::player_command(PlayerCommand::VideoRect);
+        return;
+    }
+    let Some(b) = vision_box(ui) else { return };
+    let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
+    start_vision(ui);
+    live_log(
+        ui,
+        "vision",
+        &format!("识别启动，采样窗 ({},{}) {}×{}", b.x, b.y, b.w, b.h),
+    );
+}
+
+/// 每 5 秒把识别/手柄/热键的累计量写进日志（判断"到底有没有在工作"）
+fn live_report(ui: &mut UiState) {
+    let now = Instant::now();
+    let due = ui
+        .live_last_report
+        .map(|t| now.duration_since(t).as_secs_f64() >= 5.0)
+        .unwrap_or(true);
+    if !due {
+        return;
+    }
+    ui.live_last_report = Some(now);
+    let frames = ui.vision_count;
+    let cap = if frames > 0 {
+        ui.vision_capture_sum / frames as f64
+    } else {
+        0.0
+    };
+    let det = if frames > 0 {
+        ui.vision_detect_sum / frames as f64
+    } else {
+        0.0
+    };
+    let last = ui.vision_last;
+    let arrow = last.and_then(|e| e.result.arrow);
+    let view = last.and_then(|e| e.result.view);
+    let cyan = last.map(|e| e.result.cyan_frac).unwrap_or(0.0);
+    let pad = match gifa_input::xinput::connected() {
+        Some(slot) => format!("手柄槽位{slot}"),
+        None => "无手柄".to_string(),
+    };
+    let (fg_class, fg_full) = gifa_shell::foreground_info();
+    if ui.covered_logged {
+        ui.covered_logged = false;
+        let (cls, full) = gifa_shell::foreground_info();
+        live_log(
+            ui,
+            "cover",
+            &format!(
+                "浮窗被盖住 → 识别暂停。{} 前台={cls}{}",
+                ui.covered_detail,
+                if full {
+                    "（铺满屏幕：独占全屏。请把游戏改成「窗口化」或「无边框窗口」）"
+                } else {
+                    ""
+                }
+            ),
+        );
+    }
+    live_log(
+        ui,
+        "stat",
+        &format!(
+            "识别 {frames} 帧（截帧 {cap:.1}ms/检测 {det:.1}ms）arrow={arrow:?} view={view:?} cyan={cyan:.4} 圆盘={} {pad} 前台={fg_class}{}",
+            ui.disc_shown,
+            if fg_full { "（疑似独占全屏）" } else { "" }
+        ),
+    );
+}
+
+// ---------------------------------------------------------------- 实战模式
+
+/// 写一行实战日志（同时打到 stdout，方便当场看）
+fn live_log(ui: &mut UiState, kind: &str, detail: &str) {
+    let line = format!(
+        "[{}] {kind} {detail}",
+        chrono_like_now()
+    );
+    println!("[live] {line}");
+    if let Some(f) = ui.live_log.as_mut() {
+        use std::io::Write;
+        let _ = writeln!(f, "{line}");
+        let _ = f.flush();
+    }
+}
+
+/// 不引 chrono：用系统时间算时分秒
+fn chrono_like_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let t = secs % 86400;
+    format!("{:02}:{:02}:{:02}", t / 3600, (t % 3600) / 60, t % 60)
+}
+
+/// 实战模式：文档里那套配置全开 —— 识别 + 叠加层 + 手柄 + 热键 + 日志
+fn start_live(ui: &mut UiState, log_dir: &std::path::Path) {
+    let _ = std::fs::create_dir_all(log_dir);
+    match std::fs::File::create(log_dir.join("live.log")) {
+        Ok(f) => {
+            ui.live_log = Some(f);
+            live_log(ui, "boot", "实战模式启动");
+        }
+        Err(e) => println!("[live] 日志文件创建失败：{e}"),
+    }
+
+    // 手柄
+    let (tx, rx) = std::sync::mpsc::channel();
+    match gifa_input::xinput::start_polling(tx) {
+        Ok(_) => {
+            GP.with(|g| *g.borrow_mut() = Some(rx));
+            live_log(ui, "gamepad", "XInput 轮询已启动");
+        }
+        Err(e) => live_log(ui, "gamepad", &format!("不可用：{e}")),
+    }
+
+    // 热键
+    match gifa_input::hotkey::Hotkeys::install() {
+        Ok(mut mgr) => {
+            let map = ui
+                .store
+                .as_ref()
+                .map(|s| s.hotkeys.clone())
+                .unwrap_or_default();
+            let report = mgr.apply(&map);
+            live_log(
+                ui,
+                "hotkey",
+                &format!("注册 {} 条，失败 {}", report.registered, report.failures.len()),
+            );
+            for f in &report.failures {
+                live_log(
+                    ui,
+                    "hotkey",
+                    &format!("失败 {} → {:?}", f.accelerator, f.reason),
+                );
+            }
+            ui.hotkeys = Some(mgr);
+        }
+        Err(e) => live_log(ui, "hotkey", &format!("安装失败：{e}")),
+    }
+
+    // 识别：等视频矩形就绪后由 tick 拉起（vision_box 需要它）
+    ui.logs.push("实战模式：等待视频矩形后启动识别".into());
+}
+
+// ---------------------------------------------------------------- 拖拽实测
+
+/// 复现"拖标题栏不动"：先点一次激活，再按住标题栏往右下拖 120×90。
+fn drag_test_step(ui: &mut UiState) {
+    if ui.im_started.is_none() {
+        ui.im_started = Some(Instant::now());
+        return;
+    }
+    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    match ui.im_phase {
+        0 if el > 1.0 => {
+            gifa_shell::reassert_topmost();
+            let s = gifa_shell::snapshot().unwrap();
+            println!(
+                "[drag] topmost={} rect=({},{},{}x{}) hit=({:?})",
+                s.topmost,
+                s.float_rect.x,
+                s.float_rect.y,
+                s.float_rect.w,
+                s.float_rect.h,
+                gifa_shell::classify_at(s.float_rect.x + 300, s.float_rect.y + 15)
+            );
+            ui.im_before = Some((s.float_rect.x, s.float_rect.y, 0, 0));
+            // 先把窗口激活（类似用户先点一下），再看点击能否到达页面
+            gifa_shell::focus_float();
+            std::thread::sleep(Duration::from_millis(120));
+            // 标题栏中间
+            let tx = s.float_rect.x + s.float_rect.w / 2;
+            let ty = s.float_rect.y + 15;
+            gifa_shell::win32::move_cursor(tx, ty);
+            ui.im_phase = 1;
+        }
+        1 if el > 1.3 => {
+            // 第一次点击：激活窗口（Windows 会吃掉这一次）
+            gifa_shell::win32::click_left(true);
+            gifa_shell::win32::click_left(false);
+            ui.im_phase = 2;
+        }
+        2 if el > 1.8 => {
+            let (bx, by) = ui.im_before.map(|b| (b.0, b.1)).unwrap_or((0, 0));
+            let (float_raw, chrome_raw) = gifa_shell::snapshot()
+                .map(|s| (s.float as usize, s.chrome as usize))
+                .unwrap_or((0, 0));
+            gifa_shell::win32::click_left(true);
+            // 拖动：分步移动，让拖拽线程跟上
+            let (mx, my) = gifa_shell::win32::cursor_pos();
+            for i in 1..=12 {
+                let nx = mx + i * 10;
+                let ny = my + i * 8;
+                gifa_shell::win32::move_cursor(nx, ny);
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            gifa_shell::win32::click_left(false);
+            std::thread::sleep(Duration::from_millis(150));
+            let s = gifa_shell::snapshot().unwrap();
+            let dx = s.float_rect.x - bx;
+            let dy = s.float_rect.y - by;
+            let moved = dx.abs() >= 80 && dy.abs() >= 50;
+            let hit = gifa_shell::classify_at(bx + 300, by + 15);
+            let hwnd_at = gifa_shell::window_at(bx + 300, by + 15);
+            ui.ui_rows.push((
+                "拖动标题栏 → 窗口跟手移动".into(),
+                moved,
+                format!(
+                    "位移 ({dx},{dy})，窗口@({bx},{by}) {fw}×{fh} 可见={vis} 命中={hit:?} hwnd=0x{hwnd_at:X} float=0x{float_raw:X} chrome=0x{chrome_raw:X}",
+                    fw = gifa_shell::snapshot().map(|s| s.float_rect.w).unwrap_or(0),
+                    fh = gifa_shell::snapshot().map(|s| s.float_rect.h).unwrap_or(0),
+                    vis = gifa_shell::snapshot().map(|s| s.chrome_visible).unwrap_or(false),
+                ),
+            ));
+            report_drag(ui);
+            ui.im_phase = 3;
+            ui.im_started = None;
+        }
+        _ => {}
+    }
+}
+
+fn report_drag(ui: &UiState) {
+    println!();
+    println!("============ 拖拽实测 ============");
+    for (i, (name, ok, detail)) in ui.ui_rows.iter().enumerate() {
+        println!("[{}] {:<26} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+    }
+    let pass = ui.ui_rows.iter().filter(|(_, ok, _)| *ok).count();
+    println!("----------------------------------");
+    println!("RESULT {pass}/{}", ui.ui_rows.len());
+    println!("==================================");
+    println!();
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_millis(600));
+        gifa_shell::close();
+    });
 }
 
 // ---------------------------------------------------------------- 界面自检
@@ -1071,8 +1374,21 @@ fn report_ui(ui: &UiState) {
 // ---------------------------------------------------------------- 识别管线
 
 /// 当前采样窗（屏幕坐标）：视频位置 → 去掉黑边 → 当前布局的 ROI
-fn vision_box(ui: &UiState) -> Option<gifa_vision::SampleBox> {
+fn vision_box(ui: &mut UiState) -> Option<gifa_vision::SampleBox> {
     let s = gifa_shell::snapshot()?;
+    // 浮窗被盖住时，截屏截到的是压在上面的窗口（比如独占全屏的游戏），
+    // 这时候识别出来的"方位"是假的 —— 直接暂停，宁可不报。
+    let probe_x = s.float_rect.x + s.client.0 / 2;
+    let probe_y = s.float_rect.y + s.stage.y + s.stage.h / 2;
+    if !ui.synth && !gifa_shell::float_on_top_at(probe_x, probe_y) {
+        ui.covered_logged = true;
+        ui.covered_detail = format!(
+            "({probe_x},{probe_y}) 命中={:?} hwnd=0x{:X}",
+            gifa_shell::classify_at(probe_x, probe_y),
+            gifa_shell::window_at(probe_x, probe_y)
+        );
+        return None;
+    }
     if ui.synth {
         // 合成模式：没有 <video>，把整个舞台当"视频"，ROI 用当前布局
         let roi = ui.layouts.active().roi;

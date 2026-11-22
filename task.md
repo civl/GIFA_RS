@@ -479,6 +479,7 @@ gifa-rs/
 - **验收**：`cargo run -p shell-demo -- --hotkey-test`（6 项，见 `docs/HOTKEYS.md`）
 - **实测**：`RegisterHotKey`(Alt+Space)、钩子键盘(F8 down/up)、rearm 后仍生效、冲突交换
   在 22:2x 的一轮里全部真实 PASS；之后前台变成高完整性窗口，注入输入不再到达，自检降级为 SKIP
+- **实战（22 日 00:46）**：游戏前台时 `Alt+I` 按两次触发两次（去掉了自动重复）；11 条热键全部注册成功
 - **关键发现（必须记住）**：**UIPI —— 低级钩子只能收到"前台窗口完整性级别 ≤ 自己"的按键**。
   游戏以管理员运行时，非提权的 GIFA 收不到任何热键（原版因此要求 `requireAdministrator`）。
   这把 M12 的"清单提权"从"建议"变成了"必须"，也解释了为什么自检在提权终端前台时会全 SKIP
@@ -501,7 +502,7 @@ gifa-rs/
 - **验收**：`cargo run -p gifa-demo -- --gamepad-test` → **6/6**
       （圆盘出现 / 高亮 e / 回中触发 / 松开消失 / 快速松开不误触 / XInput 可用）；
       截图 `apps/gifa-demo/docs/m5-disc.png`
-- **待实机**：插实体手柄跑 `--gamepad`，按住 L3 弹盘、右摇杆选方向、松开触发
+- **实战（22 日 00:46）**：XInput 槽位 0，按住 L3 弹盘 4 次、松开收起 4 次，日志全部对上 ✅
 
 ### M6 浮窗 UI 移植 `8d` [P0] ✅ 完成（5/5 自检）
 
@@ -523,6 +524,7 @@ gifa-rs/
   2. 自动隐藏条件写反（`!paused` 应为 `paused`）
   3. `#urlbar` 默认可见（原版是启动时收起的）→ 舞台一开始被顶下去 39px
   4. Rust 每帧推 `showUrlbar:false` 把 URL 条压回去 → 页面自己管
+- **实战（22 日）**：标题栏拖动修好（见 `docs/LIVE-TEST.md` 的 2/3/4 条）
 - **已知限制**：设置按钮只弹 toast（启动器面板未做）；进度条悬停预览未做（原版也没有）
 
 ### M7 沉浸与鼠标避让 `4d` [P1] ✅ 完成（6/6 自检）
@@ -630,6 +632,18 @@ gifa-rs/
 - **锚点**：`main.js` 的 `settingsApi`/`loadSettings`/`migrateLegacyData`
 - **验收**：`cargo run -p gifa-demo -- --settings-test` → **7/7**
 - **已知限制**：demo 仍用 `cwd/data`；登录态不在搬迁范围（需重新扫码）
+
+### 实战联调（2026-11-22）✅ 功能可用
+
+第一次把整套放进真实游戏跑，抓到并修掉 7 个只在真实环境暴露的问题，详见 `gifa-rs/docs/LIVE-TEST.md`：
+
+1. 独占全屏不可覆盖（要求窗口化/无边框）
+2. `-webkit-app-region: drag` 在 WebView2 里吞掉标题栏鼠标事件
+3. `WS_EX_NOACTIVATE` 宿主下 WebView2 不派发 DOM 鼠标事件（第一次点击只激活）
+4. 拖动区坐标漏加窗口原点
+5. `RegisterHotKey` 自动重复（8 秒触发 10 次）
+6. 被遮挡时截屏截到"上面的窗口"，报出假方位
+7. 置顶被游戏抢走，需无条件重新抬起
 
 ### M12 打包与分发 `5d` [P0]
 

@@ -123,6 +123,18 @@ pub fn available() -> bool {
     load_get_state().is_some()
 }
 
+/// 当前连着的手柄槽位（没有则 None）——只查状态，不读整帧
+pub fn connected() -> Option<u32> {
+    let get_state = load_get_state()?;
+    for slot in 0..4u32 {
+        let mut state = XInputState::default();
+        if unsafe { get_state(slot, &mut state) } == ERROR_SUCCESS {
+            return Some(slot);
+        }
+    }
+    None
+}
+
 /// 轮询一次：返回第一个连着的手柄的槽位与帧
 pub fn poll_once(get_state: GetStateFn) -> Option<(u32, Frame)> {
     for slot in 0..4u32 {

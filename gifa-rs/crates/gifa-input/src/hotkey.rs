@@ -71,6 +71,29 @@ thread_local! {
 }
 
 /// TLS 在进程退出阶段可能已被销毁，WndProc/Drop 里一律走 `try_with`
+/// 同一动作的重复抑制窗口：比自动重复间隔大、比人手两次按键慢。
+/// 原版对钩子键用"按下集合"去重；`RegisterHotKey` 拿不到 keyup，只能按时间。
+const REPEAT_GUARD: std::time::Duration = std::time::Duration::from_millis(300);
+
+thread_local! {
+    static LAST_FIRE: RefCell<std::collections::HashMap<Action, std::time::Instant>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+fn repeat_allowed(action: Action) -> bool {
+    let now = std::time::Instant::now();
+    LAST_FIRE.with(|m| {
+        let mut m = m.borrow_mut();
+        if let Some(t) = m.get(&action) {
+            if now.duration_since(*t) < REPEAT_GUARD {
+                return false;
+            }
+        }
+        m.insert(action, now);
+        true
+    })
+}
+
 fn with_sink<R>(f: impl FnOnce(&mut Sink) -> R) -> Option<R> {
     SINK.try_with(|s| f(&mut s.borrow_mut())).ok()
 }
@@ -371,7 +394,11 @@ extern "system" fn hotkey_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
         with_sink(|s| {
             if let Some((tx, map)) = s.as_ref() {
                 if let Some(action) = map.get(&id) {
-                    let _ = tx.send(HotkeyEvent::Fire(*action));
+                    // RegisterHotKey 按住会连续发 WM_HOTKEY（Windows 自动重复）。
+                    // 按键类动作必须去重，否则按住 Alt+I 会一秒切十次沉浸。
+                    if repeat_allowed(*action) {
+                        let _ = tx.send(HotkeyEvent::Fire(*action));
+                    }
                 }
             }
         });

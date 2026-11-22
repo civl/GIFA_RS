@@ -88,7 +88,11 @@ button {
   padding: 0 4px 0 10px;
   background: var(--bar);
   border-bottom: 1px solid var(--line);
-  -webkit-app-region: drag;
+  /* 原版这里是 `-webkit-app-region: drag`（Electron 的窗口拖动）。
+     WebView2 里没有宿主实现这个属性，但 Blink 仍然会把该区域的鼠标事件吞掉 ——
+     结果是标题栏点下去既不能拖窗口、也收不到 mousedown。
+     本项目改成 JS 自己驱动拖动，所以这里必须是 no-drag。 */
+  -webkit-app-region: no-drag;
   overflow: hidden;
 }
 
