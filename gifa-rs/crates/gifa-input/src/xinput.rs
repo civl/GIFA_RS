@@ -107,8 +107,10 @@ fn load_get_state() -> Option<GetStateFn> {
             let Ok(lib) = LoadLibraryW(PCWSTR(wide.as_ptr())) else {
                 continue;
             };
-            let Some(addr) = GetProcAddress(lib, windows::core::PCSTR(c"XInputGetState".as_ptr() as *const u8))
-            else {
+            let Some(addr) = GetProcAddress(
+                lib,
+                windows::core::PCSTR(c"XInputGetState".as_ptr() as *const u8),
+            ) else {
                 continue;
             };
             let f: GetStateFn = std::mem::transmute(addr);
@@ -153,10 +155,7 @@ pub fn poll_once(get_state: GetStateFn) -> Option<(u32, Frame)> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum GamepadEvent {
     /// `slot` = None 表示没插手柄
-    Frame {
-        slot: Option<u32>,
-        frame: Frame,
-    },
+    Frame { slot: Option<u32>, frame: Frame },
 }
 
 /// 后台 16ms 轮询。只有"帧签名变了"才推一条，静默时不产生消息。
@@ -213,11 +212,7 @@ mod tests {
 
     #[test]
     fn dpad_maps_to_12_to_15() {
-        let b = button_indices(
-            XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_RIGHT,
-            0,
-            0,
-        );
+        let b = button_indices(XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_RIGHT, 0, 0);
         assert!(b[12] && b[15]);
         assert!(!b[13] && !b[14]);
     }

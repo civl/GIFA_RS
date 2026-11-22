@@ -98,7 +98,10 @@ mod tests {
         assert!(!h.is_active());
         assert!(h.press("keyboard"));
         assert!(!h.press("keyboard"), "重复按下不算变化");
-        assert!(!h.press("gamepad"), "已经有来源按着，第二个来源不改变生效状态");
+        assert!(
+            !h.press("gamepad"),
+            "已经有来源按着，第二个来源不改变生效状态"
+        );
         assert!(h.is_active());
         assert_eq!(h.effective_rate(1.0, 2.0), 2.0);
         // 先松键盘，手柄还按着 → 仍然生效

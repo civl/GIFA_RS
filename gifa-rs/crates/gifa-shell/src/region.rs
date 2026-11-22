@@ -119,7 +119,9 @@ mod tests {
     fn clamp_drops_offscreen_parts() {
         let r = RectI::new(-10, -10, 20, 20).clamp_inside(100, 100).unwrap();
         assert_eq!(r, RectI::new(0, 0, 10, 10));
-        assert!(RectI::new(200, 200, 10, 10).clamp_inside(100, 100).is_none());
+        assert!(RectI::new(200, 200, 10, 10)
+            .clamp_inside(100, 100)
+            .is_none());
     }
 
     #[test]

@@ -286,8 +286,22 @@ pub fn analyze_with(
             sum_x += px as f64;
             sum_y += py as f64;
             for k in 0..4 {
-                let nx = px + if k == 0 { step_i } else if k == 1 { -step_i } else { 0 };
-                let ny = py + if k == 2 { step_i } else if k == 3 { -step_i } else { 0 };
+                let nx = px
+                    + if k == 0 {
+                        step_i
+                    } else if k == 1 {
+                        -step_i
+                    } else {
+                        0
+                    };
+                let ny = py
+                    + if k == 2 {
+                        step_i
+                    } else if k == 3 {
+                        -step_i
+                    } else {
+                        0
+                    };
                 if nx < 0 || ny < 0 || nx >= size_i || ny >= size_i {
                     continue;
                 }
@@ -478,7 +492,8 @@ pub fn analyze_with(
                 for k in (j + 1)..corners.len() {
                     let trio = [corners[i], corners[j], corners[k]];
                     for m in 0..3 {
-                        let others: Vec<Corner> = (0..3).filter(|x| *x != m).map(|x| trio[x]).collect();
+                        let others: Vec<Corner> =
+                            (0..3).filter(|x| *x != m).map(|x| trio[x]).collect();
                         let r = eval_triple(&trio[m], &others[0], &others[1], params);
                         if chosen.as_ref().is_none_or(|c| r.score > c.score) {
                             chosen = Some(r);
@@ -532,7 +547,10 @@ pub fn analyze_with(
     let rad_conf = ((ch.rad_margin + 0.08) / 0.3).clamp(0.0, 1.0);
     let size_conf = (cover / 0.05).clamp(0.0, 1.0);
     let flat_conf = ((ch.nose_flat + 0.2) / 1.2).clamp(0.0, 1.0);
-    let conf = (ang_conf * 0.3 + rad_conf * 0.24 + size_conf * 0.18 + ch.rad_sym * 0.16
+    let conf = (ang_conf * 0.3
+        + rad_conf * 0.24
+        + size_conf * 0.18
+        + ch.rad_sym * 0.16
         + flat_conf * 0.12)
         .clamp(0.0, 1.0);
 
@@ -689,7 +707,11 @@ mod tests {
         // 画在罗盘 0/90/180/270，算法给 atan2 角，转成罗盘后应一致
         for theta in [0.0, 90.0, 180.0, 270.0] {
             let r = analyze_dart(theta);
-            assert!(r.valid, "theta={theta} 应判有效，实际 corners={:?}", r.corners);
+            assert!(
+                r.valid,
+                "theta={theta} 应判有效，实际 corners={:?}",
+                r.corners
+            );
             let got = to_compass(r.angle);
             let diff = ang_diff(got, theta).abs();
             assert!(
@@ -710,11 +732,20 @@ mod tests {
         let c = (size as f64 - 1.0) / 2.0;
         for a in [160.0f64, 250.0, 330.0] {
             let rad = a * std::f64::consts::PI / 180.0;
-            let (bx, by) = (c + rad.sin() * size as f64 * 0.4, c - rad.cos() * size as f64 * 0.4);
+            let (bx, by) = (
+                c + rad.sin() * size as f64 * 0.4,
+                c - rad.cos() * size as f64 * 0.4,
+            );
             for dy in -6..=6 {
                 for dx in -6..=6 {
                     if dx * dx + dy * dy <= 36 {
-                        put(&mut frame, size, bx + dx as f64, by + dy as f64, (34, 200, 232));
+                        put(
+                            &mut frame,
+                            size,
+                            bx + dx as f64,
+                            by + dy as f64,
+                            (34, 200, 232),
+                        );
                     }
                 }
             }
@@ -722,6 +753,9 @@ mod tests {
         let mut ws = ArrowWorkspace::default();
         let r = analyze(&frame, size, 1, &mut ws);
         assert!(r.valid);
-        assert!(ang_diff(to_compass(r.angle), 45.0).abs() < 8.0, "被干扰带偏：{r:?}");
+        assert!(
+            ang_diff(to_compass(r.angle), 45.0).abs() < 8.0,
+            "被干扰带偏：{r:?}"
+        );
     }
 }

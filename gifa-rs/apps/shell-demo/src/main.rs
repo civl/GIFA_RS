@@ -14,8 +14,8 @@ use std::ffi::c_void;
 use std::time::{Duration, Instant};
 
 use gifa_shell::{probe, win32, Bounds, ShellConfig};
-use windows::Win32::UI::Input::KeyboardAndMouse::{VK_F8, VK_MENU, VK_SPACE};
 use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::Input::KeyboardAndMouse::{VK_F8, VK_MENU, VK_SPACE};
 
 const W: i32 = 896;
 const H: i32 = 568;
@@ -42,11 +42,24 @@ fn main() {
         player_tx: None,
         chrome_tx: None,
         interactive: true,
-        tick: if selftest || drag_test || hotkey_test { Some(on_tick) } else { None },
+        tick: if selftest || drag_test || hotkey_test {
+            Some(on_tick)
+        } else {
+            None
+        },
     })
     .expect("创建外壳失败");
 
-    println!("[demo] 外壳已创建 {}×{}；{}", W, H, if selftest { "2.6s 后自检" } else { "--hold 模式" });
+    println!(
+        "[demo] 外壳已创建 {}×{}；{}",
+        W,
+        H,
+        if selftest {
+            "2.6s 后自检"
+        } else {
+            "--hold 模式"
+        }
+    );
 
     if selftest {
         gifa_shell::post_tick(2600);
@@ -142,11 +155,8 @@ fn on_tick() {
     let s1 = gifa_shell::snapshot().expect("resize 后拿不到快照");
     let grew = s1.client.0 >= new_w && s1.client.1 >= new_h;
     let followed = s1.chrome_rect == s1.float_rect;
-    let region_updated = s1
-        .region
-        .iter()
-        .any(|r| r.w == s1.client.0 && r.y == 0)
-        && s1.stage.w == s1.client.0;
+    let region_updated =
+        s1.region.iter().any(|r| r.w == s1.client.0 && r.y == 0) && s1.stage.w == s1.client.0;
     let ok5 = grew && followed && region_updated;
     report.push((
         "缩放后联动 + 区域重算".into(),
@@ -210,7 +220,9 @@ static DRAG_PHASE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::
 fn drag_test() {
     match DRAG_PHASE.fetch_add(1, std::sync::atomic::Ordering::SeqCst) {
         0 => {
-            let Some(s) = gifa_shell::snapshot() else { return };
+            let Some(s) = gifa_shell::snapshot() else {
+                return;
+            };
             DRAG_BEFORE.with(|c| {
                 *c.borrow_mut() = Some((s.client.0, s.client.1));
             });
@@ -240,7 +252,11 @@ fn simulate_drag(grip: (i32, i32)) {
     };
     use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
 
-    fn send_mouse(dx: i32, dy: i32, flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS) {
+    fn send_mouse(
+        dx: i32,
+        dy: i32,
+        flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_FLAGS,
+    ) {
         let inp = INPUT {
             r#type: INPUT_MOUSE,
             Anonymous: INPUT_0 {
@@ -402,7 +418,8 @@ fn hotkey_test() {
             1 if el > 1.2 => {
                 let ok = has_event(&h.events, "Fire(TogglePlay)");
                 let detail = format!("{:?}", h.events);
-                h.rows.push(("RegisterHotKey：Alt+Space".into(), ok, detail));
+                h.rows
+                    .push(("RegisterHotKey：Alt+Space".into(), ok, detail));
                 h.events.clear();
                 send_key(VK_F8.0, true);
                 h.phase = 2;
@@ -475,7 +492,9 @@ fn hotkey_test() {
             if let Some(mgr) = h.mgr.as_mut() {
                 // seekBack 现在是 Mouse4；把它绑到 togglePlay 占着的 Alt+Space → 两者交换
                 let before_back = mgr.map().get("seekBack").cloned().unwrap_or_default();
-                let ok = mgr.set_binding(gifa_core::Action::SeekBack, "Alt+Space").is_ok();
+                let ok = mgr
+                    .set_binding(gifa_core::Action::SeekBack, "Alt+Space")
+                    .is_ok();
                 let after_back = mgr.map().get("seekBack").cloned().unwrap_or_default();
                 let after_play = mgr.map().get("togglePlay").cloned().unwrap_or_default();
                 let swapped = ok && after_back == "Alt+Space" && after_play == before_back;
@@ -489,12 +508,17 @@ fn hotkey_test() {
             // 注入的输入完全没到达（键盘钩子 0 次调用且热键也没触发）：
             // 说明前台窗口的完整性级别高于本进程（UIPI），这是环境限制而非代码问题。
             let env_blocked = gifa_input::hook::kb_calls() == 0
-                && !h.rows.iter().any(|(n, ok, _)| *ok && n.contains("RegisterHotKey"));
+                && !h
+                    .rows
+                    .iter()
+                    .any(|(n, ok, _)| *ok && n.contains("RegisterHotKey"));
             if env_blocked {
                 for row in h.rows.iter_mut() {
                     if !row.1 && !row.0.contains("冲突交换") {
                         row.1 = true;
-                        row.2 = "SKIP：注入输入未到达（前台窗口完整性级别更高，见 docs/HOTKEYS.md）".into();
+                        row.2 =
+                            "SKIP：注入输入未到达（前台窗口完整性级别更高，见 docs/HOTKEYS.md）"
+                                .into();
                     }
                 }
             }
@@ -512,7 +536,13 @@ fn hotkey_test() {
                 gifa_input::hook::last_mouse_event()
             );
             for (i, (name, ok, detail)) in h.rows.iter().enumerate() {
-                println!("[{}] {:<26} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+                println!(
+                    "[{}] {:<26} {}  {}",
+                    i + 1,
+                    name,
+                    if *ok { "PASS" } else { "FAIL" },
+                    detail
+                );
             }
             let pass = h.rows.iter().filter(|(_, ok, _)| *ok).count();
             println!("-------------------------------------");
@@ -559,7 +589,11 @@ fn send_key(vk: u16, down: bool) {
             ki: KEYBDINPUT {
                 wVk: VIRTUAL_KEY(vk),
                 wScan: 0,
-                dwFlags: if down { Default::default() } else { KEYEVENTF_KEYUP },
+                dwFlags: if down {
+                    Default::default()
+                } else {
+                    KEYEVENTF_KEYUP
+                },
                 time: 0,
                 dwExtraInfo: 0,
             },
@@ -567,10 +601,9 @@ fn send_key(vk: u16, down: bool) {
     };
     let n = unsafe { SendInput(&[inp], std::mem::size_of::<INPUT>() as i32) };
     if n == 0 {
-        println!(
-            "[hotkey] 键盘注入失败 vk={vk} GetLastError={}",
-            unsafe { windows::Win32::Foundation::GetLastError().0 }
-        );
+        println!("[hotkey] 键盘注入失败 vk={vk} GetLastError={}", unsafe {
+            windows::Win32::Foundation::GetLastError().0
+        });
     }
 }
 
@@ -586,7 +619,11 @@ fn send_left(down: bool) {
                 dx: 0,
                 dy: 0,
                 mouseData: 0,
-                dwFlags: if down { MOUSEEVENTF_LEFTDOWN } else { MOUSEEVENTF_LEFTUP },
+                dwFlags: if down {
+                    MOUSEEVENTF_LEFTDOWN
+                } else {
+                    MOUSEEVENTF_LEFTUP
+                },
                 time: 0,
                 dwExtraInfo: 0,
             },

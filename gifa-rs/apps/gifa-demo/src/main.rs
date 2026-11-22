@@ -121,6 +121,8 @@ struct UiState {
     view: gifa_vision::ViewState,
     /// --game：采游戏窗口（真机验证）。
     game_rect: Option<gifa_shell::RectI>,
+    /// 数据目录（startup.log 写在这下面）
+    data_root: Option<std::path::PathBuf>,
     /// 启动时刻（用来跳过启动期间的 bounds 抖动）
     boot_at: Option<Instant>,
     /// 是否已经做过自动定心
@@ -221,7 +223,10 @@ fn run_settings_test() {
     rows.push((
         "数据目录三种模式".into(),
         ok_dir,
-        format!("dev={:?} portable={:?} installed={:?}", dev.mode, portable.mode, installed.mode),
+        format!(
+            "dev={:?} portable={:?} installed={:?}",
+            dev.mode, portable.mode, installed.mode
+        ),
     ));
 
     // 2) 丢一份**原版 Electron** 的 settings.json 进去
@@ -256,7 +261,10 @@ fn run_settings_test() {
         && s.pinned
         && (s.opacity - 0.9).abs() < 1e-9
         && (s.volume - 66.0).abs() < 1e-9
-        && s.hotkeys.get("togglePlay").map(|v| v == "Alt+J").unwrap_or(false)
+        && s.hotkeys
+            .get("togglePlay")
+            .map(|v| v == "Alt+J")
+            .unwrap_or(false)
         && s.last_text == "BV1xx411c7mD"
         && s.last_part == 3;
     rows.push((
@@ -264,13 +272,24 @@ fn run_settings_test() {
         ok_legacy,
         format!(
             "bounds=({:?},{:?},{},{}) hotkey={:?} last={} P{}",
-            s.bounds.x, s.bounds.y, s.bounds.width, s.bounds.height,
-            s.hotkeys.get("togglePlay"), s.last_text, s.last_part
+            s.bounds.x,
+            s.bounds.y,
+            s.bounds.width,
+            s.bounds.height,
+            s.hotkeys.get("togglePlay"),
+            s.last_text,
+            s.last_part
         ),
     ));
 
     // 3) bearing.rois / roiBy → 命名布局（种子数据被跳过）
-    let custom: Vec<_> = s.bearing.layouts.layouts.iter().filter(|l| !l.built_in).collect();
+    let custom: Vec<_> = s
+        .bearing
+        .layouts
+        .layouts
+        .iter()
+        .filter(|l| !l.built_in)
+        .collect();
     let ok_migrate = custom.len() >= 2
         && !custom.iter().any(|l| (l.roi.cx - 0.0875).abs() < 1e-6)
         && store.migrated.iter().any(|m| m.contains("bearing"));
@@ -286,10 +305,14 @@ fn run_settings_test() {
     let text = std::fs::read_to_string(data.join("settings.json")).unwrap_or_default();
     let v: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
     let tmp_left = std::fs::read_dir(&data)
-        .map(|d| d.filter_map(|e| e.ok()).any(|e| e.file_name().to_string_lossy().ends_with(".tmp")))
+        .map(|d| {
+            d.filter_map(|e| e.ok())
+                .any(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+        })
         .unwrap_or(true);
     let ok_write = saved
-        && v.get("configVersion").and_then(|x| x.as_u64()) == Some(gifa_store::CONFIG_VERSION as u64)
+        && v.get("configVersion").and_then(|x| x.as_u64())
+            == Some(gifa_store::CONFIG_VERSION as u64)
         && v.get("futureField").is_some()
         && v.get("lastPart").and_then(|x| x.as_u64()) == Some(4)
         && !tmp_left;
@@ -335,13 +358,23 @@ fn run_settings_test() {
     rows.push((
         "重复载入不重复迁移".into(),
         ok_idem,
-        format!("布局数 {} → {}", before, again.settings().bearing.layouts.layouts.len()),
+        format!(
+            "布局数 {} → {}",
+            before,
+            again.settings().bearing.layouts.layouts.len()
+        ),
     ));
 
     println!();
     println!("============ 设置与迁移自检 ============");
     for (i, (name, ok, detail)) in rows.iter().enumerate() {
-        println!("[{}] {:<28} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<28} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("----------------------------------------");
@@ -382,7 +415,11 @@ fn main() {
     let boot = Instant::now();
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version") {
-        println!("GIFA {}（构建 {}）", env!("CARGO_PKG_VERSION"), env!("GIFA_MANIFEST_LEVEL"));
+        println!(
+            "GIFA {}（构建 {}）",
+            env!("CARGO_PKG_VERSION"),
+            env!("GIFA_MANIFEST_LEVEL")
+        );
         return;
     }
     // 正式包启动前先确认 WebView2：没有它连窗口都创建不出来
@@ -400,6 +437,44 @@ fn main() {
     if args.iter().any(|a| a == "--runtime") {
         report_runtime();
         return;
+    }
+    /* ---- 单实例：第二次双击要把已经开着的窗口叫回来，而不是再开一份
+     *
+     * 用命名互斥体而不是"找窗口"：窗口可能还没建（刚启动那一瞬间），
+     * 而互斥体是进程级的、立刻生效。抢不到就把老窗口提到前台再退出。 */
+    let one_shot = args
+        .iter()
+        .any(|a| a == "--list-windows" || a == "--runtime" || a == "--version");
+    if !one_shot && !gifa_shell::try_single_instance("Local\\GIFA-Rust-Single") {
+        let brought = gifa_shell::activate_existing();
+        println!(
+            "[gifa] 已有实例在运行，本次退出（{}）",
+            if brought {
+                "已把它提到前台"
+            } else {
+                "没找到它的窗口"
+            }
+        );
+        return;
+    }
+    // 提权状态：游戏以管理员跑时，非提权进程的热键收不到（UIPI）
+    let elevated = gifa_shell::is_elevated();
+    if args.iter().any(|a| a == "--elevated") {
+        println!("[gifa] 以 --elevated 启动（已提权：{elevated}）—— 该标记用于避免 UAC 循环重启");
+    }
+    if args.iter().any(|a| a == "--relaunch-elevated") {
+        match gifa_shell::relaunch_elevated() {
+            Ok(()) => {
+                println!("[gifa] 已请求提权重启，本进程退出");
+                return;
+            }
+            Err(e) => println!("[gifa] 提权重启失败：{e}（继续以普通权限运行）"),
+        }
+    }
+    // 常驻工具：告诉系统别在后台挂起本进程（钩子/识别线程要一直活着）
+    let no_sleep = gifa_shell::prevent_suspension();
+    if !no_sleep {
+        println!("[gifa] 防挂起没设上（SetThreadExecutionState 返回 0）");
     }
     if args.iter().any(|a| a == "--vision-synth") {
         // 合成地图模式：不需要游戏，也不需要 <video>
@@ -426,6 +501,10 @@ fn main() {
             .map(|p| std::path::PathBuf::from(p).join("原神跟跑助手"))
             .unwrap_or_else(|| exe_dir.join("data"));
         let dir = gifa_store::resolve_data_dir(&exe_dir, &appdata, true);
+        // 目录可能还不存在（首次运行/刚装好）：所有写入都依赖它，先建出来
+        if let Err(e) = std::fs::create_dir_all(&dir.path) {
+            println!("[gifa] 数据目录创建失败：{e}");
+        }
         println!("[gifa] 数据目录 {}（{:?}）", dir.path.display(), dir.mode);
         dir.path
     };
@@ -436,16 +515,16 @@ fn main() {
         synth_page_url()
     } else {
         arg_value(&args, "--open")
-        .or_else(|| arg_value(&args, "--url"))
-        .unwrap_or_else(|| {
-            let last = store.last_text.trim();
-            if !last.is_empty() {
-                println!("[gifa] 继续上次观看：{} P{}", last, store.last_part);
-                last.to_string()
-            } else {
-                DEFAULT_TEXT.to_string()
-            }
-        })
+            .or_else(|| arg_value(&args, "--url"))
+            .unwrap_or_else(|| {
+                let last = store.last_text.trim();
+                if !last.is_empty() {
+                    println!("[gifa] 继续上次观看：{} P{}", last, store.last_part);
+                    last.to_string()
+                } else {
+                    DEFAULT_TEXT.to_string()
+                }
+            })
     };
 
     let (player_tx, player_rx) = std::sync::mpsc::channel::<PlayerMsg>();
@@ -455,7 +534,11 @@ fn main() {
     let url = resolve(&text);
     // 别把整条 data: URL 打出来：几 KB 的日志会把管道写满，
     // 父进程若在 WaitForExit 不读就会死锁（自检门禁里真踩过）
-    println!("[gifa] 载入 {}（输入 {:?}）", short_url(&url), short_url(&text));
+    println!(
+        "[gifa] 载入 {}（输入 {:?}）",
+        short_url(&url),
+        short_url(&text)
+    );
 
     let saved_bounds = store.bounds;
     UI.with(|ui| {
@@ -470,7 +553,10 @@ fn main() {
                     Some(r) => {
                         ui.layouts.create("probe".into(), "探针", r).ok();
                         ui.layouts.select("probe").ok();
-                        println!("[gifa] ROI 探针 cx={} cy={} r={}", parts[0], parts[1], parts[2]);
+                        println!(
+                            "[gifa] ROI 探针 cx={} cy={} r={}",
+                            parts[0], parts[1], parts[2]
+                        );
                     }
                     None => println!("[gifa] ROI 非法：{v}"),
                 }
@@ -486,7 +572,8 @@ fn main() {
             }
         }
         ui.store = Some(store);
-        ui.pending_short = gifa_player::is_short_link(&text) && gifa_player::extract_id(&text).is_none();
+        ui.pending_short =
+            gifa_player::is_short_link(&text) && gifa_player::extract_id(&text).is_none();
     });
 
     gifa_shell::create(ShellConfig {
@@ -499,10 +586,7 @@ fn main() {
         chrome_tx: Some(chrome_tx),
         bounds: {
             // 优先用上次记住的位置/尺寸（用户手动调过就照原样恢复）
-            let (mut bw, mut bh) = (
-                saved_bounds.width.max(320),
-                saved_bounds.height.max(200),
-            );
+            let (mut bw, mut bh) = (saved_bounds.width.max(320), saved_bounds.height.max(200));
             if let Some(sz) = arg_value(&args, "--size") {
                 if let Some((w, h)) = sz.split_once('x') {
                     bw = w.parse().unwrap_or(W);
@@ -549,7 +633,6 @@ fn main() {
             Err(e) => println!("[gifa] 手柄不可用：{e}"),
         }
     }
-
 
     let csv_path = arg_value(&args, "--vision-csv");
     let seek_to: Option<f64> = arg_value(&args, "--seek").and_then(|v| v.parse().ok());
@@ -603,11 +686,47 @@ fn main() {
     }
 
     if let Some(b) = gifa_shell::bounds() {
-        println!("[perf] 窗口就绪 {}ms（位置 ({}, {}) 尺寸 {}×{}）", boot.elapsed().as_millis(), b.x, b.y, b.w, b.h);
+        println!(
+            "[perf] 窗口就绪 {}ms（位置 ({}, {}) 尺寸 {}×{}）",
+            boot.elapsed().as_millis(),
+            b.x,
+            b.y,
+            b.w,
+            b.h
+        );
     } else {
         println!("[perf] 窗口就绪 {}ms", boot.elapsed().as_millis());
     }
     UI.with(|ui| ui.borrow_mut().boot_at = Some(Instant::now()));
+    // 启动日志：版本 / 模式 / 提权 / 数据目录 / WebView2
+    {
+        let mode = if std::env::args().any(|a| a == "--game") {
+            "真机"
+        } else if std::env::args().any(|a| a == "--live") {
+            "实战(视频)"
+        } else {
+            "浮窗"
+        };
+        let ver = env!("CARGO_PKG_VERSION");
+        let wv = gifa_shell::webview2_version().unwrap_or_else(|e| format!("未知({e})"));
+        UI.with(|ui| {
+            ui.borrow_mut().data_root = Some(data_root.clone());
+        });
+        let mut lines = vec![format!(
+            "启动 v{ver} 模式={mode} 提权={elevated} 防挂起={no_sleep} 数据目录={} WebView2={wv}",
+            data_root.display()
+        )];
+        if !elevated {
+            lines.push(
+                "提示：未提权 —— 游戏以管理员运行时热键收不到（UIPI），需要发布版或用 --relaunch-elevated"
+                    .into(),
+            );
+        }
+        for l in lines {
+            println!("[gifa] {l}");
+            startup_log(&data_root, &l);
+        }
+    }
     gifa_shell::start_ticks(250);
     gifa_shell::run();
 
@@ -700,6 +819,36 @@ fn on_tick() {
             }
         }
 
+        /* ---- 系统电源事件
+         *
+         * 挂起/锁屏时把会一直动的东西停掉（手柄轮询、临时加速），
+         * 恢复时**必须 rearm 钩子** —— 系统在睡眠期间会摘掉低级钩子，
+         * 不重新挂的话用户会遇到"睡一觉醒来按热键没反应"。 */
+        while let Some(ev) = gifa_shell::take_power_event() {
+            match ev {
+                gifa_shell::PowerEvent::Suspend | gifa_shell::PowerEvent::Lock => {
+                    GP.with(|g| *g.borrow_mut() = None);
+                    if let Some(h) = ui.hotkeys.as_ref() {
+                        let _ = h;
+                    }
+                    let root = ui.data_root.clone();
+                    if let Some(root) = root {
+                        startup_log(&root, &format!("power {ev:?}：停手柄、取消临时加速"));
+                    }
+                }
+                gifa_shell::PowerEvent::Resume => {
+                    if let Some(h) = ui.hotkeys.as_ref() {
+                        h.rearm();
+                    }
+                    let root = ui.data_root.clone();
+                    if let Some(root) = root {
+                        startup_log(&root, "power Resume：钩子已重新挂上");
+                    }
+                }
+                gifa_shell::PowerEvent::Unlock => {}
+            }
+        }
+
         // 2.5) --login：到点在 UI 线程开弹窗
         if let Some(t) = ui.login_at {
             if Instant::now() >= t {
@@ -717,11 +866,7 @@ fn on_tick() {
         }
 
         // 2.55) 实战：热键事件 → 动作
-        let hk_events = ui
-            .hotkeys
-            .as_ref()
-            .map(|h| h.drain())
-            .unwrap_or_default();
+        let hk_events = ui.hotkeys.as_ref().map(|h| h.drain()).unwrap_or_default();
         for ev in hk_events {
             let (act, phase) = match ev {
                 gifa_input::HotkeyEvent::Fire(a) => (a, None),
@@ -807,9 +952,7 @@ fn on_tick() {
         let payload = ui_payload(&ui);
         if payload != ui.last_push {
             ui.last_push = payload.clone();
-            gifa_shell::eval_chrome(&format!(
-                "window.gifaState && window.gifaState({payload})"
-            ));
+            gifa_shell::eval_chrome(&format!("window.gifaState && window.gifaState({payload})"));
         }
 
         // 6) --check 时间轴
@@ -876,7 +1019,8 @@ fn handle_player(ui: &mut UiState, m: PlayerMsg) {
                 if let Some(info) = info {
                     ui.info = Some(info.clone());
                     ui.check.view_ok = Some(!info.pages.is_empty());
-                    ui.check.view_seen = format!("{} P{} · {}", info.bvid, info.pages.len(), info.owner);
+                    ui.check.view_seen =
+                        format!("{} P{} · {}", info.bvid, info.pages.len(), info.owner);
                     ui.title = info.title.clone();
                     remember_watched(ui);
                 }
@@ -896,7 +1040,8 @@ fn handle_player(ui: &mut UiState, m: PlayerMsg) {
                     on_login_success(ui);
                 }
                 if !l.logged_in {
-                    ui.check.nav_seen = format!("未登录（{}）", if ok { "nav ok" } else { "nav fail" });
+                    ui.check.nav_seen =
+                        format!("未登录（{}）", if ok { "nav ok" } else { "nav fail" });
                 }
             } else if !ok {
                 ui.logs.push(format!("取登录态失败：{error}"));
@@ -906,7 +1051,9 @@ fn handle_player(ui: &mut UiState, m: PlayerMsg) {
             if ok {
                 if let Some(r) = rect.as_ref() {
                     let changed = ui.video_rect.as_ref().is_none_or(|o| {
-                        (o.w - r.w).abs() > 1.0 || (o.h - r.h).abs() > 1.0 || o.video_only != r.video_only
+                        (o.w - r.w).abs() > 1.0
+                            || (o.h - r.h).abs() > 1.0
+                            || o.video_only != r.video_only
                     });
                     if changed {
                         println!(
@@ -950,7 +1097,11 @@ fn remember_watched(ui: &mut UiState) {
         return;
     }
     let text = gifa_player::video_url(&s.bvid, s.part);
-    let title = ui.info.as_ref().map(|i| i.title.clone()).unwrap_or_default();
+    let title = ui
+        .info
+        .as_ref()
+        .map(|i| i.title.clone())
+        .unwrap_or_default();
     let key = (s.bvid.clone(), s.part, text.clone());
     if ui.saved == key {
         return;
@@ -990,7 +1141,10 @@ fn gamepad_test_step(ui: &mut UiState) {
         // 打开测试用的映射（默认就是这套：e=seekFwd）
         return;
     }
-    let el = ui.gp_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .gp_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
 
     match ui.gp_phase {
         0 if el > 0.5 => {
@@ -999,8 +1153,11 @@ fn gamepad_test_step(ui: &mut UiState) {
         }
         1 if el > 1.2 => {
             let shown = gifa_shell::disc_visible() && ui.disc_shown;
-            ui.gp_rows
-                .push(("按住 L3 → 圆盘出现".into(), shown, format!("visible={shown}")));
+            ui.gp_rows.push((
+                "按住 L3 → 圆盘出现".into(),
+                shown,
+                format!("visible={shown}"),
+            ));
             apply_gamepad_frame(ui, Some(0), gp_frame(true, 0.9));
             ui.gp_phase = 2;
         }
@@ -1067,7 +1224,13 @@ fn report_gamepad(ui: &UiState) {
     println!();
     println!("============ 手柄八方向圆盘自检 ============");
     for (i, (name, ok, detail)) in ui.gp_rows.iter().enumerate() {
-        println!("[{}] {:<26} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<26} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.gp_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("--------------------------------------------");
@@ -1221,8 +1384,16 @@ fn dispatch_action(ui: &mut UiState, action: Action, phase: Option<&str>) {
         }
         Action::ToggleVisible => gifa_shell::hide(),
         Action::HoldSpeed => {
-            let hold = ui.store.as_ref().map(|s| s.hold_playback_rate).unwrap_or(2.0);
-            let v = if phase == Some("down") { hold } else { ui.rate_normal };
+            let hold = ui
+                .store
+                .as_ref()
+                .map(|s| s.hold_playback_rate)
+                .unwrap_or(2.0);
+            let v = if phase == Some("down") {
+                hold
+            } else {
+                ui.rate_normal
+            };
             gifa_shell::player_command(PlayerCommand::Rate { value: v });
         }
         Action::ToggleImmersion => {
@@ -1256,7 +1427,16 @@ fn live_step(ui: &mut UiState) {
         );
         println!(
             "[vision] stage=({},{},{}x{}) float=({},{}) 采样窗=({},{}) {}x{}",
-            s.stage.x, s.stage.y, s.stage.w, s.stage.h, s.float_rect.x, s.float_rect.y, b.x, b.y, b.w, b.h
+            s.stage.x,
+            s.stage.y,
+            s.stage.w,
+            s.stage.h,
+            s.float_rect.x,
+            s.float_rect.y,
+            b.x,
+            b.y,
+            b.w,
+            b.h
         );
     }
     let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
@@ -1337,7 +1517,10 @@ fn bearing_step(ui: &mut UiState) {
         gifa_shell::player_command(PlayerCommand::VideoRect);
         return;
     }
-    let el = ui.bearing_since.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .bearing_since
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
 
     // --autocenter：视频路径也支持（ROI 漂移时用它修）
     /* --autocenter：视频里"这一刻有没有箭头"是随机的（菜单/转场/看别处都没有），
@@ -1516,8 +1699,16 @@ fn bearing_step(ui: &mut UiState) {
     }
 
     let frames = ui.vision_count;
-    let cap = if frames > 0 { ui.vision_capture_sum / frames as f64 } else { 0.0 };
-    let det = if frames > 0 { ui.vision_detect_sum / frames as f64 } else { 0.0 };
+    let cap = if frames > 0 {
+        ui.vision_capture_sum / frames as f64
+    } else {
+        0.0
+    };
+    let det = if frames > 0 {
+        ui.vision_detect_sum / frames as f64
+    } else {
+        0.0
+    };
     let angles = ui.bearing_angles.len();
     let cyan = ui.vision_last.map(|e| e.result.cyan_frac).unwrap_or(0.0);
 
@@ -1534,12 +1725,20 @@ fn bearing_step(ui: &mut UiState) {
     // 有小地图才有角度；没有小地图时门控必须静默（这也是一种"行为正确"）
     let has_map = cyan > 0.0015;
     ui.bearing_rows.push((
-        if has_map { "有角度上报".into() } else { "无小地图时门控静默".into() },
+        if has_map {
+            "有角度上报".into()
+        } else {
+            "无小地图时门控静默".into()
+        },
         if has_map { angles > 0 } else { angles == 0 },
         format!("cyan={cyan:.4} 角度样本={angles}"),
     ));
     ui.bearing_rows.push((
-        if ui.covered_logged { "遮挡保护（已暂停识别）".into() } else { "无遮挡暂停".into() },
+        if ui.covered_logged {
+            "遮挡保护（已暂停识别）".into()
+        } else {
+            "无遮挡暂停".into()
+        },
         // 被遮挡时"暂停识别"本身就是正确行为，不该判失败
         true,
         if ui.covered_logged {
@@ -1552,7 +1751,13 @@ fn bearing_step(ui: &mut UiState) {
     println!();
     println!("============ 视觉冒烟 ============");
     for (i, (name, ok, detail)) in ui.bearing_rows.iter().enumerate() {
-        println!("[{}] {:<22} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<22} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.bearing_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("----------------------------------");
@@ -1586,11 +1791,30 @@ fn bearing_step(ui: &mut UiState) {
 // ---------------------------------------------------------------- 实战模式
 
 /// 写一行实战日志（同时打到 stdout，方便当场看）
+/// 启动日志：`data/startup.log`，超过 128KB 就滚动成 `.1`。
+///
+/// 记的是"这次启动的环境"：版本、模式、是否提权、钩子/手柄状态 ——
+/// 用户报"热键不灵"时，这份文件能一眼看出是不是 UIPI（没提权）的问题。
+fn startup_log(dir: &std::path::Path, line: &str) {
+    const MAX: u64 = 128 * 1024;
+    let path = dir.join("startup.log");
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() > MAX {
+            let _ = std::fs::rename(&path, dir.join("startup.log.1"));
+        }
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "[{}] {line}", chrono_like_now());
+    }
+}
+
 fn live_log(ui: &mut UiState, kind: &str, detail: &str) {
-    let line = format!(
-        "[{}] {kind} {detail}",
-        chrono_like_now()
-    );
+    let line = format!("[{}] {kind} {detail}", chrono_like_now());
     println!("[live] {line}");
     if let Some(f) = ui.live_log.as_mut() {
         use std::io::Write;
@@ -1643,7 +1867,11 @@ fn start_live(ui: &mut UiState, log_dir: &std::path::Path) {
             live_log(
                 ui,
                 "hotkey",
-                &format!("注册 {} 条，失败 {}", report.registered, report.failures.len()),
+                &format!(
+                    "注册 {} 条，失败 {}",
+                    report.registered,
+                    report.failures.len()
+                ),
             );
             for f in &report.failures {
                 live_log(
@@ -1669,7 +1897,10 @@ fn drag_test_step(ui: &mut UiState) {
         ui.im_started = Some(Instant::now());
         return;
     }
-    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .im_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
     match ui.im_phase {
         0 if el > 1.0 => {
             gifa_shell::reassert_topmost();
@@ -1743,7 +1974,13 @@ fn report_drag(ui: &UiState) {
     println!();
     println!("============ 拖拽实测 ============");
     for (i, (name, ok, detail)) in ui.ui_rows.iter().enumerate() {
-        println!("[{}] {:<26} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<26} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.ui_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("----------------------------------");
@@ -1764,7 +2001,10 @@ fn ui_test_step(ui: &mut UiState) {
         ui.im_started = Some(Instant::now());
         return;
     }
-    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .im_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
     match ui.im_phase {
         0 if el > 1.0 => {
             // 等页面真的开始播（release 冷启动比 debug 慢），否则"播放态"会假失败
@@ -1791,7 +2031,10 @@ fn ui_test_step(ui: &mut UiState) {
             ui.ui_rows.push((
                 "控件：布局下拉 / 分P / 播放态".into(),
                 layouts >= 1.0 && playing,
-                format!("layouts={layouts} parts={parts} playing={playing} speed={:?}", p.get("speed")),
+                format!(
+                    "layouts={layouts} parts={parts} playing={playing} speed={:?}",
+                    p.get("speed")
+                ),
             ));
             // 进度条拖到 50%：应发出 seek 且时间约等于一半
             let dur = ui.state.as_ref().map(|s| s.duration).unwrap_or(0.0);
@@ -1865,7 +2108,13 @@ fn report_ui(ui: &UiState) {
     println!();
     println!("============ 浮窗界面自检（M6） ============");
     for (i, (name, ok, detail)) in ui.ui_rows.iter().enumerate() {
-        println!("[{}] {:<28} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<28} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.ui_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("------------------------------------------");
@@ -1966,7 +2215,11 @@ fn start_vision(ui: &mut UiState) {
     let feed = shared.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     let interval = std::time::Duration::from_millis(100);
-    let dump = ui.dump_frame.clone().filter(|_| ui.dump_left > 0).map(|p| (p, ui.dump_left));
+    let dump = ui
+        .dump_frame
+        .clone()
+        .filter(|_| ui.dump_left > 0)
+        .map(|p| (p, ui.dump_left));
     match gifa_vision::start_pipeline_dump(
         move || feed.lock().ok().and_then(|g| *g),
         interval,
@@ -2058,8 +2311,13 @@ fn filter_event(
     // 箭头：门限挡下的帧不上报（叠加层保持上一次的角度）
     let cone_math = ev.result.view.map(to_math).unwrap_or(-1.0);
     let arrow_out = ev.result.arrow.map(to_math).and_then(|a| {
-        ui.ab
-            .smooth(a, ev.result.arrow_conf as f64, ev.at_ms, cone_math, view_conf)
+        ui.ab.smooth(
+            a,
+            ev.result.arrow_conf as f64,
+            ev.at_ms,
+            cone_math,
+            view_conf,
+        )
     });
     (arrow_out.map(to_math), view_deg, view_conf, view_w)
 }
@@ -2076,7 +2334,6 @@ fn send_overlay(arrow: Option<f64>, view: Option<f64>, view_conf: f64, view_w: f
     };
     gifa_shell::overlay_update(st);
 }
-
 
 /// 合成"小地图"页面：深草地底 + 朝东的青三角 + 朝南的白扇。
 /// 用来在没有游戏的情况下验证"截屏 → 采样 → 出角度 → 叠加层"整条链路。
@@ -2219,7 +2476,10 @@ fn game_step(ui: &mut UiState) {
         start_vision(ui);
         return;
     }
-    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .im_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
     let secs: f64 = std::env::args()
         .position(|a| a == "--game")
         .and_then(|i| std::env::args().nth(i + 1))
@@ -2242,7 +2502,10 @@ fn game_step(ui: &mut UiState) {
         steps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let med = steps.get(steps.len() / 2).copied().unwrap_or(0.0);
         println!("\n============ 真机验证 ============");
-        println!("[1] 抓到帧                    {} 帧（{secs:.0}s）", ui.vision_count);
+        println!(
+            "[1] 抓到帧                    {} 帧（{secs:.0}s）",
+            ui.vision_count
+        );
         println!(
             "[2] 箭头有效                   {arrow} / {n}（{:.0}%）",
             100.0 * arrow as f64 / n as f64
@@ -2292,11 +2555,15 @@ fn synth_test_step(ui: &mut UiState) {
         // 可能已经存在（上次跑完落盘了）：先尝试建，再**强制选中**
         ui.layouts.create("synth".into(), "合成", roi).ok();
         ui.layouts.select("synth").ok();
-        ui.logs.push(format!("合成自检布局 → {}", ui.layouts.active_layout_id));
+        ui.logs
+            .push(format!("合成自检布局 → {}", ui.layouts.active_layout_id));
         gifa_shell::navigate_stage(&synth_page_url());
         return;
     }
-    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .im_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
 
     // 合成自检要截自己的窗口：先抢到最前，否则截到的是别人
     if el > 0.3 && el < 0.6 {
@@ -2326,7 +2593,11 @@ fn synth_test_step(ui: &mut UiState) {
             )
         });
         if covered {
-            for name in ["合成地图：箭头 ≈ 90°（朝东）", "合成地图：视角 ≈ 180°（朝南）", "结果送到叠加层（非空）"] {
+            for name in [
+                "合成地图：箭头 ≈ 90°（朝东）",
+                "合成地图：视角 ≈ 180°（朝南）",
+                "结果送到叠加层（非空）",
+            ] {
                 ui.vision_rows.push((
                     name.to_string(),
                     true,
@@ -2372,7 +2643,10 @@ fn vision_test_step(ui: &mut UiState) {
         gifa_shell::player_command(PlayerCommand::VideoRect);
         return;
     }
-    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .im_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
 
     // 页面还没加载完时请求会落空：没拿到就每个 tick 重试（拿到即停）
     if ui.video_rect.is_none() && el > 0.4 && ui.im_phase == 0 {
@@ -2404,8 +2678,16 @@ fn vision_test_step(ui: &mut UiState) {
     }
     if ui.im_phase == 1 && el > 2.8 {
         let n = ui.vision_count;
-        let avg_cap = if n > 0 { ui.vision_capture_sum / n as f64 } else { 0.0 };
-        let avg_det = if n > 0 { ui.vision_detect_sum / n as f64 } else { 0.0 };
+        let avg_cap = if n > 0 {
+            ui.vision_capture_sum / n as f64
+        } else {
+            0.0
+        };
+        let avg_det = if n > 0 {
+            ui.vision_detect_sum / n as f64
+        } else {
+            0.0
+        };
         let last = ui.vision_last;
 
         ui.vision_rows.push((
@@ -2417,7 +2699,10 @@ fn vision_test_step(ui: &mut UiState) {
         ui.vision_rows.push((
             "采样窗有像素（不是黑帧）".into(),
             samples > 0,
-            format!("采样点 {samples}，窗口 {:?}", last.map(|e| (e.window.w, e.window.h))),
+            format!(
+                "采样点 {samples}，窗口 {:?}",
+                last.map(|e| (e.window.w, e.window.h))
+            ),
         ));
         let drew = gifa_shell::overlay_drawn();
         ui.vision_rows.push((
@@ -2434,7 +2719,10 @@ fn vision_test_step(ui: &mut UiState) {
         if let Some(e) = last {
             println!(
                 "[vision] 最后一帧 arrow={:?} view={:?} cyan={:.5} 窗={:?}",
-                e.result.arrow, e.result.view, e.result.cyan_frac, (e.window.x, e.window.y, e.window.w)
+                e.result.arrow,
+                e.result.view,
+                e.result.cyan_frac,
+                (e.window.x, e.window.y, e.window.w)
             );
         }
         report_vision(ui);
@@ -2447,7 +2735,13 @@ fn report_vision(ui: &UiState) {
     println!();
     println!("============ 识别管线自检（骨架） ============");
     for (i, (name, ok, detail)) in ui.vision_rows.iter().enumerate() {
-        println!("[{}] {:<30} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<30} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.vision_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("--------------------------------------------");
@@ -2492,7 +2786,10 @@ fn apply_calibration(ui: &mut UiState, cx: f64, cy: f64, r: f64) {
 
     let result = if is_builtin {
         // 内置预设只读：新建一个
-        let name = format!("自定义 {}", ui.layouts.layouts.iter().filter(|l| !l.built_in).count() + 1);
+        let name = format!(
+            "自定义 {}",
+            ui.layouts.layouts.iter().filter(|l| !l.built_in).count() + 1
+        );
         let id = format!("custom-{}", ui.layouts.layouts.len());
         ui.layouts
             .create(id, &name, roi)
@@ -2533,7 +2830,10 @@ fn calib_test_step(ui: &mut UiState) {
         ui.im_started = Some(Instant::now());
         return;
     }
-    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .im_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
     match ui.im_phase {
         0 if el > 0.6 => {
             // 先要一次视频矩形，再开标定
@@ -2559,7 +2859,8 @@ fn calib_test_step(ui: &mut UiState) {
                 ok_rect,
                 format!(
                     "{:?}",
-                    vr.as_ref().map(|r| (r.x, r.y, r.w, r.h, r.vw, r.vh, r.fit.as_str(), r.dpr))
+                    vr.as_ref()
+                        .map(|r| (r.x, r.y, r.w, r.h, r.vw, r.vh, r.fit.as_str(), r.dpr))
                 ),
             ));
             // 标定层应该把舞台纳进"窗口区域"→ 舞台中心的命中归属变成 Chrome
@@ -2605,15 +2906,14 @@ fn calib_test_step(ui: &mut UiState) {
                 ok,
                 format!(
                     "{:?}",
-                    custom.as_ref().map(|l| (l.name.clone(), l.roi.cx, l.roi.cy, l.roi.r))
+                    custom
+                        .as_ref()
+                        .map(|l| (l.name.clone(), l.roi.cx, l.roi.cy, l.roi.r))
                 ),
             ));
             // 切回内置预设，再切回自定义
             let before = ui.layouts.active_layout_id.clone();
-            let switched = ui
-                .layouts
-                .select(gifa_core::bearing::BUILTIN_ID)
-                .is_ok()
+            let switched = ui.layouts.select(gifa_core::bearing::BUILTIN_ID).is_ok()
                 && ui.layouts.active_layout_id == gifa_core::bearing::BUILTIN_ID;
             let back = ui.layouts.select(&before).is_ok();
             ui.calib_rows.push((
@@ -2633,7 +2933,13 @@ fn report_calib(ui: &UiState) {
     println!();
     println!("============ 布局标定自检 ============");
     for (i, (name, ok, detail)) in ui.calib_rows.iter().enumerate() {
-        println!("[{}] {:<28} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<28} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.calib_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("--------------------------------------");
@@ -2692,7 +2998,10 @@ fn immersion_test_step(ui: &mut UiState) {
         });
         return;
     }
-    let el = ui.im_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .im_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
     match ui.im_phase {
         0 if el > 0.5 => {
             toggle_immersion(ui, true);
@@ -2736,7 +3045,10 @@ fn immersion_test_step(ui: &mut UiState) {
                 ui.im_rows.push((
                     "隐藏 chrome + 强制穿透".into(),
                     !s.chrome_visible && s.click_through,
-                    format!("chrome_visible={} click_through={}", s.chrome_visible, s.click_through),
+                    format!(
+                        "chrome_visible={} click_through={}",
+                        s.chrome_visible, s.click_through
+                    ),
                 ));
                 // 把鼠标移到窗口中心
                 let cx = s.float_rect.x + s.float_rect.w / 2;
@@ -2754,7 +3066,10 @@ fn immersion_test_step(ui: &mut UiState) {
         }
         2 if el > 2.4 => {
             let s = gifa_shell::snapshot();
-            let faded = s.as_ref().map(|x| x.hovered && x.opacity <= 26).unwrap_or(false);
+            let faded = s
+                .as_ref()
+                .map(|x| x.hovered && x.opacity <= 26)
+                .unwrap_or(false);
             if !ui.im_can_move {
                 // 环境不允许移动光标（锁屏/远程会话）：判 SKIP 而不是 FAIL
                 ui.im_rows.push((
@@ -2762,11 +3077,8 @@ fn immersion_test_step(ui: &mut UiState) {
                     true,
                     "SKIP：本环境不允许移动光标（锁屏/无交互会话）".into(),
                 ));
-                ui.im_rows.push((
-                    "鼠标移出 → 恢复不透明度".into(),
-                    true,
-                    "SKIP：同上".into(),
-                ));
+                ui.im_rows
+                    .push(("鼠标移出 → 恢复不透明度".into(), true, "SKIP：同上".into()));
                 toggle_immersion(ui, false);
                 ui.im_phase = 4;
                 return;
@@ -2792,7 +3104,10 @@ fn immersion_test_step(ui: &mut UiState) {
         }
         3 if el > 3.4 => {
             let s = gifa_shell::snapshot();
-            let restored = s.as_ref().map(|x| !x.hovered && x.opacity >= 250).unwrap_or(false);
+            let restored = s
+                .as_ref()
+                .map(|x| !x.hovered && x.opacity >= 250)
+                .unwrap_or(false);
             ui.im_rows.push((
                 "鼠标移出 → 恢复不透明度".into(),
                 restored,
@@ -2810,13 +3125,26 @@ fn immersion_test_step(ui: &mut UiState) {
             let before = ui.im_before;
             let ok = match (s, before) {
                 (Some(s), Some((bx, by, bw, bh))) => {
-                    let same = (s.float_rect.x, s.float_rect.y, s.float_rect.w, s.float_rect.h)
-                        == (bx, by, bw, bh);
+                    let same = (
+                        s.float_rect.x,
+                        s.float_rect.y,
+                        s.float_rect.w,
+                        s.float_rect.h,
+                    ) == (bx, by, bw, bh);
                     let visible = s.chrome_visible && !s.click_through && !s.immersion;
                     ui.im_rows.push((
                         "退出后尺寸精确还原".into(),
                         same,
-                        format!("{:?} vs {:?}", (s.float_rect.x, s.float_rect.y, s.float_rect.w, s.float_rect.h), (bx, by, bw, bh)),
+                        format!(
+                            "{:?} vs {:?}",
+                            (
+                                s.float_rect.x,
+                                s.float_rect.y,
+                                s.float_rect.w,
+                                s.float_rect.h
+                            ),
+                            (bx, by, bw, bh)
+                        ),
                     ));
                     visible
                 }
@@ -2839,7 +3167,13 @@ fn report_immersion(ui: &UiState) {
     println!();
     println!("============ 沉浸与鼠标避让自检 ============");
     for (i, (name, ok, detail)) in ui.im_rows.iter().enumerate() {
-        println!("[{}] {:<24} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<24} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.im_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("--------------------------------------------");
@@ -2884,7 +3218,10 @@ fn overlay_test_step(ui: &mut UiState) {
         }
         return;
     }
-    let el = ui.ov_started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+    let el = ui
+        .ov_started
+        .map(|t| t.elapsed().as_secs_f64())
+        .unwrap_or(0.0);
     match ui.ov_phase {
         0 if el > 0.8 => {
             let rect = gifa_shell::overlay_rect();
@@ -2993,7 +3330,10 @@ fn overlay_test_step(ui: &mut UiState) {
             ui.ov_rows.push((
                 "放置模式：可移动且圆心落盘".into(),
                 gifa_shell::overlay_placing() && ok_center,
-                format!("placing={} center={center:?}", gifa_shell::overlay_placing()),
+                format!(
+                    "placing={} center={center:?}",
+                    gifa_shell::overlay_placing()
+                ),
             ));
             gifa_shell::overlay_set_placing(false);
             let _ = &mut ui.ov_mid_seen;
@@ -3009,7 +3349,13 @@ fn report_overlay(ui: &UiState) {
     println!();
     println!("============ 方位叠加层自检 ============");
     for (i, (name, ok, detail)) in ui.ov_rows.iter().enumerate() {
-        println!("[{}] {:<26} {}  {}", i + 1, name, if *ok { "PASS" } else { "FAIL" }, detail);
+        println!(
+            "[{}] {:<26} {}  {}",
+            i + 1,
+            name,
+            if *ok { "PASS" } else { "FAIL" },
+            detail
+        );
     }
     let pass = ui.ov_rows.iter().filter(|(_, ok, _)| *ok).count();
     println!("----------------------------------------");
@@ -3177,7 +3523,12 @@ fn ui_payload(ui: &UiState) -> String {
 fn check_step(ui: &mut UiState, el: f64) -> bool {
     match ui.check.phase {
         0 if el > 1.2 => {
-            if let Some(bvid) = ui.state.as_ref().map(|s| s.bvid.clone()).filter(|b| !b.is_empty()) {
+            if let Some(bvid) = ui
+                .state
+                .as_ref()
+                .map(|s| s.bvid.clone())
+                .filter(|b| !b.is_empty())
+            {
                 gifa_shell::player_command(PlayerCommand::FetchView { id: bvid });
             }
             gifa_shell::player_command(PlayerCommand::FetchNav);
@@ -3322,8 +3673,19 @@ fn report_runtime() {
                 "最低要求   = {}.x（Chromium 主版本）",
                 gifa_shell::WEBVIEW2_MIN_MAJOR
             );
-            println!("[1] 版本可解析        {}", if gifa_shell::parse_version(&v).is_some() { "PASS" } else { "FAIL" });
-            println!("[2] 满足基线 ≥{}     {}", gifa_shell::WEBVIEW2_MIN_MAJOR, if ok { "PASS" } else { "FAIL" });
+            println!(
+                "[1] 版本可解析        {}",
+                if gifa_shell::parse_version(&v).is_some() {
+                    "PASS"
+                } else {
+                    "FAIL"
+                }
+            );
+            println!(
+                "[2] 满足基线 ≥{}     {}",
+                gifa_shell::WEBVIEW2_MIN_MAJOR,
+                if ok { "PASS" } else { "FAIL" }
+            );
             println!("--------------------------------------------");
             println!("RESULT {}/2", if ok { 2 } else { 1 });
             if !ok {

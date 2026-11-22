@@ -211,7 +211,8 @@ pub fn get_opacity(hwnd: HWND) -> Option<u8> {
     }
 }
 
-pub fn topmost(hwnd: HWND) {    unsafe {
+pub fn topmost(hwnd: HWND) {
+    unsafe {
         let _ = SetWindowPos(
             hwnd,
             Some(HWND_TOPMOST),

@@ -11,7 +11,7 @@
 //!
 //! 单次重试很容易被噪声带偏，**簇投票**才是重点：孤立的伪峰凑不出 3 票。
 
-use crate::arrow::{ang_diff, analyze_with, ArrowParams, ArrowResult, ArrowWorkspace};
+use crate::arrow::{analyze_with, ang_diff, ArrowParams, ArrowResult, ArrowWorkspace};
 use crate::cone::{analyze_cone, ConeResult, ConeWorkspace};
 
 /// 从 `size×size` 的中心裁出 `width×width`，再平移 `(dx, dy)`。
@@ -45,7 +45,9 @@ pub fn analyze_arrow_with_recovery(
 ) -> ArrowResult {
     let base = analyze_with(rgba, size, step, ws, params);
     // 已经认出来、窗口太小、或者青色本来就很少 → 不重试
-    if base.valid || size < 100 || (base.cyans as f64 * (step * step) as f64) < (size * size) as f64 * 0.025
+    if base.valid
+        || size < 100
+        || (base.cyans as f64 * (step * step) as f64) < (size * size) as f64 * 0.025
     {
         return base;
     }
@@ -100,16 +102,16 @@ pub fn analyze_arrow_with_recovery(
     if best_cluster.len() < 3 || best_cluster.len() * 2 <= candidates.len() {
         return base;
     }
-    let best = best_cluster
-        .iter()
-        .map(|&i| &candidates[i])
-        .fold(&candidates[best_cluster[0]], |acc, cur| {
+    let best = best_cluster.iter().map(|&i| &candidates[i]).fold(
+        &candidates[best_cluster[0]],
+        |acc, cur| {
             if cur.conf > acc.conf {
                 cur
             } else {
                 acc
             }
-        });
+        },
+    );
     let delta: f64 = best_cluster
         .iter()
         .map(|&i| ang_diff(candidates[i].angle, best.angle))
@@ -131,10 +133,7 @@ pub fn analyze_cone_with_recovery(
 ) -> ConeResult {
     let outer = analyze_cone(rgba, size, step, ws);
     // 窗口太小 / 没有小地图 / 两边都够强 → 不重试
-    if size < 380
-        || outer.cyan_frac < map_cyan_min
-        || (outer.valid && outer.edge_min() >= 0.095)
-    {
+    if size < 380 || outer.cyan_frac < map_cyan_min || (outer.valid && outer.edge_min() >= 0.095) {
         return outer;
     }
     let width = ((size as f64 * 0.64) + 0.5).floor() as usize;

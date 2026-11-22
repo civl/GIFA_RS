@@ -22,7 +22,13 @@ fn load_dir(dir: PathBuf, prefix_skip: bool) -> Vec<(Vec<u8>, usize)> {
         if path.extension().and_then(|x| x.to_str()) != Some("bin") {
             continue;
         }
-        if prefix_skip && path.file_name().unwrap().to_string_lossy().starts_with("sample-") {
+        if prefix_skip
+            && path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("sample-")
+        {
             continue;
         }
         let bytes = std::fs::read(&path).expect("read");

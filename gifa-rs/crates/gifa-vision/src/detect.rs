@@ -140,8 +140,7 @@ pub fn detect_window(
         for y in 0..arrow_side {
             let src = ((y + crop_off) * size + crop_off) * 4;
             let dst = y * arrow_side * 4;
-            crop[dst..dst + arrow_side * 4]
-                .copy_from_slice(&rgba[src..src + arrow_side * 4]);
+            crop[dst..dst + arrow_side * 4].copy_from_slice(&rgba[src..src + arrow_side * 4]);
         }
         crate::recovery::analyze_arrow_with_recovery(&crop, arrow_side, 1, aws, &arrow_params())
     } else {
@@ -151,13 +150,8 @@ pub fn detect_window(
         .nose_deg
         .map(|n| ((n - arrow.angle + 540.0) % 360.0 - 180.0).abs() as f32);
     let ang_margin = Some(arrow.ang_margin as f32);
-    let cone = crate::recovery::analyze_cone_with_recovery(
-        rgba,
-        size,
-        1,
-        cws,
-        params::MAP_CYAN_FRAC_MIN,
-    );
+    let cone =
+        crate::recovery::analyze_cone_with_recovery(rgba, size, 1, cws, params::MAP_CYAN_FRAC_MIN);
 
     out.samples = arrow.cyans;
     out.nose_gap = nose_gap;
@@ -452,7 +446,7 @@ mod tests {
     fn white_fan_gives_view_angle() {
         let mut f = blank(200, 200);
         blob(&mut f, 150, 175, 9, WHITE); // 中心正南 25px
-        // 门控要求画面里存在青色（真实场景里箭头通常也在）
+                                          // 门控要求画面里存在青色（真实场景里箭头通常也在）
         blob(&mut f, 150, 150, 4, CYAN);
         let d = detect_simple(
             &f,

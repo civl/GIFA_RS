@@ -21,7 +21,11 @@ pub fn sample(x: i32, y: i32) -> Option<Rgb> {
             return None;
         }
         let v = c.0;
-        Some(((v & 0xFF) as u8, ((v >> 8) & 0xFF) as u8, ((v >> 16) & 0xFF) as u8))
+        Some((
+            (v & 0xFF) as u8,
+            ((v >> 8) & 0xFF) as u8,
+            ((v >> 16) & 0xFF) as u8,
+        ))
     }
 }
 

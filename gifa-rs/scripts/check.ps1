@@ -123,9 +123,15 @@ try {
     }
     Add-Row "cargo test" ($f -eq 0 -and $p -gt 0) "passed=$p failed=$f"
 
-    $clippy = (Invoke-Native "cargo" @("clippy", "--workspace", "--all-targets")).Out
+    # -D warnings：门禁里任何 warning 都算失败（本仓库的约定是零警告）
+    $clippy = (Invoke-Native "cargo" @("clippy", "--workspace", "--all-targets", "--", "-D", "warnings")).Out
     $warn = ([regex]::Matches($clippy, "(?m)^(warning|error)")).Count
-    Add-Row "cargo clippy" ($warn -eq 0) "warnings=$warn"
+    Add-Row "cargo clippy -D warnings" ($warn -eq 0) "warnings=$warn"
+
+    # 代码风格：fmt 一次对齐过，之后门禁卡住，避免格式漂移混进 diff
+    $fmt = (Invoke-Native "cargo" @("fmt", "--all", "--", "--check")).Out
+    $diff = ([regex]::Matches($fmt, "(?m)^Diff in")).Count
+    Add-Row "cargo fmt --check" ($diff -eq 0) "未格式化文件块=$diff"
 } finally { Pop-Location }
 
 Write-Host "== 3/4 自检 ==" -ForegroundColor Cyan

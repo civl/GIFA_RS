@@ -13,7 +13,6 @@
 //!
 //! 只在需要时跑一次（换视频/换分辨率/手动触发），不进每帧链路。
 
-
 /// 自动定心的结果（全部是相对基准矩形的比例）
 #[derive(Debug, Clone, Copy)]
 pub struct Centered {
@@ -187,7 +186,11 @@ fn scan(area: Rect, base: Rect, probe: Probe) -> Option<Centered> {
             h,
             thr,
             cands.len(),
-            cands.iter().take(5).map(|c| (c.3, c.1, c.2)).collect::<Vec<_>>()
+            cands
+                .iter()
+                .take(5)
+                .map(|c| (c.3, c.1, c.2))
+                .collect::<Vec<_>>()
         );
     }
 

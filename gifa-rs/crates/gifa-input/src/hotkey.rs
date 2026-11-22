@@ -246,7 +246,9 @@ impl Hotkeys {
         let hook_ok = self.hook.is_some();
         if !hook_ok {
             for (key, acc) in map {
-                let Some(action) = Action::from_key(key) else { continue };
+                let Some(action) = Action::from_key(key) else {
+                    continue;
+                };
                 if acc.trim().is_empty() {
                     continue;
                 }

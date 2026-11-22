@@ -5,18 +5,18 @@ pub mod gamepad;
 #[cfg(windows)]
 pub mod hook;
 #[cfg(windows)]
-pub mod xinput;
-#[cfg(windows)]
 pub mod hotkey;
+#[cfg(windows)]
+pub mod xinput;
 
 pub use gamepad::{ChordConfig, ChordState, ChordStep, Frame};
 
 #[cfg(windows)]
 pub use hook::HotkeyEvent;
 #[cfg(windows)]
-pub use xinput::GamepadEvent;
-#[cfg(windows)]
 pub use hotkey::{ApplyReport, Failure, FailureReason, Hotkeys};
+#[cfg(windows)]
+pub use xinput::GamepadEvent;
 
 #[cfg(windows)]
 pub(crate) fn hinstance() -> windows::Win32::Foundation::HINSTANCE {

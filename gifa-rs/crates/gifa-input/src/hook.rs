@@ -308,10 +308,11 @@ fn on_up(st: &mut HookState, token: &str) {
         .and_then(|v| v.parse::<u32>().ok())
         .is_some_and(is_modifier_vk);
     let still_down = released_modifier
-        && st
-            .pressed
-            .iter()
-            .any(|t| t.strip_prefix("key:").and_then(|v| v.parse().ok()).is_some_and(is_modifier_vk));
+        && st.pressed.iter().any(|t| {
+            t.strip_prefix("key:")
+                .and_then(|v| v.parse().ok())
+                .is_some_and(is_modifier_vk)
+        });
     if is_main_key || (released_modifier && !still_down) {
         st.active_hold = None;
         let _ = tx.send(HotkeyEvent::Up(action));

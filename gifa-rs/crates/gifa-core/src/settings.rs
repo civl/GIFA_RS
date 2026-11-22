@@ -330,8 +330,7 @@ mod tests {
     #[test]
     fn patch_merges_deeply_without_wiping_siblings() {
         let mut s = Settings::default();
-        s.apply_patch(&serde_json::json!({"volume": 42}))
-            .unwrap();
+        s.apply_patch(&serde_json::json!({"volume": 42})).unwrap();
         assert_eq!(s.volume, 42.0);
         // 同级的其它字段不受影响
         assert_eq!(s.hotkeys.get("togglePlay").unwrap(), "Alt+Space");

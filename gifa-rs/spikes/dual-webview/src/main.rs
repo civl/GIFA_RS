@@ -151,7 +151,10 @@ fn main() {
         }
     );
     println!("[spike] 主窗 {WIN_W}x{WIN_H}（无边框 + WS_EX_LAYERED, alpha=255）");
-    println!("[spike] bar={BAR_H}px  stage=[30,{}]  foot={FOOT_H}px", WIN_H - FOOT_H);
+    println!(
+        "[spike] bar={BAR_H}px  stage=[30,{}]  foot={FOOT_H}px",
+        WIN_H - FOOT_H
+    );
     println!("[spike] 3.5s 后开始自检…");
     post_later(hwnd, MSG_PHASE_A, 3500);
 
@@ -299,11 +302,8 @@ fn phase_a() {
 
         let p_title = win::client_to_screen(app.hwnd, 200, BAR_H / 2);
         let p_stage = win::client_to_screen(app.hwnd, l.w / 2, BAR_H + 160);
-        let p_pill = win::client_to_screen(
-            app.hwnd,
-            l.pill_x + l.pill_w() - 34,
-            l.pill_y + PILL_H / 2,
-        );
+        let p_pill =
+            win::client_to_screen(app.hwnd, l.pill_x + l.pill_w() - 34, l.pill_y + PILL_H / 2);
 
         app.phase_a = Some(PhaseA {
             s_title: probe::sample(p_title.0, p_title.1),
@@ -413,10 +413,18 @@ fn finish(app: &mut App, a: &PhaseA, alpha_ok: bool, alpha_detail: String) {
     let mut report: Vec<(String, bool, String)> = Vec::new();
 
     let ok1 = a.s_title.is_some_and(|p| probe::close(p, BAR_RGB, 16));
-    report.push(("chrome 层渲染（顶部条）".into(), ok1, fmt_rgb(a.s_title, BAR_RGB)));
+    report.push((
+        "chrome 层渲染（顶部条）".into(),
+        ok1,
+        fmt_rgb(a.s_title, BAR_RGB),
+    ));
 
     let ok2 = a.s_stage.is_some_and(|p| probe::close(p, STAGE_RGB, 24));
-    report.push(("舞台透出（红块原色）".into(), ok2, fmt_rgb(a.s_stage, STAGE_RGB)));
+    report.push((
+        "舞台透出（红块原色）".into(),
+        ok2,
+        fmt_rgb(a.s_stage, STAGE_RGB),
+    ));
 
     // 0.85*(16,16,16) + 0.15*(255,0,0) ≈ (52,14,14)
     let ok3 = a
@@ -449,7 +457,11 @@ fn finish(app: &mut App, a: &PhaseA, alpha_ok: bool, alpha_detail: String) {
     println!(
         "模式：{} / chrome 层 = {}",
         if app.toplevel { "toplevel" } else { "child" },
-        if app.toplevel { "独立顶层玻璃窗" } else { "父窗子窗" }
+        if app.toplevel {
+            "独立顶层玻璃窗"
+        } else {
+            "父窗子窗"
+        }
     );
     for (i, (name, ok, detail)) in report.iter().enumerate() {
         println!(

@@ -97,7 +97,10 @@ where
                         let _ = std::fs::write(dir.join(format!("{name}.bin")), &frame.data);
                         let _ = std::fs::write(
                             dir.join(format!("{name}.json")),
-                            format!("{{\"w\":{},\"h\":{},\"cyan\":{:.5}}}", frame.width, frame.height, result.cyan_frac),
+                            format!(
+                                "{{\"w\":{},\"h\":{},\"cyan\":{:.5}}}",
+                                frame.width, frame.height, result.cyan_frac
+                            ),
                         );
                         eprintln!("[vision] dump {name} cyan={:.5}", result.cyan_frac);
                     }
@@ -159,6 +162,9 @@ mod tests {
     fn none_window_skips_without_panicking() {
         let (tx, rx) = mpsc::channel();
         start(|| None, Duration::from_millis(10), tx).unwrap();
-        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "没有窗口就不该产出事件");
+        assert!(
+            rx.recv_timeout(Duration::from_millis(200)).is_err(),
+            "没有窗口就不该产出事件"
+        );
     }
 }

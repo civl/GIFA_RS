@@ -12,9 +12,7 @@ use std::cell::RefCell;
 
 use serde::Deserialize;
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{
-    HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
-};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea;
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, PAINTSTRUCT};
 use windows::Win32::UI::Controls::MARGINS;
@@ -199,6 +197,23 @@ struct Shell {
     disc: Option<Disc>,
     /// 方位标记叠加层
     overlay: Option<Overlay>,
+    /// 系统电源事件（WM_POWERBROADCAST 记录下来，应用层在 tick 里取走）
+    power: Option<PowerEvent>,
+    /// 单实例互斥体（活着就代表本进程是唯一实例）
+    instance_mutex: Option<isize>,
+}
+
+/// 系统电源事件
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PowerEvent {
+    /// 挂起（睡眠/休眠）
+    Suspend,
+    /// 锁屏
+    Lock,
+    /// 解锁
+    Unlock,
+    /// 恢复
+    Resume,
 }
 
 struct Overlay {
@@ -325,6 +340,8 @@ pub fn create(cfg: ShellConfig) -> Result<(), String> {
             popup: None,
             disc: None,
             overlay: None,
+            power: None,
+            instance_mutex: None,
         });
     });
 
@@ -446,9 +463,7 @@ fn build_stage(
             on_stage_message(req.body());
         })
         // 页面要开新窗一律拒绝：GIFA 只有固定几个窗口，弹窗会破坏置顶/区域模型
-        .with_new_window_req_handler(|_url, _features| {
-            wry::NewWindowResponse::Deny
-        })
+        .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
         .with_devtools(false);
 
     builder = match cfg.stage_url.as_deref() {
@@ -745,11 +760,7 @@ pub fn overlay_init(radius: i32, center: Option<(i32, i32)>) -> Result<(), Strin
     let title = wide("GIFA overlay");
     let hwnd = unsafe {
         CreateWindowExW(
-            WS_EX_TOOLWINDOW
-                | WS_EX_NOACTIVATE
-                | WS_EX_TRANSPARENT
-                | WS_EX_LAYERED
-                | WS_EX_TOPMOST,
+            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST,
             CLASS_OVERLAY,
             PCWSTR(title.as_ptr()),
             WS_POPUP,
@@ -828,7 +839,8 @@ pub fn overlay_set_placing(on: bool) {
     let hwnd = with_shell(|s| {
         let o = s.overlay.as_mut()?;
         o.placing = on;
-        let _ = o.wv.evaluate_script(&format!("window.gifaPlace && window.gifaPlace({payload})"));
+        let _ =
+            o.wv.evaluate_script(&format!("window.gifaPlace && window.gifaPlace({payload})"));
         Some(o.hwnd)
     })
     .flatten();
@@ -883,12 +895,9 @@ pub fn overlay_center() -> Option<(i32, i32)> {
 
 /// 按圆心摆放（半径变化时也要跟着改大小）
 pub fn overlay_move_center(x: i32, y: i32) {
-    let Some((h, size)) = with_shell(|s| {
-        s.overlay
-            .as_ref()
-            .map(|o| (o.hwnd, overlay_size(o.radius)))
-    })
-    .flatten() else {
+    let Some((h, size)) =
+        with_shell(|s| s.overlay.as_ref().map(|o| (o.hwnd, overlay_size(o.radius)))).flatten()
+    else {
         return;
     };
     unsafe {
@@ -927,9 +936,13 @@ pub fn overlay_drawn() -> (Option<f64>, Option<f64>) {
 
 /// 最近画过的角度序列（诊断/自检：补间过程可见）
 pub fn overlay_drawn_log() -> Vec<(Option<f64>, Option<f64>)> {
-    with_shell(|s| s.overlay.as_ref().map(|o| o.drawn_log.iter().copied().collect::<Vec<_>>()))
-        .flatten()
-        .unwrap_or_default()
+    with_shell(|s| {
+        s.overlay
+            .as_ref()
+            .map(|o| o.drawn_log.iter().copied().collect::<Vec<_>>())
+    })
+    .flatten()
+    .unwrap_or_default()
 }
 
 /// 最后一帧是否真的画了绿弧（诊断）
@@ -950,7 +963,12 @@ pub fn overlay_view_stale() -> bool {
 pub fn overlay_rect() -> Option<RectI> {
     let h = with_shell(|s| s.overlay.as_ref().map(|o| o.hwnd)).flatten()?;
     let r = win32::window_rect(h);
-    Some(RectI::new(r.left, r.top, r.right - r.left, r.bottom - r.top))
+    Some(RectI::new(
+        r.left,
+        r.top,
+        r.right - r.left,
+        r.bottom - r.top,
+    ))
 }
 
 fn on_overlay_message(body: &str) {
@@ -1248,7 +1266,8 @@ fn fit_immersion(aspect: f64) {
     if !(aspect > 0.1 && aspect < 10.0) {
         return;
     }
-    let (Some(h), Some(saved)) = (float_hwnd(), with_shell(|s| s.immersion_bounds).flatten()) else {
+    let (Some(h), Some(saved)) = (float_hwnd(), with_shell(|s| s.immersion_bounds).flatten())
+    else {
         return;
     };
     let (sx, sy, sw, sh) = saved;
@@ -1275,7 +1294,8 @@ fn fit_immersion(aspect: f64) {
 /// 还原沉浸前的矩形。系统对 `SetWindowPos` 可能做 1~2px 舍入，
 /// 这里读回实际值再补一次差值（原版同样处理）。
 fn restore_immersion_bounds() {
-    let (Some(h), Some(saved)) = (float_hwnd(), with_shell(|s| s.immersion_bounds).flatten()) else {
+    let (Some(h), Some(saved)) = (float_hwnd(), with_shell(|s| s.immersion_bounds).flatten())
+    else {
         return;
     };
     let (x, y, w, hh) = saved;
@@ -1483,6 +1503,142 @@ pub fn list_windows() -> Vec<(String, String, RectI)> {
     out
 }
 
+/// 取走一个待处理的系统电源事件（应用层在 tick 里调）
+pub fn take_power_event() -> Option<PowerEvent> {
+    with_shell(|s| s.power.take()).flatten()
+}
+
+/// 告诉系统"别挂起我"。
+///
+/// 常驻工具的最小化/后台场景下，进程被 EcoQoS 或省电策略挂起，
+/// 全局钩子和识别线程都会停 —— 用户看到的就是"窗口最小化后热键失灵"。
+pub fn prevent_suspension() -> bool {
+    use windows::Win32::System::Power::{
+        SetThreadExecutionState, ES_CONTINUOUS, ES_SYSTEM_REQUIRED,
+    };
+    // 返回 0 表示失败（上一次的设置被沿用）；非 0 是设置前的旧状态
+    unsafe { SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED).0 != 0 }
+}
+
+/// 当前进程是否已提权（决定热键能不能收到提权游戏里的按键）
+pub fn is_elevated() -> bool {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    unsafe {
+        let mut token = HANDLE::default();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+            return false;
+        }
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut len = 0u32;
+        let ok = GetTokenInformation(
+            token,
+            TokenElevation,
+            Some(&mut elevation as *mut _ as *mut _),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut len,
+        )
+        .is_ok();
+        let _ = CloseHandle(token);
+        ok && elevation.TokenIsElevated != 0
+    }
+}
+
+/// 以管理员身份重启自己（UAC 被取消时返回错误，调用方继续以普通权限运行）。
+///
+/// 提权后的新进程会带 `--elevated` 标记 —— 那个标记的唯一用途是**避免循环重启**：
+/// 如果已经是管理员却仍不满足条件，就不要再弹 UAC 了。
+pub fn relaunch_elevated() -> Result<(), String> {
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let exe = std::env::current_exe().map_err(|e| format!("取 exe 路径失败: {e}"))?;
+    let exe_w: Vec<u16> = exe
+        .to_string_lossy()
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    // 参数原样带过去，但去掉可能已经存在的 --elevated（避免重复）
+    let mut args: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|a| a != "--elevated")
+        .collect();
+    args.push("--elevated".into());
+    let args_w: Vec<u16> = args
+        .join(" ")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let ret = unsafe {
+        ShellExecuteW(
+            None,
+            w!("runas"),
+            PCWSTR(exe_w.as_ptr()),
+            PCWSTR(args_w.as_ptr()),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // ShellExecuteW 返回值 > 32 才算成功
+    if ret.0 as isize > 32 {
+        Ok(())
+    } else {
+        Err(format!("UAC 被取消或启动失败（{}）", ret.0 as isize))
+    }
+}
+
+/// 单实例：抢一个命名互斥体。返回 true = 本进程是唯一实例。
+///
+/// 抢不到说明已有实例在跑 —— 调用方应该把那个窗口叫回来再退出。
+/// 互斥体句柄存进 Shell 状态，进程退出时由系统回收（不需要显式 CloseHandle）。
+pub fn try_single_instance(name: &str) -> bool {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+    use windows::Win32::System::Threading::CreateMutexW;
+    let name_w: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let handle = unsafe { CreateMutexW(None, false, PCWSTR(name_w.as_ptr())) };
+    match handle {
+        Ok(h) => {
+            let already = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
+            if already {
+                return false;
+            }
+            with_shell(|s| s.instance_mutex = Some(h.0 as isize));
+            true
+        }
+        // 建不出来就当作"没有其它实例"，不要因为保护机制挡住启动
+        Err(_) => true,
+    }
+}
+
+/// 把已经在跑的实例叫回来（单实例的第二次启动）
+pub fn activate_existing() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+    for class in ["GifaFloat", "GifaChrome"] {
+        let c: Vec<u16> = class.encode_utf16().chain(std::iter::once(0)).collect();
+        let h = unsafe { FindWindowW(PCWSTR(c.as_ptr()), PCWSTR::null()) };
+        if let Ok(h) = h {
+            if !h.is_invalid() {
+                unsafe {
+                    if IsIconic(h).as_bool() {
+                        let _ = ShowWindow(h, SW_RESTORE);
+                    }
+                    let _ = SetForegroundWindow(h);
+                }
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 诊断：屏幕坐标处 WindowFromPoint 返回的 HWND 裸值
 pub fn window_at(x: i32, y: i32) -> isize {
     use windows::Win32::Foundation::POINT;
@@ -1507,7 +1663,12 @@ pub fn message_box(title: &str, text: &str) {
     let t = wide(title);
     let m = wide(text);
     unsafe {
-        MessageBoxW(None, PCWSTR(m.as_ptr()), PCWSTR(t.as_ptr()), MB_OK | MB_ICONERROR);
+        MessageBoxW(
+            None,
+            PCWSTR(m.as_ptr()),
+            PCWSTR(t.as_ptr()),
+            MB_OK | MB_ICONERROR,
+        );
     }
 }
 
@@ -1563,9 +1724,13 @@ fn drag_poll_tick() {
     if DRAG_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
-    let Some(zone) = with_shell(|s| s.layout.drag).flatten() else { return };
+    let Some(zone) = with_shell(|s| s.layout.drag).flatten() else {
+        return;
+    };
     // 页面报的是**窗口内**坐标，要和屏幕光标比，得先加上 chrome 窗原点
-    let Some(origin) = chrome_hwnd().map(win32::window_rect) else { return };
+    let Some(origin) = chrome_hwnd().map(win32::window_rect) else {
+        return;
+    };
     let zx = origin.left + zone.x;
     let zy = origin.top + zone.y;
     let (cx, cy) = win32::cursor_pos();
@@ -1644,7 +1809,9 @@ pub fn minimize() {
 }
 
 pub fn hide() {
-    let (Some(f), Some(c)) = (float_hwnd(), chrome_hwnd()) else { return };
+    let (Some(f), Some(c)) = (float_hwnd(), chrome_hwnd()) else {
+        return;
+    };
     unsafe {
         let _ = ShowWindow(c, SW_HIDE);
         let _ = ShowWindow(f, SW_HIDE);
@@ -1652,7 +1819,9 @@ pub fn hide() {
 }
 
 pub fn show_inactive() {
-    let (Some(f), Some(c)) = (float_hwnd(), chrome_hwnd()) else { return };
+    let (Some(f), Some(c)) = (float_hwnd(), chrome_hwnd()) else {
+        return;
+    };
     unsafe {
         let _ = ShowWindow(f, SW_SHOWNOACTIVATE);
         let _ = ShowWindow(c, SW_SHOWNOACTIVATE);
@@ -1698,7 +1867,11 @@ pub fn snapshot() -> Option<Snapshot> {
             .region(cw, ch)
             .normalized(cw, ch)
             .unwrap_or_default();
-        let owner = unsafe { GetWindow(s.chrome, GW_OWNER).map(|h| h == s.float).unwrap_or(false) };
+        let owner = unsafe {
+            GetWindow(s.chrome, GW_OWNER)
+                .map(|h| h == s.float)
+                .unwrap_or(false)
+        };
         Snapshot {
             float: s.float.0 as isize,
             chrome: s.chrome.0 as isize,
@@ -1972,10 +2145,7 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             if let Some((min_w, min_h)) = min {
                 unsafe {
                     let mmi = &mut *(lp.0 as *mut MINMAXINFO);
-                    mmi.ptMinTrackSize = POINT {
-                        x: min_w,
-                        y: min_h,
-                    };
+                    mmi.ptMinTrackSize = POINT { x: min_w, y: min_h };
                 }
             }
             windows::Win32::Foundation::LRESULT(0)
@@ -2015,6 +2185,28 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             windows::Win32::Foundation::LRESULT(0)
         }
 
+        /* ---- 电源事件：挂起/锁屏/恢复
+         *
+         * 只在钩子里记一笔，真正的处理交给应用层（它才知道手柄在不在跑、
+         * 临时加速是不是开着）。挂起时钩子会被系统摘掉，恢复后必须 rearm ——
+         * 这一步不做，用户「睡一觉醒来按热键没反应」。
+         */
+        WM_POWERBROADCAST => {
+            // 常量直接写字面量：windows crate 只导出了 SetThreadExecutionState 那部分
+            const PBT_APMSUSPEND: u32 = 0x0004;
+            const PBT_APMRESUMESUSPEND: u32 = 0x0007;
+            const PBT_APMRESUMEAUTOMATIC: u32 = 0x0012;
+            let ev = match wp.0 as u32 {
+                PBT_APMSUSPEND => Some(PowerEvent::Suspend),
+                PBT_APMRESUMESUSPEND | PBT_APMRESUMEAUTOMATIC => Some(PowerEvent::Resume),
+                _ => None,
+            };
+            if let Some(ev) = ev {
+                with_shell(|s| s.power = Some(ev));
+            }
+            windows::Win32::Foundation::LRESULT(1) // TRUE = 已处理
+        }
+
         // ---- 显示器增删/分辨率变化：沉浸模式重新贴合
         WM_DISPLAYCHANGE => {
             if with_shell(|s| s.immersion).unwrap_or(false) {
@@ -2043,7 +2235,8 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             let (w, h) = win32::client_size(hwnd);
             with_shell(|s| {
                 if let Some(o) = s.overlay.as_mut() {
-                    let _ = o.wv.set_bounds(rect_for(RectI::new(0, 0, w.max(1), h.max(1))));
+                    let _ =
+                        o.wv.set_bounds(rect_for(RectI::new(0, 0, w.max(1), h.max(1))));
                 }
             });
             unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
@@ -2054,7 +2247,8 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
             let (w, h) = win32::client_size(hwnd);
             with_shell(|s| {
                 if let Some(d) = s.disc.as_mut() {
-                    let _ = d.wv.set_bounds(rect_for(RectI::new(0, 0, w.max(1), h.max(1))));
+                    let _ =
+                        d.wv.set_bounds(rect_for(RectI::new(0, 0, w.max(1), h.max(1))));
                 }
             });
             unsafe { DefWindowProcW(hwnd, msg, wp, lp) }
@@ -2062,13 +2256,14 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
 
         // ---- 位置/尺寸/DPI 变化：两窗联动；弹窗只同步自己的 WebView2
         WM_WINDOWPOSCHANGED | WM_SIZE | WM_MOVE => {
-            let is_popup = with_shell(|s| s.popup.as_ref().is_some_and(|p| p.hwnd == hwnd))
-                .unwrap_or(false);
+            let is_popup =
+                with_shell(|s| s.popup.as_ref().is_some_and(|p| p.hwnd == hwnd)).unwrap_or(false);
             if is_popup {
                 let (w, h) = win32::client_size(hwnd);
                 with_shell(|s| {
                     if let Some(p) = s.popup.as_mut() {
-                        let _ = p.wv.set_bounds(rect_for(RectI::new(0, 0, w.max(1), h.max(1))));
+                        let _ =
+                            p.wv.set_bounds(rect_for(RectI::new(0, 0, w.max(1), h.max(1))));
                     }
                 });
                 return unsafe { DefWindowProcW(hwnd, msg, wp, lp) };
@@ -2194,8 +2389,8 @@ fn dispatch(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
 
         WM_CLOSE => {
             // 弹窗自己关：销毁即可
-            let is_popup = with_shell(|s| s.popup.as_ref().is_some_and(|p| p.hwnd == hwnd))
-                .unwrap_or(false);
+            let is_popup =
+                with_shell(|s| s.popup.as_ref().is_some_and(|p| p.hwnd == hwnd)).unwrap_or(false);
             if is_popup {
                 with_shell(|s| s.popup = None);
                 unsafe {
@@ -2324,7 +2519,9 @@ mod url_tests {
     #[test]
     fn whitelist_accepts_only_bilibili() {
         assert!(is_bilibili_url("https://passport.bilibili.com/login"));
-        assert!(is_bilibili_url("https://www.bilibili.com/video/BV1xx411c7mD"));
+        assert!(is_bilibili_url(
+            "https://www.bilibili.com/video/BV1xx411c7mD"
+        ));
         assert!(is_bilibili_url("http://b23.tv/abc"));
         assert!(!is_bilibili_url("https://evil.com/bilibili.com"));
         assert!(!is_bilibili_url("https://bilibili.com.evil.com/x"));

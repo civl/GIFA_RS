@@ -15,9 +15,11 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 
 | 层 | 项 | 判据 |
 |---|---|---|
+| 风格 | `cargo fmt --check` | 无未格式化块（一次性对齐 186 处后卡住） |
+| 静态检查 | `cargo clippy -D warnings` | 任何 warning 都算失败 |
 | 编译 | `cargo build --workspace` | 退出码 |
 | 语料 | 生成视觉对拍素材（node） | 有 node 时现场生成，交给 golden 测试 |
-| 单测 | `cargo test` | **106 通过 / 0 失败**（含视觉 golden 对拍） |
+| 单测 | `cargo test` | **130 通过 / 0 失败**（含视觉 golden 对拍） |
 | 静态 | `cargo clippy --all-targets` | **0 warning** |
 | 外壳 | `shell-demo` 区域/拖角/命中 | 6/6 |
 | 热键 | `--hotkey-test` 注册/钩子/交换 | 6/6（环境受限时降级 SKIP） |

@@ -44,10 +44,7 @@ impl Roi {
 ///
 /// 归一是**混用**的（照搬原版）：`cx`、`r` 除以视频**宽**，`cy` 除以视频**高**。
 /// `video` 与 `ring` 必须用同一坐标系（这里都用浮窗客户区像素）。
-pub fn roi_from_pixels(
-    ring: (f64, f64, f64),
-    video: (f64, f64, f64, f64),
-) -> Option<Roi> {
+pub fn roi_from_pixels(ring: (f64, f64, f64), video: (f64, f64, f64, f64)) -> Option<Roi> {
     let (cx, cy, r) = ring;
     let (vx, vy, vw, vh) = video;
     if !(vw > 1.0 && vh > 1.0 && r > 0.0) {
@@ -193,7 +190,12 @@ impl LayoutError {
 }
 
 fn clean_name(raw: &str) -> String {
-    raw.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(40).collect()
+    raw.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(40)
+        .collect()
 }
 
 impl Layouts {
@@ -438,7 +440,8 @@ mod tests {
         let mut l = Layouts::default();
         l.create("x1".into(), "自定义", roi()).unwrap();
         let before = l.active().revision;
-        l.calibrate("x1", Roi::new(0.2, 0.3, 0.12).unwrap()).unwrap();
+        l.calibrate("x1", Roi::new(0.2, 0.3, 0.12).unwrap())
+            .unwrap();
         let a = l.active();
         assert_eq!(a.revision, before + 1);
         assert!(!a.centered);
@@ -449,7 +452,10 @@ mod tests {
         let mut l = Layouts::default();
         l.create("x1".into(), "自定义", roi()).unwrap();
         let rev = l.active().revision;
-        assert_eq!(l.center("x1", rev + 1, (0.001, 0.001)), Err(LayoutError::Stale));
+        assert_eq!(
+            l.center("x1", rev + 1, (0.001, 0.001)),
+            Err(LayoutError::Stale)
+        );
         l.center("x1", rev, (0.001, 0.0)).unwrap();
         assert!(l.active().centered);
         assert_eq!(l.active().revision, rev + 1);
@@ -479,10 +485,7 @@ mod tests {
     #[test]
     fn legacy_migration_dedupes_same_roi() {
         let r = Roi::new(0.147, 0.246, 0.144).unwrap();
-        let l = Layouts::migrate_legacy(
-            &[r],
-            &[("BV1xx".into(), vec![r])],
-        );
+        let l = Layouts::migrate_legacy(&[r], &[("BV1xx".into(), vec![r])]);
         let custom: Vec<_> = l.layouts.iter().filter(|x| !x.built_in).collect();
         assert_eq!(custom.len(), 1);
     }
@@ -492,7 +495,10 @@ mod tests {
         // 视频占客户区 (0,70) 起、1280×720；圆环中心 (282,266)、半径 276
         let roi = roi_from_pixels((282.0, 266.0, 276.0), (0.0, 70.0, 1280.0, 720.0)).unwrap();
         assert!((roi.cx - 282.0 / 1280.0).abs() < 1e-9, "cx 按宽归一");
-        assert!((roi.cy - 196.0 / 720.0).abs() < 1e-9, "cy 先减偏移再按**高**归一");
+        assert!(
+            (roi.cy - 196.0 / 720.0).abs() < 1e-9,
+            "cy 先减偏移再按**高**归一"
+        );
         assert!((roi.r - 276.0 / 1280.0).abs() < 1e-9, "r 按宽归一");
         assert!(roi.is_valid());
     }

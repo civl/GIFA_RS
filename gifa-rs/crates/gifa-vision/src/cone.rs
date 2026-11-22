@@ -315,9 +315,21 @@ pub fn analyze_cone(rgba: &[u8], size: usize, step: usize, ws: &mut ConeWorkspac
             rr /= rn as f64;
             rg /= rn as f64;
             rb /= rn as f64;
-            let sign = if rr + rg + rb >= lr + lg + lb { 1.0 } else { -1.0 };
-            let (or, og, ob) = if sign > 0.0 { (lr, lg, lb) } else { (rr, rg, rb) };
-            let (hr, hg, hb) = if sign > 0.0 { (rr, rg, rb) } else { (lr, lg, lb) };
+            let sign = if rr + rg + rb >= lr + lg + lb {
+                1.0
+            } else {
+                -1.0
+            };
+            let (or, og, ob) = if sign > 0.0 {
+                (lr, lg, lb)
+            } else {
+                (rr, rg, rb)
+            };
+            let (hr, hg, hb) = if sign > 0.0 {
+                (rr, rg, rb)
+            } else {
+                (lr, lg, lb)
+            };
             let (big_h_r, big_h_g, big_h_b) = (255.0 - or, 255.0 - og, 255.0 - ob);
             let den = big_h_r * big_h_r + big_h_g * big_h_g + big_h_b * big_h_b;
             let near_white = big_h_r.max(big_h_g).max(big_h_b) < 18.0;
@@ -325,9 +337,7 @@ pub fn analyze_cone(rgba: &[u8], size: usize, step: usize, ws: &mut ConeWorkspac
                 continue;
             }
             let a = ((hr - or) * big_h_r + (hg - og) * big_h_g + (hb - ob) * big_h_b) / den;
-            if near_white
-                && (hr - or).abs().max((hg - og).abs()).max((hb - ob).abs()) < 1.5
-            {
+            if near_white && (hr - or).abs().max((hg - og).abs()).max((hb - ob).abs()) < 1.5 {
                 continue;
             }
             if a > A_MAX {
@@ -435,9 +445,7 @@ pub fn analyze_cone(rgba: &[u8], size: usize, step: usize, ws: &mut ConeWorkspac
         None
     };
     let axis = match (e_r, e_f) {
-        (Some(r), Some(f)) => {
-            ((r + HALF) * b_rise + (f - HALF) * b_fall) / (b_rise + b_fall)
-        }
+        (Some(r), Some(f)) => ((r + HALF) * b_rise + (f - HALF) * b_fall) / (b_rise + b_fall),
         (Some(r), None) => r + HALF,
         (None, Some(f)) => f - HALF,
         (None, None) => bc,

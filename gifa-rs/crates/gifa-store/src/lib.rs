@@ -227,7 +227,11 @@ impl SettingsStore {
         Self {
             path,
             settings,
-            version: if version == 0 { CONFIG_VERSION } else { version },
+            version: if version == 0 {
+                CONFIG_VERSION
+            } else {
+                version
+            },
             dirty: false,
             dirty_since: None,
             newer_version: newer,
@@ -305,12 +309,7 @@ impl SettingsStore {
 /// 旧版的 `bearing.rois` / `bearing.roiBy` → 命名布局。
 /// 只有在用户还没有自定义布局时才迁移，避免覆盖新数据。
 pub fn migrate_bearing(settings: &mut Settings) -> Option<usize> {
-    let has_custom = settings
-        .bearing
-        .layouts
-        .layouts
-        .iter()
-        .any(|l| !l.built_in);
+    let has_custom = settings.bearing.layouts.layouts.iter().any(|l| !l.built_in);
     if has_custom {
         return None;
     }
@@ -364,8 +363,12 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&p)
-            .unwrap_or_else(|e| panic!("建临时目录失败 {p:?}: {e}（temp_dir={:?}）", std::env::temp_dir()));
+        std::fs::create_dir_all(&p).unwrap_or_else(|e| {
+            panic!(
+                "建临时目录失败 {p:?}: {e}（temp_dir={:?}）",
+                std::env::temp_dir()
+            )
+        });
         p
     }
 
@@ -441,7 +444,10 @@ mod tests {
         let t0 = Instant::now();
         assert!(!s.save_if_due(t0), "刚改完不该立刻写");
         assert!(!s.save_if_due(t0 + Duration::from_millis(200)));
-        assert!(s.save_if_due(t0 + Duration::from_millis(260)), "过了窗口要写");
+        assert!(
+            s.save_if_due(t0 + Duration::from_millis(260)),
+            "过了窗口要写"
+        );
         assert!(!s.is_dirty());
     }
 
@@ -465,8 +471,17 @@ mod tests {
         assert_eq!(st.volume, 55.0);
         assert_eq!(st.hotkeys.get("togglePlay").unwrap(), "Alt+J");
         assert!(s.migrated.iter().any(|m| m.contains("bearing")));
-        let custom: Vec<_> = st.bearing.layouts.layouts.iter().filter(|l| !l.built_in).collect();
-        assert!(custom.len() >= 2, "种子 ROI 被跳过，其余进 legacy 布局：{custom:?}");
+        let custom: Vec<_> = st
+            .bearing
+            .layouts
+            .layouts
+            .iter()
+            .filter(|l| !l.built_in)
+            .collect();
+        assert!(
+            custom.len() >= 2,
+            "种子 ROI 被跳过，其余进 legacy 布局：{custom:?}"
+        );
         assert_ne!(st.bearing.layouts.default_layout_id, "builtin");
         // 种子（0.0875/0.122/0.046）不该出现
         assert!(!custom.iter().any(|l| (l.roi.cx - 0.0875).abs() < 1e-6));
@@ -482,7 +497,11 @@ mod tests {
         let first = s.settings().bearing.layouts.layouts.len();
         s.flush().unwrap();
         let again = SettingsStore::load(path);
-        assert_eq!(again.settings().bearing.layouts.layouts.len(), first, "第二次载入不再迁移");
+        assert_eq!(
+            again.settings().bearing.layouts.layouts.len(),
+            first,
+            "第二次载入不再迁移"
+        );
     }
 
     #[test]

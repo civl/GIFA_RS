@@ -283,7 +283,10 @@ mod tests {
     #[test]
     fn swap_map_rejects_bad_accelerator() {
         let m = std::collections::BTreeMap::new();
-        assert_eq!(swap_map(&m, Action::TogglePlay, "Ctrl+"), Err(ParseError::NoKey));
+        assert_eq!(
+            swap_map(&m, Action::TogglePlay, "Ctrl+"),
+            Err(ParseError::NoKey)
+        );
     }
 
     #[test]

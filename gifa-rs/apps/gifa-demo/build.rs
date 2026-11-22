@@ -25,7 +25,11 @@ fn main() {
     let release = std::env::var("PROFILE").unwrap_or_default() == "release";
     let no_admin = std::env::var_os("GIFA_NO_ADMIN").is_some();
     let admin = release && !no_admin;
-    let level = if admin { "requireAdministrator" } else { "asInvoker" };
+    let level = if admin {
+        "requireAdministrator"
+    } else {
+        "asInvoker"
+    };
 
     // ---- 清单（链接器直接嵌）
     let manifest = format!(
@@ -69,8 +73,8 @@ fn main() {
 }
 
 fn embed_icon_and_version(out: &Path) {
-    let icon = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../reference/GIFA/build/icon.ico");
+    let icon =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../reference/GIFA/build/icon.ico");
     if !icon.exists() {
         println!("cargo:warning=找不到 icon.ico，跳过图标与版本资源");
         return;

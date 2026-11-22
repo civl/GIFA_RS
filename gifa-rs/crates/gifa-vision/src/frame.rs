@@ -84,7 +84,17 @@ mod tests {
         assert!((y - 0.246 * 1080.0).abs() < 1e-9);
         assert!((rad - 0.144 * 1920.0).abs() < 1e-9);
 
-        assert!(!Roi { cx: 0.0, cy: 0.5, r: 0.1 }.is_valid());
-        assert!(!Roi { cx: 0.5, cy: 0.5, r: 0.9 }.is_valid());
+        assert!(!Roi {
+            cx: 0.0,
+            cy: 0.5,
+            r: 0.1
+        }
+        .is_valid());
+        assert!(!Roi {
+            cx: 0.5,
+            cy: 0.5,
+            r: 0.9
+        }
+        .is_valid());
     }
 }

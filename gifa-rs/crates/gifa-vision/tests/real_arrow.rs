@@ -36,7 +36,11 @@ fn clean_real_arrow_matches_reference() {
     assert_eq!(r.cyans, 331, "青色像素数应与原版一致");
     assert_eq!(r.corners.len(), 4, "干净箭头是 4 个角");
     let err = ((r.angle - 90.2 + 540.0) % 360.0 - 180.0).abs();
-    assert!(err < 0.05, "角度应与原版一致：Rust {:.4} / JS 90.2", r.angle);
+    assert!(
+        err < 0.05,
+        "角度应与原版一致：Rust {:.4} / JS 90.2",
+        r.angle
+    );
     assert!(
         (r.ang_margin - 23.4).abs() < 0.05,
         "angMargin 应与原版一致：Rust {} / JS 23.4",
@@ -53,13 +57,16 @@ fn minimap_background_pulls_the_angle_but_still_passes_gates() {
     // 移植必须复现同样的"错"，因为它是算法本身的行为
     assert_eq!(r.corners.len(), 5, "带背景时是 5 个角");
     let err = ((r.angle - 101.8 + 540.0) % 360.0 - 180.0).abs();
-    assert!(err < 0.05, "角度应与原版一致：Rust {:.4} / JS 101.8", r.angle);
+    assert!(
+        err < 0.05,
+        "角度应与原版一致：Rust {:.4} / JS 101.8",
+        r.angle
+    );
     assert!(
         r.valid,
         "原版在这一帧仍判有效（angMargin 13.5 > 4），移植不应自行加严"
     );
 }
-
 
 /// 管线参数（bisErr 25 / angMargin 18）在真机绿地上的表现。
 ///
@@ -96,7 +103,6 @@ fn pipe_params_on_realgame() {
     );
 }
 
-
 /// 管线参数对"干净/被污染"两枚真机箭头的取舍。
 ///
 /// 干净那枚 angMargin 23.4 → 保住；被地图青色污染的那枚 13.5 → 挡掉。
@@ -112,7 +118,11 @@ fn pipe_params_keep_good_and_drop_contaminated() {
 
     let (data, side) = load("real-arrow-clean-96.bin");
     let good = gifa_vision::arrow::analyze_with(&data, side, 1, &mut ws, &params);
-    assert!(good.valid, "干净箭头应保住（angMargin={}）", good.ang_margin);
+    assert!(
+        good.valid,
+        "干净箭头应保住（angMargin={}）",
+        good.ang_margin
+    );
     let err = ((good.angle - 90.2 + 540.0) % 360.0 - 180.0).abs();
     assert!(err < 0.05, "角度应与默认参数一致：{}", good.angle);
 

@@ -79,7 +79,8 @@ fn matches_javascript_reference_on_golden_frames() {
     let mut max_cone_err = 0.0f64;
 
     for c in &cases {
-        let bytes = std::fs::read(dir.join(&c.name)).unwrap_or_else(|e| panic!("读 {}: {e}", c.name));
+        let bytes =
+            std::fs::read(dir.join(&c.name)).unwrap_or_else(|e| panic!("读 {}: {e}", c.name));
         let mut ws = ArrowWorkspace::default();
         let got = analyze(&bytes, c.size, 1, &mut ws);
 

@@ -232,11 +232,21 @@ pub enum PlayerCommand {
     Toggle,
     Play,
     Pause,
-    Seek { value: f64 },
-    SeekBy { value: f64 },
-    Rate { value: f64 },
-    Volume { value: f64 },
-    Mute { value: bool },
+    Seek {
+        value: f64,
+    },
+    SeekBy {
+        value: f64,
+    },
+    Rate {
+        value: f64,
+    },
+    Volume {
+        value: f64,
+    },
+    Mute {
+        value: bool,
+    },
     /// 同步偏好（切 P / 新视频后要重新应用）
     Preferences {
         volume: f64,
@@ -244,7 +254,9 @@ pub enum PlayerCommand {
         rate: f64,
     },
     /// 纯净模式
-    Clean { on: bool },
+    Clean {
+        on: bool,
+    },
     /// 只看视频（沉浸）
     ///
     /// 注意字段名：agent 里读的是 `m.videoOnly`，所以这里必须显式 camelCase，
@@ -255,7 +267,9 @@ pub enum PlayerCommand {
         session: u32,
     },
     /// 取视频信息（分 P 列表）：页面内 fetch，同源带 Cookie
-    FetchView { id: String },
+    FetchView {
+        id: String,
+    },
     /// 取登录态
     FetchNav,
     /// 取 `<video>` 的实际位置（标定用）
@@ -315,7 +329,10 @@ mod tests {
             video_url("BV1xx411c7mD", 2),
             "https://www.bilibili.com/video/BV1xx411c7mD/?p=2&autoplay=1"
         );
-        assert_eq!(video_url("av1", 0), "https://www.bilibili.com/video/av1/?p=1&autoplay=1");
+        assert_eq!(
+            video_url("av1", 0),
+            "https://www.bilibili.com/video/av1/?p=1&autoplay=1"
+        );
     }
 
     #[test]
@@ -331,7 +348,9 @@ mod tests {
         assert!(is_short_link("https://b23.tv/abc123"));
         assert!(is_short_link("b23.tv/abc"));
         assert!(is_short_link("https://bili2233.cn/xyz"));
-        assert!(!is_short_link("https://www.bilibili.com/video/BV1xx411c7mD"));
+        assert!(!is_short_link(
+            "https://www.bilibili.com/video/BV1xx411c7mD"
+        ));
     }
 
     #[test]
@@ -386,7 +405,10 @@ mod tests {
             session: 3,
         }
         .to_js();
-        assert!(js.contains("\"videoOnly\":true"), "agent 读的是 videoOnly：{js}");
+        assert!(
+            js.contains("\"videoOnly\":true"),
+            "agent 读的是 videoOnly：{js}"
+        );
         assert!(!js.contains("video_only"));
     }
 

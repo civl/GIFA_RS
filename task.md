@@ -400,18 +400,29 @@ gifa-rs/
 >
 > **分期（D2）**：`M0~M13` 为**一期**，出口是"与原版 v0.2.6 功能等价"；`M8` 为**二期**（视觉原生化）。一期**不做** M8，方位标记靠页面 JS 那份原版识别直接可用。
 
-### M0 工程骨架与生命周期 `3d` [P0]
+### M0 工程骨架与生命周期 `3d` [P0] ✅ **完成**
 
-- [ ] workspace + 5 个 crate（4 库 + 1 二进制）骨架 + `cargo fmt` / `clippy -D warnings`
-- [ ] 清单：`requireAdministrator` + `PerMonitorV2` + `longPathAware`
-- [ ] CLI：`--open BV1xx?p=2`、`--bearing`、`--elevated`（提权标记，用于避免循环重启）
-- [ ] 单实例：`CreateMutexW` → 第二实例发自定义消息唤回启动器（启动器未建时先建）
-- [ ] 数据目录解析：`installed.flag` → `%APPDATA%\原神跟跑助手`；否则探写 `exe\data`，失败回退
-- [ ] `startup.log`：128KB 滚动；记录版本、模式、钩子/手柄状态
-- [ ] `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED)` 防挂起
-- [ ] `WM_POWERBROADCAST`：suspend/lock → 停手柄、取消临时加速；resume → `rearm()` 钩子
+- [x] workspace + 6 个 crate（gifa-core/input/player/shell/store/vision）+ 2 个 app 骨架
+- [x] `cargo fmt --all` 一次对齐（186 处），门禁加 `cargo fmt --check` 卡住后续漂移
+- [x] `clippy -D warnings` 进出门禁（任何 warning 都算失败）
+- [x] 清单：`requireAdministrator` + `PerMonitorV2` + `longPathAware`
+      ↳ release 二进制里字符串实测三个都在（debug 用 asInvoker，`GIFA_NO_ADMIN=1` 可覆盖）
+- [x] CLI：`--open BV1xx?p=2`、`--bearing`、`--elevated`（提权标记，避免 UAC 循环重启）、
+      `--relaunch-elevated`（UAC 被取消时继续以普通权限运行，不会卡死）
+- [x] 单实例：`CreateMutexW("Local\\GIFA-Rust-Single")`；
+      抢不到就 `FindWindow("GifaFloat"/"GifaChrome")` → `SW_RESTORE` + `SetForegroundWindow` 唤回
+      ↳ 实测第二次启动输出「已有实例在运行，本次退出（已把它提到前台）」
+- [x] 数据目录解析：`installed.flag` → `%APPDATA%\原神跟跑助手`；否则探写 `exe\data`，失败回退
+      （`gifa_store::resolve_data_dir`，含单测 `installed_flag_wins`）
+- [x] `startup.log`：超过 128KB 滚动成 `startup.log.1`；
+      记录版本 / 模式（浮窗·实战·真机）/ 提权状态 / 数据目录 / WebView2 版本，
+      未提权时额外写一条 UIPI 提示
+- [x] `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED)` 防挂起（启动即调）
+- [x] `WM_POWERBROADCAST`：suspend/lock → 停手柄轮询、记日志；resume → `rearm()` 钩子 + 记日志
+      （钩子被系统摘掉后不重挂，用户会遇到"睡一觉醒来热键没反应"）
 - **锚点**：`main.js:1676-2147`（`app:boot`、生命周期）
-- **验收**：双击 exe 弹一次 UAC；第二次双击唤回已开启动器；`%APPDATA%` 下出现 `data/` 与 `startup.log`
+- **验收**：✅ 二次启动唤回；✅ `startup.log` 有版本/模式/提权/WebView2；
+  ✅ release 清单含 requireAdministrator（UAC 由清单触发，无需代码再弹）
 
 ### M1 窗口基座 `8d` [P0] ✅ 骨架完成（spike 1d + 实现 3d，剩 4d 收尾）
 

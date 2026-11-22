@@ -45,10 +45,13 @@ fn ang_diff(a: f64, b: f64) -> f64 {
 
 #[test]
 fn filter_matches_javascript_on_sequence() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tools/vision-ref/filter-seq.json");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/vision-ref/filter-seq.json");
     if !path.exists() {
-        eprintln!("跳过时序对拍：没有 {}（先跑 harness.js seq）", path.display());
+        eprintln!(
+            "跳过时序对拍：没有 {}（先跑 harness.js seq）",
+            path.display()
+        );
         return;
     }
     let seq: Seq =

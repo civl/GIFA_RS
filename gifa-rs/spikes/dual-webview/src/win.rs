@@ -34,9 +34,9 @@ impl raw_window_handle::HasWindowHandle for HwndHost {
             .ok_or(raw_window_handle::HandleError::Unavailable)?;
         let handle = raw_window_handle::Win32WindowHandle::new(nz);
         Ok(unsafe {
-            raw_window_handle::WindowHandle::borrow_raw(
-                raw_window_handle::RawWindowHandle::Win32(handle),
-            )
+            raw_window_handle::WindowHandle::borrow_raw(raw_window_handle::RawWindowHandle::Win32(
+                handle,
+            ))
         })
     }
 }

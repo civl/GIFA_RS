@@ -36,12 +36,12 @@ pub fn capture_screen(x: i32, y: i32, w: i32, h: i32) -> Result<Frame, String> {
 
         let bi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: w,
-            // 负高度 = 自顶向下，省一次翻转
-            biHeight: -h,
-            biPlanes: 1,
-            biBitCount: 32,
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w,
+                // 负高度 = 自顶向下，省一次翻转
+                biHeight: -h,
+                biPlanes: 1,
+                biBitCount: 32,
                 biCompression: 0, // BI_RGB
                 ..Default::default()
             },

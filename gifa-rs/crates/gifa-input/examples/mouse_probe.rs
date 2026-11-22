@@ -31,7 +31,9 @@ extern "system" fn proc_(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
 
 fn main() {
     unsafe {
-        let module = GetModuleHandleW(None).ok().map(|m| windows::Win32::Foundation::HINSTANCE(m.0));
+        let module = GetModuleHandleW(None)
+            .ok()
+            .map(|m| windows::Win32::Foundation::HINSTANCE(m.0));
         match SetWindowsHookExW(WH_MOUSE_LL, Some(proc_), module, 0) {
             Ok(h) => println!("[probe] 钩子已安装 {:#x}", h.0 as isize),
             Err(e) => {

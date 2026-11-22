@@ -242,7 +242,10 @@ impl ViewState {
 }
 
 /// 视角 → 上报字段（出口换算成罗盘角）
-pub fn view_payload(view: Option<ViewOut>, cone_width: f64) -> (Option<f64>, f64, &'static str, f64) {
+pub fn view_payload(
+    view: Option<ViewOut>,
+    cone_width: f64,
+) -> (Option<f64>, f64, &'static str, f64) {
     match view {
         None => (None, 0.0, "", 0.0),
         Some(v) => (
@@ -325,7 +328,10 @@ mod tests {
             width: 90.0,
         };
         v.update(Some(c), 0.0, true);
-        assert!(v.update(Some(c), 100.0, false).is_none(), "地图不在要立刻清");
+        assert!(
+            v.update(Some(c), 100.0, false).is_none(),
+            "地图不在要立刻清"
+        );
     }
 
     #[test]
@@ -360,6 +366,9 @@ mod tests {
         v.update(Some(c(0.0)), 0.0, true);
         v.update(Some(c(180.0)), 100.0, true); // 挂起
         let confirmed = v.update(Some(c(185.0)), 200.0, true).unwrap();
-        assert!((confirmed.deg - 185.0).abs() < 1e-9, "下一帧还在那儿 → 直接就位");
+        assert!(
+            (confirmed.deg - 185.0).abs() < 1e-9,
+            "下一帧还在那儿 → 直接就位"
+        );
     }
 }

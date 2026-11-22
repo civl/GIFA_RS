@@ -196,7 +196,11 @@ pub fn step(state: &ChordState, frame: &Frame, cfg: &ChordConfig) -> (ChordState
     }
 
     // 满推才锁存；轻推连高亮都不给，免得看着像选中了却什么都不触发
-    let latched = if amp >= LATCH_AMPLITUDE { preview } else { state.latched };
+    let latched = if amp >= LATCH_AMPLITUDE {
+        preview
+    } else {
+        state.latched
+    };
 
     // 回中：触发锁存的动作
     if amp < COMMIT_AMPLITUDE {

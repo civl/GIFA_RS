@@ -11,29 +11,29 @@
 pub mod arrow;
 pub mod autocenter;
 pub mod color;
-pub mod filter;
-pub mod hexagon;
-pub mod recovery;
-pub mod template;
 pub mod cone;
 pub mod detect;
-pub mod pipeline;
+pub mod filter;
 pub mod frame;
+pub mod hexagon;
+pub mod pipeline;
+pub mod recovery;
 pub mod result;
 pub mod screen;
+pub mod template;
 
 pub use arrow::{analyze, to_compass, ArrowResult, ArrowWorkspace, Corner};
 pub use autocenter::{autocenter, Centered};
 pub use cone::{analyze_cone, ConeResult, ConeWorkspace};
-pub use filter::{view_payload, AbFilter, ConeObs, ViewOut, ViewSource, ViewState};
-pub use hexagon::{direction as hex_direction, HexDirection};
-pub use recovery::{analyze_arrow_with_recovery, analyze_cone_with_recovery, centered_patch};
-pub use template::{fit_arrow, Fit};
 pub use detect::{detect_simple, detect_window, Detect, Origin, SampleBox};
+pub use filter::{view_payload, AbFilter, ConeObs, ViewOut, ViewSource, ViewState};
 pub use frame::{Frame, FrameSource, Roi};
+pub use hexagon::{direction as hex_direction, HexDirection};
 pub use pipeline::{start as start_pipeline, start_with_dump as start_pipeline_dump, VisionEvent};
-pub use screen::capture_screen;
+pub use recovery::{analyze_arrow_with_recovery, analyze_cone_with_recovery, centered_patch};
 pub use result::{Arrow, Bearing, Cone};
+pub use screen::capture_screen;
+pub use template::{fit_arrow, Fit};
 
 /// 二期移植的参数（照抄原版常量，集中放这里便于对拍时逐个核对）
 pub mod params {
@@ -92,7 +92,10 @@ mod tests {
         let t = color::adaptive_threshold(166.0).unwrap();
         assert!((t - 122.84).abs() < 0.01);
         // p99 很高时下限仍然生效
-        assert_eq!(color::adaptive_threshold(120.0).unwrap(), 112.0_f64.max(88.8));
+        assert_eq!(
+            color::adaptive_threshold(120.0).unwrap(),
+            112.0_f64.max(88.8)
+        );
     }
 
     #[test]
@@ -109,10 +112,11 @@ mod tests {
     #[test]
     fn frame_sampling_keeps_original_colors() {
         // 2×2 帧：data 是 RGBA，索引按 (y*w+x)*4
-        let f = Frame::new(2, 2, vec![
-            1, 2, 3, 255, 4, 5, 6, 255,
-            7, 8, 9, 255, 10, 11, 12, 255,
-        ]);
+        let f = Frame::new(
+            2,
+            2,
+            vec![1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255],
+        );
         assert_eq!(f.pixel(0, 0), Some((1, 2, 3)));
         assert_eq!(f.pixel(1, 1), Some((10, 11, 12)));
         assert_eq!(f.pixel(2, 0), None);
