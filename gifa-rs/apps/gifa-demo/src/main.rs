@@ -115,6 +115,9 @@ struct UiState {
     /// 浮窗被盖住过（只用日志，不参与逻辑）
     covered_logged: bool,
     covered_detail: String,
+    /// `--seek <秒>`：视频就绪后跳转一次
+    seek_to: Option<f64>,
+    seeked: bool,
     /// `--login`：到点后在 UI 线程开登录弹窗（后台线程拿不到 TLS 里的外壳状态）
     login_at: Option<Instant>,
     /// 视觉冒烟：跑 N 秒后出结论（M13）
@@ -506,11 +509,13 @@ fn main() {
 
 
     let csv_path = arg_value(&args, "--vision-csv");
+    let seek_to: Option<f64> = arg_value(&args, "--seek").and_then(|v| v.parse().ok());
     let dump = arg_value(&args, "--dump-frame");
     if let Some(secs) = arg_value(&args, "--bearing") {
         let secs = secs.parse::<f64>().unwrap_or(30.0).clamp(3.0, 120.0);
         UI.with(|ui| {
             let mut ui = ui.borrow_mut();
+            ui.seek_to = seek_to;
             if let Some(p) = &dump {
                 ui.dump_frame = Some(data_root.join(p));
                 ui.dump_left = 6;
@@ -1247,6 +1252,17 @@ fn bearing_step(ui: &mut UiState) {
         return;
     }
     let el = ui.bearing_since.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0);
+
+    // --seek：视频就绪（有 duration）后跳一次
+    if !ui.seeked {
+        if let (Some(t), Some(st)) = (ui.seek_to, ui.state.as_ref()) {
+            if st.duration > 1.0 {
+                gifa_shell::player_command(PlayerCommand::Seek { value: t });
+                ui.seeked = true;
+                println!("[gifa] 跳转到 {t}s");
+            }
+        }
+    }
 
     // video-rect 会随窗口/布局变化，每秒重取一次；否则沉浸后还在用旧尺寸算采样窗
     if ui.ticks.is_multiple_of(4) {
