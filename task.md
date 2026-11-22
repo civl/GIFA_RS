@@ -527,8 +527,20 @@ gifa-rs/
       派发时**只挡单键**（组合键照常生效）—— 否则用户在输入框里打不出这个字符
 - [x] 录制新键位：`{t:'capture'}` 期间所有热键都不触发；齿轮按钮打开快捷键面板，
       点「改」按新键 → `{t:'bind'}` → `set_binding`（冲突自动交换 → 失败整体回滚）→ 写回设置
-      ↳ 实测（`--bind-test` 走真实链路）：`togglePlay → Ctrl+Shift+P`，设置里落盘，
-        `RESULT 1/1`；非实战模式下（没装钩子）也能改，留着下次启动生效
+      ↳ 实测（`--bind-test` 走真实链路）：`typing` 上报后 `ui.typing=true`、
+        `togglePlay → Ctrl+Shift+P` 落盘，`RESULT 2/2`；
+        非实战模式（没装钩子）也能改，留着下次启动生效
+      ↳ 面板截图：`apps/gifa-demo/docs/hotkeys-panel.png`（11 条，按 `Action::ALL` 顺序）
+
+**面板的坑（两个都是"看得见但用不了"的典型）**：
+
+1. **被舞台盖住**：chrome 窗口用 `SetWindowRgn` 挖空，只有上报过的矩形会显示。
+   面板不在 `overlay[]` 里 → 那一片被裁掉，看起来就是"点开设置，面板被视频盖住"。
+   修法：面板打开时把它加进 `overlay[]`，并在**渲染完行之后**再报一次（高度会变）。
+2. **列表空白**：`renderHotkeys` 写在了初始化函数内部、`applyState` 是模块作用域 ——
+   两者互相看不见，一调用就 ReferenceError。把函数提到模块作用域才通。
+   （这个 bug 还会**连带打断 `applyState`**：面板开着时状态一更新就抛错，
+   后面的标题/分P/布局渲染全被跳过，`--ui-test` 抓到 `layouts=0`。）
 - **锚点**：`hook-hotkeys.js` 全文、`main.js:1411-1472`
 - **验收**：`cargo run -p shell-demo -- --hotkey-test`（6 项，见 `docs/HOTKEYS.md`）
 - **实测**：`RegisterHotKey`(Alt+Space)、钩子键盘(F8 down/up)、rearm 后仍生效、冲突交换

@@ -125,6 +125,8 @@ struct UiState {
     typing: bool,
     /// 正在录制新键位（此时所有热键都不触发，按键只用来捕获）
     capturing: bool,
+    /// 自检用：输入态上报时见过的值（复位后仍能断言）
+    typing_seen: bool,
     /// 数据目录（startup.log 写在这下面）
     data_root: Option<std::path::PathBuf>,
     /// 启动时刻（用来跳过启动期间的 bounds 抖动）
@@ -994,6 +996,16 @@ fn on_tick() {
         /* --bind-test：走真实链路验证"录制换绑" —— 页面 ipc.postMessage → handle_chrome
          * → set_binding（冲突自动交换）→ 写回 settings。 */
         if std::env::args().any(|a| a == "--bind-test") {
+            // 输入态：页面 report 之后 Rust 要立刻看到（单键热键据此让路）
+            if ui.ticks == 14 {
+                gifa_shell::eval_chrome("post({t:'typing',on:true})");
+            }
+            if ui.ticks == 16 {
+                let on = ui.typing;
+                ui.typing_seen = on;
+                println!("[bind-test] typing 上报后 ui.typing={on} → {}", if on { "PASS" } else { "FAIL" });
+                gifa_shell::eval_chrome("post({t:'typing',on:false})");
+            }
             if ui.ticks == 12 {
                 gifa_shell::eval_chrome(
                     "window.ipc.postMessage(JSON.stringify({t:'bind',action:'togglePlay',accel:'Ctrl+Shift+P'}))",
@@ -1006,11 +1018,13 @@ fn on_tick() {
                     .and_then(|s| s.hotkeys.get("togglePlay").cloned())
                     .unwrap_or_default();
                 let ok = now == "Ctrl+Shift+P";
+                let typing_ok = ui.typing_seen;
                 println!(
                     "[bind-test] togglePlay 现在是 {now:?} → {}",
                     if ok { "PASS" } else { "FAIL" }
                 );
-                println!("RESULT {}/1", if ok { 1 } else { 0 });
+                let pass = usize::from(ok) + usize::from(typing_ok);
+                println!("RESULT {pass}/2");
                 std::thread::spawn(|| {
                     std::thread::sleep(Duration::from_millis(400));
                     gifa_shell::close();
@@ -1024,7 +1038,8 @@ fn on_tick() {
             gifa_shell::eval_chrome(
                 "(function(){var p=document.getElementById('hkPanel'); if(!p) return; \
                  p.classList.remove('hidden'); \
-                 if(window.__gifaRenderHotkeys) window.__gifaRenderHotkeys();})()",
+                 if(window.__gifaRenderHotkeys) window.__gifaRenderHotkeys(); \
+                 })()",
             );
         }
 
@@ -3570,6 +3585,7 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
             }
         }
         "debug" => {
+            // 页面 console/自检信息：GIFA_DEBUG=1 时打到 stdout
             if std::env::var_os("GIFA_DEBUG").is_some() {
                 println!("[ui-debug] {v}");
             }
@@ -3662,16 +3678,24 @@ fn ui_payload(ui: &UiState) -> String {
             .collect::<Vec<_>>(),
         "log": ui.logs.last().cloned().unwrap_or_default(),
         // 快捷键面板用：动作 → 显示名/当前键位
-        "hotkeys": ui
-            .hotkeys
-            .as_ref()
-            .map(|h| {
-                h.map()
-                    .iter()
-                    .map(|(k, v)| serde_json::json!({"action": k, "accel": v}))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default(),
+        /* 快捷键表：实战模式下用**已安装的**映射（可能和设置不同——冲突交换后以实际生效的为准）；
+         * 非实战模式没有管理器，就退回设置里的映射，面板照样能看能改。 */
+        "hotkeys": ({
+            let map = ui
+                .hotkeys
+                .as_ref()
+                .map(|h| h.map().clone())
+                .or_else(|| ui.store.as_ref().map(|s| s.hotkeys.clone()))
+                .unwrap_or_default();
+            /* 按 Action::ALL 的固定顺序输出（不要按字母序，否则面板看起来是乱的） */
+            gifa_core::Action::ALL
+                .iter()
+                .filter_map(|a| {
+                    map.get(a.key())
+                        .map(|v| serde_json::json!({"action": a.key(), "accel": v}))
+                })
+                .collect::<Vec<_>>()
+        }),
         "typing": ui.typing,
         "capturing": ui.capturing,
     })

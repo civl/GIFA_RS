@@ -60,6 +60,10 @@ function rectPx(el) {
 function reportLayout() {
   const urlbar = $('urlbar');
   const overlay = [rectPx($('grip'))];
+  /* 快捷键面板是**浮在舞台上方**的：chrome 窗口的区域只包含上报过的矩形，
+   * 不把它加进来，那一片会被裁掉 —— 表现就是"点开设置，面板被视频盖住"。 */
+  const hk = $('hkPanel');
+  if (hk && !hk.classList.contains('hidden')) overlay.push(rectPx(hk));
   if (state.calibOpen) overlay.push(rectPx($('calib')));
   const toast = $('toast');
   if (toast.classList.contains('show')) overlay.push(rectPx(toast));
@@ -99,6 +103,96 @@ const fmt = (s) => {
  * 后面 renderParts/renderLayouts 全被跳过（界面看起来像"控件没渲染"）。 */
 let recording = null;
 let lastHotkeys = [];
+
+/* ---------------- 快捷键面板 ----------------
+ * 点「改」进入录制态：页面发 {t:'capture',on:true}，Rust 那边把所有热键都挡住，
+ * 按键只用来捕获；捕获到就把 {t:'bind'} 发回去，Rust 用 set_binding 换绑（冲突自动交换）。 */
+const HK_LABELS = {
+  togglePlay: '播放/暂停',
+  seekFwd: '快进 5 秒',
+  seekBack: '后退 5 秒',
+  nextPart: '下一分 P',
+  prevPart: '上一分 P',
+  holdSpeed: '按住加速',
+  cycleSpeed: '循环倍速',
+  toggleImmersion: '沉浸模式',
+  togglePass: '鼠标穿透',
+  toggleOpacity: '透明度',
+  toggleVisible: '隐藏/显示',
+};
+
+function renderHotkeys(list) {
+  const box = $('hkList');
+  if (!box) return;
+  box.innerHTML = '';
+  (list || []).forEach(({ action, accel }) => {
+    const row = document.createElement('div');
+    row.className = 'hk-row' + (recording === action ? ' rec' : '');
+    row.dataset.action = action;
+    const name = document.createElement('span');
+    name.className = 'hk-name';
+    name.textContent = HK_LABELS[action] || action;
+    const key = document.createElement('span');
+    key.className = 'hk-key';
+    key.textContent = recording === action ? '按下…' : accel || '—';
+    const btn = document.createElement('button');
+    btn.textContent = recording === action ? '取消' : '改';
+    btn.addEventListener('click', () => {
+      if (recording === action) { stopRecording(); return; }
+      recording = action;
+      post({ t: 'capture', on: true });
+      renderHotkeys(lastHotkeys);
+    });
+    row.append(name, key, btn);
+    box.appendChild(row);
+  });
+  // 面板高度随行数变化：区域要跟着重算，否则底部会被裁掉（看起来像"只显示了标题"）
+  reportLayout();
+}
+function stopRecording() {
+  recording = null;
+  post({ t: 'capture', on: false });
+  renderHotkeys(lastHotkeys);
+}
+
+// 把 KeyboardEvent 转成加速器字符串（Alt+J / F7 / Ctrl+Shift+K）
+function accelOf(e) {
+  const k = e.key;
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(k)) return null; // 只按了修饰键
+  let key = k.length === 1 ? k.toUpperCase() : k.replace('Arrow', '');
+  if (key === ' ') key = 'Space';
+  if (key === 'Escape') key = 'Esc';
+  const mods = [];
+  if (e.ctrlKey) mods.push('Ctrl');
+  if (e.altKey) mods.push('Alt');
+  if (e.shiftKey) mods.push('Shift');
+  if (e.metaKey) mods.push('Super');
+  return [...mods, key].join('+');
+}
+
+window.addEventListener('keydown', (e) => {
+  if (!recording) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === 'Escape') { stopRecording(); return; }
+  const accel = accelOf(e);
+  if (!accel) return;
+  post({ t: 'bind', action: recording, accel });
+  recording = null;
+  post({ t: 'capture', on: false });
+}, true);
+
+$('btnSettings').addEventListener('click', () => {
+  const p = $('hkPanel');
+  p.classList.toggle('hidden');
+  if (!p.classList.contains('hidden')) renderHotkeys(lastHotkeys);
+  reportLayout(); // 区域要跟着变，否则面板落在挖空区外，看不见也点不到
+});
+$('hkClose').addEventListener('click', () => {
+  stopRecording();
+  $('hkPanel').classList.add('hidden');
+  reportLayout();
+});
 
 function applyState(s) {
   if (!s || typeof s !== 'object') return;
@@ -353,92 +447,9 @@ function wireUi() {
     e.stopPropagation();
   });
 
-  /* ---------------- 快捷键面板 ----------------
-   * 点「改」进入录制态：页面发 {t:'capture',on:true}，Rust 那边把所有热键都挡住，
-   * 按键只用来捕获；捕获到就把 {t:'bind'} 发回去，Rust 用 set_binding 换绑（冲突自动交换）。 */
-  const HK_LABELS = {
-    togglePlay: '播放/暂停',
-    seekFwd: '快进 5 秒',
-    seekBack: '后退 5 秒',
-    nextPart: '下一分 P',
-    prevPart: '上一分 P',
-    holdSpeed: '按住加速',
-    cycleRate: '循环倍速',
-    toggleImmersive: '沉浸模式',
-    toggleClickThrough: '鼠标穿透',
-    toggleOpacity: '透明度',
-    toggleVisible: '隐藏/显示',
-  };
-
-  function renderHotkeys(list) {
-    const box = $('hkList');
-    if (!box) return;
-    box.innerHTML = '';
-    (list || []).forEach(({ action, accel }) => {
-      const row = document.createElement('div');
-      row.className = 'hk-row' + (recording === action ? ' rec' : '');
-      row.dataset.action = action;
-      const name = document.createElement('span');
-      name.className = 'hk-name';
-      name.textContent = HK_LABELS[action] || action;
-      const key = document.createElement('span');
-      key.className = 'hk-key';
-      key.textContent = recording === action ? '按下…' : accel || '—';
-      const btn = document.createElement('button');
-      btn.textContent = recording === action ? '取消' : '改';
-      btn.addEventListener('click', () => {
-        if (recording === action) { stopRecording(); return; }
-        recording = action;
-        send({ t: 'capture', on: true });
-        renderHotkeys(lastHotkeys);
-      });
-      row.append(name, key, btn);
-      box.appendChild(row);
-    });
-  }
-  function stopRecording() {
-    recording = null;
-    send({ t: 'capture', on: false });
-    renderHotkeys(lastHotkeys);
-  }
-
-  // 把 KeyboardEvent 转成加速器字符串（Alt+J / F7 / Ctrl+Shift+K）
-  function accelOf(e) {
-    const k = e.key;
-    if (['Control', 'Alt', 'Shift', 'Meta'].includes(k)) return null; // 只按了修饰键
-    let key = k.length === 1 ? k.toUpperCase() : k.replace('Arrow', '');
-    if (key === ' ') key = 'Space';
-    if (key === 'Escape') key = 'Esc';
-    const mods = [];
-    if (e.ctrlKey) mods.push('Ctrl');
-    if (e.altKey) mods.push('Alt');
-    if (e.shiftKey) mods.push('Shift');
-    if (e.metaKey) mods.push('Super');
-    return [...mods, key].join('+');
-  }
-
-  window.addEventListener('keydown', (e) => {
-    if (!recording) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === 'Escape') { stopRecording(); return; }
-    const accel = accelOf(e);
-    if (!accel) return;
-    send({ t: 'bind', action: recording, accel });
-    recording = null;
-    send({ t: 'capture', on: false });
-  }, true);
-
-  $('btnSettings').addEventListener('click', () => {
-    const p = $('hkPanel');
-    p.classList.toggle('hidden');
-    if (!p.classList.contains('hidden')) renderHotkeys(lastHotkeys);
-  });
-  $('hkClose').addEventListener('click', () => { stopRecording(); $('hkPanel').classList.add('hidden'); });
-
   /* 输入态：在输入框里打字时，单键热键要让路（否则那个字符打不出来） */
-  $('urlInput').addEventListener('focus', () => send({ t: 'typing', on: true }));
-  $('urlInput').addEventListener('blur', () => send({ t: 'typing', on: false }));
+  $('urlInput').addEventListener('focus', () => post({ t: 'typing', on: true }));
+  $('urlInput').addEventListener('blur', () => post({ t: 'typing', on: false }));
   $('btnMin').addEventListener('click', () => post({ t: 'min' }));
   $('btnClose').addEventListener('click', () => post({ t: 'close' }));
 
@@ -505,6 +516,7 @@ function wireUi() {
 window.gifaState = applyState;
 // 自检/截图用：把最新热键表重绘一遍
 window.__gifaRenderHotkeys = () => renderHotkeys(lastHotkeys);
+window.__gifaHkCount = () => (lastHotkeys || []).length;
 
 document.addEventListener('DOMContentLoaded', () => {
   // URL 条默认收起：标记里没写 hidden，必须在这里收，否则舞台一开始就被顶下去
