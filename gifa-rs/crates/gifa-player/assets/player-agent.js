@@ -33,6 +33,8 @@
   let cleanOn = false;
   let cleanStyle = null;
   let videoOnly = false;
+  // 每次注入一个随机 id：用来判断页面是不是又注入了一遍（会重置上面的状态）
+  const BOOT_ID = Math.random().toString(36).slice(2, 8);
   let videoOnlyStyle = null;
   let lastSig = '';
   let lastPushAt = 0;
@@ -318,6 +320,12 @@
         vh: v.videoHeight,
         fit,
         dpr: window.devicePixelRatio || 1,
+        // 自检：沉浸相关状态，排查"消息到了但 CSS 没生效"
+        videoOnly,
+        boot: BOOT_ID,
+        keys: Object.keys(handlers).join('|'),
+        bound: !!video,
+        marked: !!(video && video.hasAttribute('data-gifa-video')),
       },
     });
   }

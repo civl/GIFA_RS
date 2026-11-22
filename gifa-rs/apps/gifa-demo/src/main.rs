@@ -813,13 +813,27 @@ fn handle_player(ui: &mut UiState, m: PlayerMsg) {
         }
         PlayerMsg::VideoRect { ok, rect, error } => {
             if ok {
+                if let Some(r) = rect.as_ref() {
+                    let changed = ui.video_rect.as_ref().is_none_or(|o| {
+                        (o.w - r.w).abs() > 1.0 || (o.h - r.h).abs() > 1.0 || o.video_only != r.video_only
+                    });
+                    if changed {
+                        println!(
+                            "[vision] rect 变化 → {:.0}×{:.0} @({:.0},{:.0}) videoOnly={} boot={}",
+                            r.w, r.h, r.x, r.y, r.video_only, r.boot
+                        );
+                    }
+                }
                 ui.video_rect = rect;
             } else {
                 ui.logs.push(format!("取视频矩形失败：{error}"));
             }
         }
         PlayerMsg::Fullscreen => ui.logs.push("页面请求全屏".into()),
-        PlayerMsg::Log { msg } => ui.logs.push(msg),
+        PlayerMsg::Log { msg } => {
+            println!("[page] {msg}");
+            ui.logs.push(msg);
+        }
     }
 }
 
@@ -1146,8 +1160,8 @@ fn live_step(ui: &mut UiState) {
     let Some(b) = vision_box(ui) else { return };
     if let (Some(vr), Some(s)) = (ui.video_rect.as_ref(), gifa_shell::snapshot()) {
         println!(
-            "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={} dpr={:.2}",
-            vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit, vr.dpr
+            "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={} dpr={:.2} videoOnly={} bound={} marked={}",
+            vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit, vr.dpr, vr.video_only, vr.bound, vr.marked
         );
         println!(
             "[vision] stage=({},{},{}x{}) float=({},{}) 采样窗=({},{}) {}x{}",
@@ -1239,18 +1253,33 @@ fn bearing_step(ui: &mut UiState) {
         gifa_shell::player_command(PlayerCommand::VideoRect);
     }
 
+    // 沉浸已开但页面还没切到纯视频：补发（窗口尺寸变化后第一发可能落在无效状态里）
+    if std::env::args().any(|a| a == "--immerse")
+        && ui.immersion
+        && ui.video_rect.as_ref().is_some_and(|v| !v.video_only)
+    {
+        gifa_shell::player_command(PlayerCommand::Presentation {
+            video_only: true,
+            session: ui.im_session,
+        });
+    }
+
     // --immerse：进纯视频模式，让视频占满整个浮窗（采样接近原生分辨率）
     if std::env::args().any(|a| a == "--immerse") && !ui.immersion && ui.video_rect.is_some() {
         toggle_immersion(ui, true);
-        ui.logs.push("沉浸模式：视频占满浮窗".into());
+        println!(
+            "[vision] 请求沉浸 → immersion={} click_through={}",
+            ui.immersion,
+            gifa_shell::click_through()
+        );
     }
 
     if ui.vision_box.is_none() && ui.video_rect.is_some() && el > 0.8 {
         if let Some(b) = vision_box(ui) {
             if let Some(vr) = ui.video_rect.as_ref() {
                 println!(
-                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={}",
-                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit
+                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={} videoOnly={} bound={} marked={} keys={} boot={}",
+                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit, vr.video_only, vr.bound, vr.marked, vr.keys, vr.boot
                 );
             }
             let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
@@ -1847,8 +1876,8 @@ fn synth_test_step(ui: &mut UiState) {
         if let Some(b) = vision_box(ui) {
             if let Some(vr) = ui.video_rect.as_ref() {
                 println!(
-                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={}",
-                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit
+                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={} videoOnly={} bound={} marked={} keys={} boot={}",
+                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit, vr.video_only, vr.bound, vr.marked, vr.keys, vr.boot
                 );
             }
             let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
@@ -1923,8 +1952,8 @@ fn vision_test_step(ui: &mut UiState) {
         if let Some(b) = vision_box(ui) {
             if let Some(vr) = ui.video_rect.as_ref() {
                 println!(
-                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={}",
-                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit
+                    "[vision] videoRect x={:.0} y={:.0} w={:.0} h={:.0} vw={} vh={} fit={} videoOnly={} bound={} marked={} keys={} boot={}",
+                    vr.x, vr.y, vr.w, vr.h, vr.vw, vr.vh, vr.fit, vr.video_only, vr.bound, vr.marked, vr.keys, vr.boot
                 );
             }
             let _ = gifa_shell::overlay_init(110, Some((b.x + b.w / 2, b.y + b.h / 2)));
@@ -2194,10 +2223,12 @@ fn toggle_immersion(ui: &mut UiState, on: bool) {
     let active = gifa_shell::set_immersion(on, aspect);
     ui.immersion = active;
     ui.im_session = ui.im_session.wrapping_add(1);
-    gifa_shell::player_command(PlayerCommand::Presentation {
+    let cmd = PlayerCommand::Presentation {
         video_only: active,
         session: ui.im_session,
-    });
+    };
+    println!("[vision] 发送 presentation → {}", cmd.to_js());
+    gifa_shell::player_command(cmd);
     ui.toast = if active {
         "已进入纯视频沉浸".into()
     } else {

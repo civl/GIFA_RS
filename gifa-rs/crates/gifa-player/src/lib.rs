@@ -117,6 +117,21 @@ pub struct VideoRect {
     pub fit: String,
     /// 设备像素比：CSS 像素 × dpr = 物理像素
     pub dpr: f64,
+    /// 页面是否处于纯视频模式
+    #[serde(default)]
+    pub video_only: bool,
+    /// agent 是否已经绑定到具体 <video>
+    #[serde(default)]
+    pub bound: bool,
+    /// agent 的指令表（排查"指令名字对不上"）
+    #[serde(default)]
+    pub keys: String,
+    /// 每次注入的随机 id（判断页面是否被重复注入/刷新）
+    #[serde(default)]
+    pub boot: String,
+    /// <video> 上是否打了 data-gifa-video 标记（CSS 靠它选中）
+    #[serde(default)]
+    pub marked: bool,
 }
 
 /// 登录态（`x/web-interface/nav`）
