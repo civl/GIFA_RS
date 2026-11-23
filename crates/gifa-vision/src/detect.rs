@@ -123,14 +123,12 @@ fn fuse_arrow(
     v1: Option<f64>,
     v1_conf: f64,
     v3: Option<(f64, f64)>, // (deg, span_px)
-    v3_blunt: f64,
 ) -> ArrowPick {
-    // 两路分歧，或者 v3 的形状可疑（尖端被切）→ 都标可疑
-    let disagreement = match (v1, v3) {
+    // 两路分歧 → 标可疑，交给滤波层谨慎处理
+    let suspect = match (v1, v3) {
         (Some(a1), Some((a3, _))) => crate::arrow::ang_diff(a1, a3).abs() > 20.0,
         _ => false,
     };
-    let suspect = disagreement || (v3.is_some() && v3_blunt >= TIP_BLUNT_MAX);
     let arrow_px = v3.map(|(_, s)| s).unwrap_or(0.0);
     if v1.is_some() && arrow_px >= ARROW_PX_PREFER_V1 {
         ArrowPick {
@@ -142,9 +140,7 @@ fn fuse_arrow(
     } else if let Some((a3, _)) = v3 {
         ArrowPick {
             deg: Some(a3),
-            // 形状可疑时把置信度压下去：滤波层"连续 2 帧 + conf≥0.5"那条确认路径就走不通，
-            // 于是会保持上一帧，而不是把 120° 的错值认下来
-            conf: if v3_blunt >= TIP_BLUNT_MAX { 0.2 } else { 0.5 },
+            conf: 0.5,
             source: 2,
             suspect,
         }
@@ -157,11 +153,6 @@ fn fuse_arrow(
         }
     }
 }
-
-/// 尖端钝度超过这个值就认为"箭头被切掉了一块"，标记可疑。
-/// 依据：真机 57 帧全朝向语料里，>45° 的坏帧有 4/5 的钝度 ≥0.89，
-/// 而 52 个正常帧最大只到 0.82。
-const TIP_BLUNT_MAX: f64 = 0.85;
 
 /// 箭头轴长（像素）大于这个值就信 v1，否则信 v3。
 /// 数据依据见 `detect_window` 里"两路裁决"的注释：视频箭头 ~60px（v1 准）、
@@ -267,12 +258,7 @@ pub fn detect_window(
     let c = (size as f64 / 2.0, size as f64 / 2.0);
     let v3 = crate::hexagon::direction_v3(rgba, size, c, 0.0);
 
-    let pick = fuse_arrow(
-        v1_compass,
-        arrow.conf,
-        v3.map(|h| (h.deg, h.span)),
-        v3.map(|h| h.tip_blunt).unwrap_or(0.0),
-    );
+    let pick = fuse_arrow(v1_compass, arrow.conf, v3.map(|h| (h.deg, h.span)));
     out.arrow = pick.deg;
     out.arrow_conf = pick.conf;
     out.arrow_source = pick.source;
@@ -404,21 +390,21 @@ mod tests {
     #[test]
     fn fuse_arrow_routes_by_size() {
         // 大箭头（视频，60px）→ v1
-        let p = fuse_arrow(Some(10.0), 0.9, Some((12.0, 60.0)), 0.3);
+        let p = fuse_arrow(Some(10.0), 0.9, Some((12.0, 60.0)));
         assert_eq!(p.source, 1, "大箭头应信 v1");
         assert_eq!(p.deg, Some(10.0));
         // 小箭头（真机，28px）→ v3
-        let p = fuse_arrow(Some(10.0), 0.9, Some((12.0, 28.0)), 0.3);
+        let p = fuse_arrow(Some(10.0), 0.9, Some((12.0, 28.0)));
         assert_eq!(p.source, 2, "小箭头应信 v3");
         assert_eq!(p.deg, Some(12.0));
         // 只有 v3
-        let p = fuse_arrow(None, 0.0, Some((12.0, 28.0)), 0.3);
+        let p = fuse_arrow(None, 0.0, Some((12.0, 28.0)));
         assert_eq!(p.source, 2);
         // 两路分歧 → suspect
-        let p = fuse_arrow(Some(10.0), 0.9, Some((200.0, 60.0)), 0.3);
+        let p = fuse_arrow(Some(10.0), 0.9, Some((200.0, 60.0)));
         assert!(p.suspect, "差 170° 应标 suspect");
         // 两路一致 → 不 suspect
-        let p = fuse_arrow(Some(10.0), 0.9, Some((15.0, 60.0)), 0.3);
+        let p = fuse_arrow(Some(10.0), 0.9, Some((15.0, 60.0)));
         assert!(!p.suspect);
     }
 

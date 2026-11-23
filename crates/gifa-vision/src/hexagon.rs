@@ -90,6 +90,12 @@ fn mask_of(rgba: &[u8], size: usize) -> (Vec<u8>, usize) {
 }
 
 /// 最大连通块（8 邻域）
+/// 最大连通块。
+///
+/// 用 **4 邻域**而不是 8 邻域：小地图上的白色楔形/图标只会"斜对角"擦着箭头，
+/// 8 邻域会把它们和箭头并成一块 —— 并进来的外来青色会让"窄端定鼻尖"选错边。
+/// 真机语料里符号判错的那一帧（seq 305）就是斜对角连上了白楔里的青色。
+/// 箭头本身是实心块，4 邻域不会把它切碎。
 fn largest_blob(mask: &[u8], size: usize) -> Vec<usize> {
     let n = size * size;
     let mut seen = vec![false; n];
@@ -107,17 +113,15 @@ fn largest_blob(mask: &[u8], size: usize) -> Vec<usize> {
             cur_blob.push(cur);
             let y = cur / size;
             let x = cur % size;
-            for dy in -1i32..=1 {
-                for dx in -1i32..=1 {
-                    let (ny, nx) = (y as i32 + dy, x as i32 + dx);
-                    if nx < 0 || ny < 0 || nx >= size as i32 || ny >= size as i32 {
-                        continue;
-                    }
-                    let k = ny as usize * size + nx as usize;
-                    if mask[k] != 0 && !seen[k] {
-                        seen[k] = true;
-                        q.push_back(k);
-                    }
+            for (dy, dx) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                let (ny, nx) = (y as i32 + dy, x as i32 + dx);
+                if nx < 0 || ny < 0 || nx >= size as i32 || ny >= size as i32 {
+                    continue;
+                }
+                let k = ny as usize * size + nx as usize;
+                if mask[k] != 0 && !seen[k] {
+                    seen[k] = true;
+                    q.push_back(k);
                 }
             }
         }
@@ -287,6 +291,56 @@ mod tests {
         );
     }
 
+    /// 全朝向真机语料（57 帧）上的回归：大错只允许出现在已知的 4 帧里。
+    ///
+    /// 其中 seq 305 是"符号判错"那一帧 —— 白色楔形里的另一块青色只靠**斜对角**
+    /// 擦着箭头，8 邻域会把它们并成一块，于是"窄端定鼻尖"选错了边（误差 +147°）。
+    /// 改成 4 邻域连通之后它恢复正常，这条测试就是防止再改回 8 邻域。
+    #[test]
+    fn m1_corpus_gross_errors_stay_within_known_set() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let labels = root.join("docs/calibration/m1-labels.json");
+        let Ok(txt) = std::fs::read_to_string(&labels) else {
+            eprintln!("跳过：没有 m1 标注");
+            return;
+        };
+        let v: serde_json::Value = serde_json::from_str(&txt).unwrap_or_default();
+        let dir = root.join("docs/calibration/m1-sub");
+        // 已知的 4 帧（被导航路线条把箭头尖端切掉）
+        let known: [u64; 4] = [25, 161, 169, 177];
+        let mut gross = Vec::new();
+        let mut covered = 0;
+        for f in v["frames"].as_array().cloned().unwrap_or_default() {
+            let (Some(seq), Some(truth)) = (f["seq"].as_u64(), f["truth"].as_f64()) else {
+                continue;
+            };
+            let path = dir.join(format!("f{seq:03}-158.bin"));
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            let side = (bytes.len() / 4).isqrt();
+            let c = (side as f64 / 2.0, side as f64 / 2.0);
+            let Some(d) = direction_v3(&bytes, side, c, 0.0) else {
+                continue;
+            };
+            covered += 1;
+            if ((d.deg - truth + 540.0) % 360.0 - 180.0).abs() > 45.0 {
+                gross.push(seq);
+            }
+        }
+        if covered == 0 {
+            eprintln!("跳过：没有 m1 帧");
+            return;
+        }
+        assert_eq!(covered, 57, "v3 应当在全部 57 帧都出结果");
+        for seq in &gross {
+            assert!(
+                known.contains(seq),
+                "seq {seq} 是新出现的大错帧（已知大错只有 {known:?}）"
+            );
+        }
+    }
+
     /// v3 在真机语料上不许出现 >45° 的翻转（v1 六边形在这里有 2 帧翻错）
     #[test]
     fn v3_has_no_gross_errors_on_realgame_corpus() {
@@ -411,94 +465,6 @@ pub fn direction_v4(rgba: &[u8], size: usize, center: (f64, f64)) -> Option<HexV
     hex_from_pixels(&pixels, size)
 }
 
-/// 实验用：可调"中心圆半径比例 + 闭运算半径"的变体，便于在语料上扫参数。
-///
-/// 背景：导航路线条会把箭头切开，v3（只取最大连通块）于是把残片当整体，
-/// 主轴歪 50~60°。这里提供两个旋钮：
-///   · `disk_frac`：只看中心圆内的像素（0 = 不看窗口以外的限制）
-///   · `close_r`  ：先做闭运算（膨胀+腐蚀），把被路线条切开的缝补上
-pub fn direction_v5(
-    rgba: &[u8],
-    size: usize,
-    center: (f64, f64),
-    disk_frac: f64,
-    close_r: usize,
-) -> Option<HexV3> {
-    if size < 24 || rgba.len() < size * size * 4 {
-        return None;
-    }
-    let (mask, _) = mask_of(rgba, size);
-    let (cx0, cy0) = (center.0, (size - 1) as f64 - center.1);
-    let r_core = if disk_frac > 0.0 {
-        size as f64 * disk_frac
-    } else {
-        0.0
-    };
-    let mut pixels = pixels_in_disk(&mask, size, (cx0, cy0), r_core);
-    if pixels.is_empty() {
-        return None;
-    }
-    if close_r > 0 {
-        let mut sub = vec![0u8; size * size];
-        for &i in &pixels {
-            sub[i] = 1;
-        }
-        let closed = close_binary(&sub, size, close_r);
-        pixels = closed
-            .iter()
-            .enumerate()
-            .filter_map(|(i, v)| (*v != 0).then_some(i))
-            .collect();
-    }
-    hex_from_pixels(&largest_blob_of(&pixels, size), size)
-}
-
-/// 二值闭运算（圆盘结构元），用来补"细条把目标切开"的缝。
-fn close_binary(src: &[u8], size: usize, r: usize) -> Vec<u8> {
-    let dil = morph(src, size, r, true);
-    morph(&dil, size, r, false)
-}
-
-/// 圆盘膨胀（`grow=true`）或腐蚀
-fn morph(src: &[u8], size: usize, r: usize, grow: bool) -> Vec<u8> {
-    let mut out = vec![0u8; src.len()];
-    let ri = r as i32;
-    let mut offs = Vec::new();
-    for dy in -ri..=ri {
-        for dx in -ri..=ri {
-            if dx * dx + dy * dy <= ri * ri {
-                offs.push((dx, dy));
-            }
-        }
-    }
-    for y in 0..size {
-        for x in 0..size {
-            let i = y * size + x;
-            let hit = |xx: i32, yy: i32| -> bool {
-                xx >= 0
-                    && yy >= 0
-                    && (xx as usize) < size
-                    && (yy as usize) < size
-                    && src[yy as usize * size + xx as usize] != 0
-            };
-            if grow {
-                if offs
-                    .iter()
-                    .any(|(dx, dy)| hit(x as i32 + dx, y as i32 + dy))
-                {
-                    out[i] = 1;
-                }
-            } else if offs
-                .iter()
-                .all(|(dx, dy)| hit(x as i32 + dx, y as i32 + dy))
-            {
-                out[i] = 1;
-            }
-        }
-    }
-    out
-}
-
 /// 掩码里落在圆内的像素索引（`r <= 0` 表示不限制）
 fn pixels_in_disk(mask: &[u8], size: usize, center: (f64, f64), r: f64) -> Vec<usize> {
     let mut out = Vec::new();
@@ -591,6 +557,20 @@ fn hex_from_pixels(blob: &[usize], size: usize) -> Option<HexV3> {
     };
     let w_lo = width_at(lo, lo + span * 0.22);
     let w_hi = width_at(hi - span * 0.22, hi);
+    // 绕主轴的面积不对称度（左右两侧像素数之差）
+    let mut pos = 0u32;
+    let mut neg = 0u32;
+    for &i in blob {
+        let dx = (i % size) as f64 - mx;
+        let dy = (i / size) as f64 - my;
+        if dx * perp.0 + dy * perp.1 >= 0.0 {
+            pos += 1;
+        } else {
+            neg += 1;
+        }
+    }
+    let asym = (pos as f64 - neg as f64).abs() / (pos + neg).max(1) as f64;
+
     // 尖端钝度：外侧 10% 的宽度 vs 中段宽度（路线条把尖端切掉时会明显变大）
     let body_w = width_at(lo + span * 0.3, hi - span * 0.3);
     let tip_w = width_at(lo, lo + span * 0.10).max(width_at(hi - span * 0.10, hi));
@@ -607,6 +587,7 @@ fn hex_from_pixels(blob: &[usize], size: usize) -> Option<HexV3> {
         w_lo,
         w_hi,
         axis_conf: (w_lo - w_hi).abs() / (w_lo + w_hi).max(1.0),
+        asym,
         tip_blunt,
         area: blob.len(),
     })
@@ -622,6 +603,12 @@ pub struct HexV3 {
     pub w_hi: f64,
     /// 两端宽度的相对差（越大越确信"哪头是鼻尖"）
     pub axis_conf: f64,
+    /// 绕主轴的**面积不对称度**：|左半 − 右半| / (左+右)。
+    ///
+    /// 箭头关于自己的中轴近似对称，正常帧这个值很小；
+    /// 如果有**别的青色块被并进同一个连通块**（白楔里的青色、路线条边缘等），
+    /// 面积会明显偏到一侧。真机 57 帧语料里那个符号判错的帧（seq 305）就是这种。
+    pub asym: f64,
     /// 尖端钝度：最外侧 10% 的宽度 / 中段宽度。
     ///
     /// 正常箭头一端是尖的、另一端是燕尾，两者都不超过中段宽度（实测 ≤0.82）；

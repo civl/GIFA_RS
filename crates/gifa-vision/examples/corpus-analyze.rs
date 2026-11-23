@@ -11,7 +11,7 @@
 use gifa_vision::arrow::{analyze_with, ArrowParams, ArrowWorkspace};
 use gifa_vision::cone::ConeWorkspace;
 use gifa_vision::detect::detect_window;
-use gifa_vision::hexagon::{direction_v3, direction_v5};
+use gifa_vision::hexagon::direction_v3;
 
 fn ang_diff(a: f64, b: f64) -> f64 {
     ((a - b + 540.0) % 360.0) - 180.0
@@ -37,7 +37,8 @@ struct Row {
     v1: Option<(f64, f64)>, // (罗盘角, angMargin)
     v3: Option<(f64, f64)>, // (罗盘角, span_px)
     v3_blunt: f64,
-    v5: Option<(f64, f64)>,  // (罗盘角, span_px)
+    v3_asym: f64,
+    v3_area: usize,
     pipe: Option<(f64, u8)>, // (罗盘角, source)
 }
 
@@ -98,7 +99,8 @@ fn main() {
             },
             v3: h.map(|x| (x.deg, x.span)),
             v3_blunt: h.map(|x| x.tip_blunt).unwrap_or(0.0),
-            v5: direction_v5(&bytes, side, c, 0.0, 2).map(|x| (x.deg, x.span)),
+            v3_asym: h.map(|x| x.asym).unwrap_or(0.0),
+            v3_area: h.map(|x| x.area).unwrap_or(0),
             pipe: p.arrow.map(|a| (a, p.arrow_source)),
         });
     }
@@ -146,13 +148,6 @@ fn main() {
         &rows
             .iter()
             .filter_map(|r| r.v3.map(|(a, _)| (a, r.truth)))
-            .collect::<Vec<_>>(),
-    );
-    stat(
-        "闭运算r2",
-        &rows
-            .iter()
-            .filter_map(|r| r.v5.map(|(a, _)| (a, r.truth)))
             .collect::<Vec<_>>(),
     );
     stat(
@@ -256,20 +251,65 @@ fn main() {
      *
      * 这类帧 v3 会给出 ~120° 的错值。detect 把它们的置信度压到 0.2，
      * 于是滤波层"连续 2 帧 + conf≥0.5"的确认路径走不通，会保持上一帧。 */
-    let flagged: Vec<&Row> = rows.iter().filter(|r| r.v3_blunt >= 0.85).collect();
-    println!(
-        "\n== 尖端钝度 ≥0.85（标记可疑）==\n  {} 帧 / {}",
-        flagged.len(),
-        rows.len()
-    );
-    let bad_flagged = flagged
+    let is_bad = |r: &Row| {
+        r.v3.map(|(a, _)| ang_diff(a, r.truth).abs() > 45.0)
+            .unwrap_or(false)
+    };
+    println!("\n== 尖端钝度分布（4 邻域下已无区分力，仅作诊断）==");
+    let mut bvals: Vec<(f64, bool)> = rows.iter().map(|r| (r.v3_blunt, is_bad(r))).collect();
+    bvals.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    let line: Vec<String> = bvals
         .iter()
-        .filter(|r| {
-            r.v3.map(|(a, _)| ang_diff(a, r.truth).abs() > 45.0)
-                .unwrap_or(false)
+        .take(10)
+        .map(|(v, bad)| format!("{v:.2}{}", if *bad { "*" } else { "" }))
+        .collect();
+    println!("  降序前 10（* = 偏 >45°）：{}", line.join("  "));
+
+    // 面积不对称度：被别的青色块污染时应该变大
+    let mut as_all: Vec<(f64, bool)> = rows
+        .iter()
+        .map(|r| {
+            (
+                r.v3_asym,
+                r.v3.map(|(a, _)| ang_diff(a, r.truth).abs() > 45.0)
+                    .unwrap_or(false),
+            )
         })
-        .count();
-    println!("  其中确实偏 >45° 的 {bad_flagged} 帧");
+        .collect();
+    as_all.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    println!("\n== 坏帧 vs 好帧的形状特征 ==");
+    println!("  seq     误差    面积   轴长   钝度   不对称");
+    for r in rows.iter().filter(|r| is_bad(r)) {
+        println!(
+            "  {:>3}  {:>7.1}°  {:>4}  {:>5.1}  {:>5.2}  {:>5.2}",
+            r.seq,
+            ang_diff(r.v3.unwrap().0, r.truth),
+            r.v3_area,
+            r.v3.unwrap().1,
+            r.v3_blunt,
+            r.v3_asym
+        );
+    }
+    let mut good_list: Vec<(f64, f64, usize, f64)> = rows
+        .iter()
+        .filter(|r| !is_bad(r))
+        .map(|r| (r.v3_blunt, r.v3_asym, r.v3_area, r.v3.unwrap().1))
+        .collect();
+    good_list.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    println!("  好帧钝度前三：{:?}", &good_list[..3.min(good_list.len())]);
+    good_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    println!(
+        "  好帧不对称前三：{:?}",
+        &good_list[..3.min(good_list.len())]
+    );
+
+    println!("\n== 绕主轴面积不对称度（降序，* = 偏 >45°）==");
+    let line: Vec<String> = as_all
+        .iter()
+        .take(12)
+        .map(|(v, bad)| format!("{v:.2}{}", if *bad { "*" } else { "" }))
+        .collect();
+    println!("  {}", line.join("  "));
 
     // v1 的 angMargin 分布：看门槛 18 卡在哪
     let mut margins: Vec<f64> = rows.iter().filter_map(|r| r.v1.map(|(_, m)| m)).collect();

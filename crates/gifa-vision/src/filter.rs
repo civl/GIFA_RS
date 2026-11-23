@@ -375,6 +375,26 @@ mod tests {
         }
     }
 
+    /// 真机语料里"路线条切断箭头"那种帧：箭头通道稳定给 345°，而真值是 106°、
+    /// 视锥也指着 110°（置信度 1.0）。这种持续错值必须被扇形否决掉。
+    ///
+    /// 数值直接取自 docs/calibration/m1-labels.json 的 seq 161/169/177。
+    #[test]
+    fn cone_veto_holds_through_route_bar_occlusion() {
+        let mut f = AbFilter::with_gate(65.0);
+        // 前面几帧是正常值（≈106°），扇形也指 110°
+        f.smooth(106.0, 0.8, 0.0, 110.0, 1.0);
+        f.smooth(106.5, 0.8, 100.0, 110.5, 1.0);
+        // 之后连续 6 帧箭头通道报 345°（被切断的残片），扇形稳定指 110°
+        for i in 2..8 {
+            let t = i as f64 * 100.0;
+            assert!(
+                f.smooth(345.0, 0.5, t, 110.0, 1.0).is_none(),
+                "第 {i} 帧：扇形否决时不能把 345° 认下来"
+            );
+        }
+    }
+
     #[test]
     fn first_frame_snaps() {
         let mut f = AbFilter::default();
