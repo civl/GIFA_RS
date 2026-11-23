@@ -695,6 +695,10 @@ fn main() {
     let saved_bounds = store.bounds;
     UI.with(|ui| {
         let mut ui = ui.borrow_mut();
+        /* 单帧跳变门限：原版 130° 是给"60fps 页面抓帧"写的；
+         * 我们 10fps 采样，物理上限只有 540°/s × 0.1s = 54°/帧，
+         * 130° 会放过 90~120° 的假跳变（真机实测每 40 秒能见到十几次）。 */
+        ui.ab.flip_gate = 80.0;
         ui.layouts = store.bearing.layouts.clone();
         // --roi cx,cy,r：直接指定 ROI（真实语料调参用）
         if let Some(v) = arg_value(&args, "--roi") {

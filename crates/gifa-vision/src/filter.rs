@@ -30,6 +30,10 @@ pub struct AbFilter {
     pub omega: f64,
     t: f64,
     suspect: u32,
+    /// 单帧跳变门限（度）。原版固定 130°；真机实测发现 90~120° 的假跳变会漏进来，
+    /// 而 10fps 下物理上限只有 540°/s × 0.1s = 54°，所以管线里调得更紧。
+    /// 默认仍是 130，保证和原版逐帧对拍不变。
+    pub flip_gate: f64,
 }
 
 impl Default for AbFilter {
@@ -39,6 +43,7 @@ impl Default for AbFilter {
             omega: 0.0,
             t: 0.0,
             suspect: 0,
+            flip_gate: 130.0,
         }
     }
 }
@@ -70,7 +75,16 @@ impl AbFilter {
         let pred = (self.theta + self.omega * dt + 360.0) % 360.0;
         let res = ang_diff(obs, pred);
 
-        if res.abs() > 130.0 {
+        /* 门限 = min(flip_gate, 物理上限×1.3)，且不低于 60°：
+         * 物理上限 = 540°/s × dt（ω 的钳位值），10fps 时是 54°/帧。
+         * 真机实测：90~120° 的假跳变会从原版 130° 的门限里漏过去。 */
+        let phys = (540.0 * dt * 1.3).max(60.0);
+        let gate = if self.flip_gate < 130.0 {
+            self.flip_gate.min(phys)
+        } else {
+            self.flip_gate
+        };
+        if res.abs() > gate {
             // 疑似 180° 翻转：让扇形投票（它只能回答"翻没翻"）
             let (mut vote_new, mut vote_old) = (0, 0);
             if cone_conf > 0.3 {
@@ -260,6 +274,42 @@ pub fn view_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 门限收紧后：90~120° 的假跳变要被拦住，而真实的快速转身（50°/帧）照常跟。
+    ///
+    /// 背景：10fps 采样下物理上限是 540°/s × 0.1s = 54°/帧，
+    /// 原版 130° 的门限会放过 90~120° 的假跳变（真机 40 秒能见到十几次）。
+    #[test]
+    fn tight_gate_rejects_impossible_jump() {
+        let mut f = AbFilter {
+            flip_gate: 80.0,
+            ..Default::default()
+        };
+        let mut t = 0.0;
+        f.smooth(30.0, 0.9, t, 0.0, 0.0);
+        t += 100.0;
+        assert!(
+            f.smooth(150.0, 0.9, t, 0.0, 0.0).is_none(),
+            "120° 单帧跳变应当被拦下"
+        );
+
+        // 真实快速转身：50°/帧
+        let mut f2 = AbFilter {
+            flip_gate: 80.0,
+            ..Default::default()
+        };
+        let mut tt = 0.0;
+        let mut last = 0.0f64;
+        f2.smooth(0.0, 0.9, tt, 0.0, 0.0);
+        for _ in 0..6 {
+            tt += 100.0;
+            last = (last + 50.0) % 360.0;
+            assert!(
+                f2.smooth(last, 0.9, tt, 0.0, 0.0).is_some(),
+                "50°/帧 的真实转身不该被拦"
+            );
+        }
+    }
 
     #[test]
     fn first_frame_snaps() {
