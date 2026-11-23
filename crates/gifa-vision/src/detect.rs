@@ -174,13 +174,18 @@ pub fn detect_window(
         out.view_conf = cone.conf as f32;
         out.view_is_cone = true;
     }
-    // v1 不出（或评分余量不够）时，用六边形法兜底 —— 见 hexagon.rs 的实测表
+    /* v1 不出（或评分余量不够）时兜底。
+     *
+     * 用 v3（主轴 + 两端宽度）而不是 v1 六边形（凹口中点→最远点）：
+     * 真机语料上 v1 六边形 2/39 帧偏 >45°、视频语料 59/138 帧偏 >45°，
+     * v3 两份都是 0 帧（中位 2.4°/4.0°）。见 hexagon.rs 的实测表。 */
     let v1_strong = arrow.valid && arrow.ang_margin >= 18.0;
     if !v1_strong {
-        if let Some(h) = crate::hexagon::direction(rgba, size) {
+        let c = (size as f64 / 2.0, size as f64 / 2.0);
+        if let Some(h) = crate::hexagon::direction_v3(rgba, size, c, 0.0) {
             out.arrow = Some(h.deg);
             out.arrow_conf = 0.5;
-            out.arrow_source = 2; // 六边形兜底
+            out.arrow_source = 2; // 几何兜底
             return out;
         }
     }

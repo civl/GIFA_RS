@@ -269,6 +269,62 @@ mod tests {
     use std::path::PathBuf;
 
     /// 用户给的那枚 36×36 箭头：尖端朝上（罗盘 ≈ 0/360）
+    /// v3：样例箭头（尖端朝上 → 罗盘 0/360）
+    #[test]
+    fn v3_points_north_on_sample_arrow() {
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/realgame/sample-arrow-36.bin");
+        let bytes = std::fs::read(p).expect("样例箭头");
+        let side = (bytes.len() / 4).isqrt();
+        let c = (side as f64 / 2.0, side as f64 / 2.0);
+        let d = direction_v3(&bytes, side, c, 0.0).expect("应当识别出方向");
+        let err = ((d.deg - 0.0 + 540.0) % 360.0 - 180.0).abs();
+        assert!(
+            err < 20.0,
+            "v3 应指向北，实际 {:.1}°（误差 {:.1}°）",
+            d.deg,
+            err
+        );
+    }
+
+    /// v3 在真机语料上不许出现 >45° 的翻转（v1 六边形在这里有 2 帧翻错）
+    #[test]
+    fn v3_has_no_gross_errors_on_realgame_corpus() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let labels = root.join("docs/calibration/realgame-labels.json");
+        let Ok(txt) = std::fs::read_to_string(&labels) else {
+            eprintln!("跳过：没有真机标注");
+            return;
+        };
+        let v: serde_json::Value = serde_json::from_str(&txt).unwrap_or_default();
+        let dir = root.join("apps/gifa-demo/data/gamelabel");
+        let (mut n, mut gross) = (0, 0);
+        for f in v["frames"].as_array().cloned().unwrap_or_default() {
+            let (Some(seq), Some(truth)) = (f["seq"].as_u64(), f["truth"].as_f64()) else {
+                continue;
+            };
+            let path = dir.join(format!("f{seq:03}-126.bin"));
+            let Ok(bytes) = std::fs::read(&path) else {
+                continue;
+            };
+            let side = (bytes.len() / 4).isqrt();
+            let c = (side as f64 / 2.0, side as f64 / 2.0);
+            if let Some(d) = direction_v3(&bytes, side, c, 0.0) {
+                n += 1;
+                let err = ((d.deg - truth + 540.0) % 360.0 - 180.0).abs();
+                if err > 45.0 {
+                    gross += 1;
+                }
+            }
+        }
+        if n == 0 {
+            eprintln!("跳过：没有帧");
+            return;
+        }
+        println!("v3 真机语料：{n} 帧，>45° 翻转 {gross} 帧");
+        assert_eq!(gross, 0, "v3 出现翻转（v1 六边形是 2 帧，这里是回归）");
+    }
+
     #[test]
     fn points_north_on_sample_arrow() {
         let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -308,4 +364,127 @@ mod tests {
         assert!(n >= 5, "真机素材少于 5 帧");
         assert_eq!(ok, n, "六边形法应对每一帧都能给出方向（{ok}/{n}）");
     }
+}
+
+/// v3：主轴（PCA）+ 两端宽度差定鼻尖。
+///
+/// 为什么不用"底边枚举"：真机小地图里的箭头有时被地形青切掉一角，
+/// 形状接近三角形 —— 三角形的**每条边**都能凑出"垂线"，几何约束不唯一，
+/// 实测会选到侧翼边（方向差 ~120°）。
+///
+/// 主轴法利用的是更本质的性质：箭头**关于中轴对称**。
+/// 1. 对 blob 像素做 PCA，主轴方向就是中轴（±180° 不确定）
+/// 2. 沿主轴两端各取一段，量"垂直方向的宽度"：**窄的那头是鼻尖**
+pub fn direction_v3(rgba: &[u8], size: usize, center: (f64, f64), r_arrow: f64) -> Option<HexV3> {
+    if size < 24 || rgba.len() < size * size * 4 {
+        return None;
+    }
+    let (mask, _) = mask_of(rgba, size);
+    let (cxm0, cym0) = (center.0, (size - 1) as f64 - center.1);
+    let r_core = if r_arrow > 0.0 { r_arrow * 1.2 } else { 0.0 };
+
+    // 取内圆里的最大连通块（r_core<=0 时用全图）
+    let mut scoped = vec![0u8; mask.len()];
+    for i in 0..mask.len() {
+        if mask[i] == 0 {
+            continue;
+        }
+        if r_core > 0.0 {
+            let (x, y) = ((i % size) as f64, (i / size) as f64);
+            let (dx, dy) = (x - cxm0, y - cym0);
+            if dx * dx + dy * dy > r_core * r_core {
+                continue;
+            }
+        }
+        scoped[i] = 1;
+    }
+    let blob = largest_blob(&scoped, size);
+    if blob.len() < 40 {
+        return None;
+    }
+    // 以 blob 质心为原点做 PCA
+    let n = blob.len() as f64;
+    let mut sx = 0.0;
+    let mut sy = 0.0;
+    for &i in &blob {
+        sx += (i % size) as f64;
+        sy += (i / size) as f64;
+    }
+    let (mx, my) = (sx / n, sy / n);
+    let (mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0);
+    for &i in &blob {
+        let dx = (i % size) as f64 - mx;
+        let dy = (i / size) as f64 - my;
+        sxx += dx * dx;
+        syy += dy * dy;
+        sxy += dx * dy;
+    }
+    // 主轴方向（数组坐标，y 向下）
+    let theta = 0.5 * (2.0 * sxy).atan2(sxx - syy);
+    let axis = (theta.cos(), theta.sin()); // 数组坐标下的单位向量
+    let perp = (-axis.1, axis.0);
+
+    // 沿轴投影的范围
+    let mut lo = f64::MAX;
+    let mut hi = f64::MIN;
+    for &i in &blob {
+        let dx = (i % size) as f64 - mx;
+        let dy = (i / size) as f64 - my;
+        let t = dx * axis.0 + dy * axis.1;
+        lo = lo.min(t);
+        hi = hi.max(t);
+    }
+    let span = hi - lo;
+    if span < size as f64 * 0.08 {
+        return None;
+    }
+
+    // 两端各取 20% 长度，量垂直宽度（峰-峰）
+    let width_at = |from: f64, to: f64| -> f64 {
+        let (mut a, mut b) = (f64::MAX, f64::MIN);
+        for &i in &blob {
+            let dx = (i % size) as f64 - mx;
+            let dy = (i / size) as f64 - my;
+            let t = dx * axis.0 + dy * axis.1;
+            if t < from || t > to {
+                continue;
+            }
+            let p = dx * perp.0 + dy * perp.1;
+            a = a.min(p);
+            b = b.max(p);
+        }
+        if a > b {
+            0.0
+        } else {
+            b - a
+        }
+    };
+    let w_lo = width_at(lo, lo + span * 0.22);
+    let w_hi = width_at(hi - span * 0.22, hi);
+
+    // 窄的那端是鼻尖：lo 端更窄 → 鼻尖在 lo 方向（即 -axis）
+    let sign = if w_lo < w_hi { -1.0 } else { 1.0 };
+    let nose_dir = (axis.0 * sign, axis.1 * sign);
+    // 数组坐标 → 数学坐标（y 翻）：数学下鼻尖方向 = (dx, -dy)
+    let deg = (90.0 - (-nose_dir.1).atan2(nose_dir.0).to_degrees()).rem_euclid(360.0);
+    Some(HexV3 {
+        deg,
+        span,
+        w_lo,
+        w_hi,
+        axis_conf: (w_lo - w_hi).abs() / (w_lo + w_hi).max(1.0),
+        area: blob.len(),
+    })
+}
+
+/// v3 的结果
+#[derive(Debug, Clone, Copy)]
+pub struct HexV3 {
+    pub deg: f64,
+    pub span: f64,
+    pub w_lo: f64,
+    pub w_hi: f64,
+    /// 两端宽度的相对差（越大越确信"哪头是鼻尖"）
+    pub axis_conf: f64,
+    pub area: usize,
 }
