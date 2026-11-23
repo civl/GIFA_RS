@@ -33,6 +33,8 @@ pub struct ConeResult {
     /// 重试策略用它判"当前识别的把握够不够"。
     pub rise: f64,
     pub fall: f64,
+    /// 几何校验是否通过（扇形内部整体比对面亮）。诊断 + 门控用。
+    pub membrane_ok: bool,
 }
 
 impl ConeResult {
@@ -454,7 +456,43 @@ pub fn analyze_cone(rgba: &[u8], size: usize, step: usize, ws: &mut ConeWorkspac
         let v = ((bin + 0.5) * 360.0) / NA as f64;
         v.rem_euclid(360.0)
     };
+    /* ---- 几何校验：扇形内部的"白膜"必须真的比对面亮
+     *
+     * 峰配对只保证"某个角度上有一条上升边、45° 外有一条下降边"，
+     * 两块互不相关的白色图标也可能凑出这样一对（真机观测到过一次 136° 翻转）。
+     * 但**扇形是一整片半透明白膜**：它覆盖的那些极坐标格应当整体比
+     * 正对面（+180°）同半径的格子更白。
+     *
+     * 用已经累好的 sr/sg/sb/cnt 直接算，不额外扫像素。
+     */
+    let cell_lum = |k: i64, j: usize| -> Option<f64> {
+        let idx = j * NA + (k.rem_euclid(NA as i64) as usize);
+        let n = ws.cnt[idx] as f64;
+        if n < 1.0 {
+            return None;
+        }
+        Some((ws.sr[idx] as f64 + ws.sg[idx] as f64 + ws.sb[idx] as f64) / (3.0 * n))
+    };
+    let mut brighter = 0;
+    let mut compared = 0;
+    for j in 3..10 {
+        for dk in -10i64..=10 {
+            let k = axis.round() as i64 + dk;
+            let (Some(inside), Some(opposite)) = (cell_lum(k, j), cell_lum(k + NA as i64 / 2, j))
+            else {
+                continue;
+            };
+            compared += 1;
+            if inside > opposite + 2.0 {
+                brighter += 1;
+            }
+        }
+    }
+    // 至少要比对到 8 格，且过半格"内部更亮"；否则认为这一对峰是误配
+    let membrane_ok = compared >= 8 && brighter * 2 > compared;
+
     let conf = ((score - 0.06) / 0.34).clamp(0.0, 1.0);
+    let conf = if membrane_ok { conf } else { conf * 0.35 };
     ConeResult {
         valid: conf > 0.12,
         deg: to_deg(axis),
@@ -463,6 +501,7 @@ pub fn analyze_cone(rgba: &[u8], size: usize, step: usize, ws: &mut ConeWorkspac
         cyan_frac,
         rise: b_rise,
         fall: b_fall,
+        membrane_ok,
     }
 }
 
@@ -514,6 +553,48 @@ mod tests {
             }
         }
         v
+    }
+
+    /// 白膜校验：真扇形必须通过；把扇形换成"两块孤立白点"必须不通过。
+    #[test]
+    fn membrane_check_distinguishes_real_sector() {
+        let size = 200usize;
+        let frame = frame_with_cone(size, 90.0);
+        let mut ws = ConeWorkspace::default();
+        let r = analyze_cone(&frame, size, 1, &mut ws);
+        assert!(r.valid, "真扇形应当有效");
+        assert!(r.membrane_ok, "真扇形内部比对面亮，校验应当通过");
+
+        // 只留两条细边、中间挖空 → 峰还在，但不是"整片白膜"
+        let mut hollow = frame.clone();
+        let c = (size as f64 - 1.0) / 2.0;
+        for y in 0..size {
+            for x in 0..size {
+                let dx = x as f64 - c;
+                let dy = y as f64 - c;
+                let dist = (dx * dx + dy * dy).sqrt();
+                let ang = (90.0 - dy.atan2(dx).to_degrees()).rem_euclid(360.0);
+                // 扇形中心 90°，张角 90°：把内部（±35°）挖回底色
+                if dist > size as f64 * 0.18
+                    && dist < size as f64 * 0.46
+                    && ((ang - 90.0 + 540.0) % 360.0 - 180.0).abs() < 35.0
+                {
+                    let i = (y * size + x) * 4;
+                    hollow[i] = 40;
+                    hollow[i + 1] = 93;
+                    hollow[i + 2] = 103;
+                }
+            }
+        }
+        let mut ws2 = ConeWorkspace::default();
+        let r2 = analyze_cone(&hollow, size, 1, &mut ws2);
+        assert!(
+            !r2.valid || !r2.membrane_ok,
+            "中间挖空之后不该再通过白膜校验（conf {:.2} valid {} membrane {}）",
+            r2.conf,
+            r2.valid,
+            r2.membrane_ok
+        );
     }
 
     #[test]

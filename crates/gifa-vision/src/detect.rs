@@ -66,6 +66,8 @@ pub struct Detect {
     pub cross_check: Option<(f64, f64)>,
     /// view 是否来自真视锥（而不是占位）
     pub view_is_cone: bool,
+    /// 视锥的"白膜几何校验"是否通过（扇形内部整体比对面亮）
+    pub membrane_ok: bool,
     /// 0=没被挡 1=鼻子不在轴上
     pub reject_reason: u8,
     /// 箭头来源：0=v1 三点拟合，2=六边形兜底
@@ -173,6 +175,7 @@ pub fn detect_window(
         out.view = Some(crate::cone::to_compass(cone.deg));
         out.view_conf = cone.conf as f32;
         out.view_is_cone = true;
+        out.membrane_ok = cone.membrane_ok;
     }
     /* v1 不出（或评分余量不够）时兜底。
      *
