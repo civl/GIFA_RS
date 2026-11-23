@@ -70,6 +70,8 @@ pub struct Detect {
     pub membrane_ok: bool,
     /// 0=没被挡 1=鼻子不在轴上
     pub reject_reason: u8,
+    /// 两路（v1/v3）都出结果但分歧过大 —— 供滤波层更谨慎地处理
+    pub suspect: bool,
     /// 箭头来源：0=v1 三点拟合，2=六边形兜底
     pub arrow_source: u8,
     /// |鼻子角 − 输出轴角|（标定时用来看闸门余量）
@@ -108,6 +110,54 @@ impl Detect {
 ///
 /// 视频素材（138 帧标注）上这套参数**完全等价于原版**：有效帧 138/138、
 /// 误差中位 0.03°、最大 2.35°（原版 angMargin 最小 20.3，18 这条线碰不到它）。
+/// 融合/裁决的纯结果（便于单测，不依赖像素数据）。
+struct ArrowPick {
+    deg: Option<f64>,
+    conf: f32,
+    source: u8,
+    suspect: bool,
+}
+
+/// 两路裁决：见 `detect_window` 里"谁当主通道由箭头绝对尺寸决定"的注释。
+fn fuse_arrow(
+    v1: Option<f64>,
+    v1_conf: f64,
+    v3: Option<(f64, f64)>, // (deg, span_px)
+) -> ArrowPick {
+    let suspect = match (v1, v3) {
+        (Some(a1), Some((a3, _))) => crate::arrow::ang_diff(a1, a3).abs() > 20.0,
+        _ => false,
+    };
+    let arrow_px = v3.map(|(_, s)| s).unwrap_or(0.0);
+    if v1.is_some() && arrow_px >= ARROW_PX_PREFER_V1 {
+        ArrowPick {
+            deg: v1,
+            conf: v1_conf.clamp(0.0, 1.0) as f32,
+            source: 1,
+            suspect,
+        }
+    } else if let Some((a3, _)) = v3 {
+        ArrowPick {
+            deg: Some(a3),
+            conf: 0.5,
+            source: 2,
+            suspect,
+        }
+    } else {
+        ArrowPick {
+            deg: None,
+            conf: 0.0,
+            source: 0,
+            suspect,
+        }
+    }
+}
+
+/// 箭头轴长（像素）大于这个值就信 v1，否则信 v3。
+/// 数据依据见 `detect_window` 里"两路裁决"的注释：视频箭头 ~60px（v1 准）、
+/// 真机箭头 ~28px（v3 准）。取 40 把两者分开。
+const ARROW_PX_PREFER_V1: f64 = 40.0;
+
 fn arrow_params() -> crate::arrow::ArrowParams {
     crate::arrow::ArrowParams {
         bis_err_max: 25.0,
@@ -132,23 +182,33 @@ pub fn detect_window(
      *
      * 所以两个通道用两个窗口：视锥用整窗（它要看到扇形边缘），箭头用中心 55% 的
      * 裁切（箭头占 8% 左右，p99 稳定过线）。不额外截屏，只是同一块像素里换窗口。 */
-    let crop_frac: f64 = std::env::var("GIFA_ARROW_CROP")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0.55);
-    let arrow_side = ((size as f64 * crop_frac) as usize).clamp(48, size) & !1;
-    let crop_off = (size - arrow_side) / 2;
-    let arrow = if arrow_side + 8 < size {
-        let mut crop = vec![0u8; arrow_side * arrow_side * 4];
-        for y in 0..arrow_side {
-            let src = ((y + crop_off) * size + crop_off) * 4;
-            let dst = y * arrow_side * 4;
-            crop[dst..dst + arrow_side * 4].copy_from_slice(&rgba[src..src + arrow_side * 4]);
+    /* 先用**全窗**跑 v1：窗口小、箭头大时（真机语料 126px 窗、箭头占大半），
+     * 全窗结果已经很好；只有"大窗里的小箭头"（视频 253px 窗、箭头只占 1.5%）
+     * 才会被 `p99 < 100` 的"没有小地图"闸误杀 —— 这时才退到中心裁切。 */
+    let mut arrow =
+        crate::recovery::analyze_arrow_with_recovery(rgba, size, 1, aws, &arrow_params());
+    if !arrow.valid {
+        let crop_frac: f64 = std::env::var("GIFA_ARROW_CROP")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.55);
+        let arrow_side = ((size as f64 * crop_frac) as usize).clamp(48, size) & !1;
+        let crop_off = (size - arrow_side) / 2;
+        let cropped = if arrow_side + 8 < size {
+            let mut crop = vec![0u8; arrow_side * arrow_side * 4];
+            for y in 0..arrow_side {
+                let src = ((y + crop_off) * size + crop_off) * 4;
+                let dst = y * arrow_side * 4;
+                crop[dst..dst + arrow_side * 4].copy_from_slice(&rgba[src..src + arrow_side * 4]);
+            }
+            crate::recovery::analyze_arrow_with_recovery(&crop, arrow_side, 1, aws, &arrow_params())
+        } else {
+            crate::recovery::analyze_arrow_with_recovery(rgba, size, 1, aws, &arrow_params())
+        };
+        if cropped.valid {
+            arrow = cropped;
         }
-        crate::recovery::analyze_arrow_with_recovery(&crop, arrow_side, 1, aws, &arrow_params())
-    } else {
-        crate::recovery::analyze_arrow_with_recovery(rgba, size, 1, aws, &arrow_params())
-    };
+    }
     let nose_gap = arrow
         .nose_deg
         .map(|n| ((n - arrow.angle + 540.0) % 360.0 - 180.0).abs() as f32);
@@ -178,62 +238,30 @@ pub fn detect_window(
         out.view_is_cone = true;
         out.membrane_ok = cone.membrane_ok;
     }
-    /* v1 不出（或评分余量不够）时兜底。
+    /* ---- 两路裁决：谁当主通道由**箭头的绝对尺寸**决定
      *
-     * 用 v3（主轴 + 两端宽度）而不是 v1 六边形（凹口中点→最远点）：
-     * 真机语料上 v1 六边形 2/39 帧偏 >45°、视频语料 59/138 帧偏 >45°，
-     * v3 两份都是 0 帧（中位 2.4°/4.0°）。见 hexagon.rs 的实测表。 */
-    let v1_strong = arrow.valid && arrow.ang_margin >= 18.0;
-    if !v1_strong {
-        let c = (size as f64 / 2.0, size as f64 / 2.0);
-        if let Some(h) = crate::hexagon::direction_v3(rgba, size, c, 0.0) {
-            out.arrow = Some(h.deg);
-            out.arrow_conf = 0.5;
-            out.arrow_source = 2; // 几何兜底
-            return out;
-        }
-    }
+     * 实测（两份人工真值）：
+     *   · 放大过的小地图（视频，箭头 ~60px）：v1 138/138 中位 0.03°，v3 中位 4.0° → 信 v1
+     *   · 原版小地图（真机，箭头 ~28px）：v1 28/39 中位 9.3°，v3 中位 2.4° → 信 v3
+     *
+     * 同一相对大小，方向相反 —— 所以不能用"窗口占比"判，得用**像素数**：
+     * v1 的三点拟合在放大箭头上近乎完美，在小箭头上有个 ~9° 的系统偏差。
+     * v3 的 PCA 对尺寸不敏感。
+     *
+     * 无论输出哪路，两路差 >20° 时都标 suspect，交给滤波层谨慎处理。 */
+    let v1_compass = if arrow.valid {
+        Some(crate::arrow::to_compass(arrow.angle))
+    } else {
+        None
+    };
+    let c = (size as f64 / 2.0, size as f64 / 2.0);
+    let v3 = crate::hexagon::direction_v3(rgba, size, c, 0.0);
 
-    if arrow.valid {
-        // 原版给的是 atan2 角，叠加层要罗盘角。
-        // 额外过一道"鼻子在轴上"的检查：小地图背景的青色混进连通块时，
-        // 原版仍会判有效、但角度能偏 10° 以上（实测见 NOSE_AXIS_MAX_DEG 文档）。
-        /* 撒手不管的两个旧闸：
-         * · `axis_consistent`（|鼻子−轴| ≤8°）—— 真机实测**反了**：
-         *   好帧 24.0~24.5°，坏帧 18~22.6°。它只会把对的挡掉。
-         * · v2（凸包+凹口）—— 真机序列上 74% 的帧与 v1 分歧，不可靠。
-         * 现在靠 `ang_margin` 区分好坏（见 arrow_params 的注释）。 */
-
-        /* 第二意见：凸包 + 凹口定位（结构完全不同的模型）。
-         * 两个模型在干净帧上差 ~10°，在"背景青色混进连通块"的帧上差 35° ——
-         * 差得太多就说明这一帧的形状被污染了，宁可不上报。 */
-        let second = crate::template::fit_arrow(rgba, size);
-        let agree = match second {
-            Some(f) => {
-                let d = ((f.angle - arrow.angle + 540.0) % 360.0 - 180.0).abs();
-                out.cross_check = Some((f.angle, d));
-                d <= crate::template::MAX_DISAGREE_DEG
-            }
-            // 拿不到第二意见（没有明显凹口）就不拦：以 v1 + 鼻子闸为准
-            None => true,
-        };
-        /* 视锥互证**不成立**，已撤：原神的移动是"镜头相对"的，按 A/D 横移时
-         * 箭头（行进）与视锥（镜头）本来就**垂直**；按 S 倒走时还差 180°。
-         * 实测在蒙德素材上它会误挡 16/290 帧。留在文档里当结论。 */
-
-        /* v2 只记录、不拦截：真实视频上它和 v1 有 74% 的帧分歧 >16°，
-         * 说明 v2 还不够稳（在 2 张真机静态图上表现好，不代表序列上可靠）。
-         * 等它准了再把 agree 加回判据。 */
-        let _ = agree;
-        if true {
-            out.arrow = Some(crate::arrow::to_compass(arrow.angle));
-            out.arrow_conf = arrow.conf as f32;
-            out.arrow_source = 1;
-        } else {
-            out.rejected_axis = true;
-            out.reject_reason = 1;
-        }
-    }
+    let pick = fuse_arrow(v1_compass, arrow.conf, v3.map(|h| (h.deg, h.span)));
+    out.arrow = pick.deg;
+    out.arrow_conf = pick.conf;
+    out.arrow_source = pick.source;
+    out.suspect = pick.suspect;
     out
 }
 
@@ -356,6 +384,28 @@ pub fn detect_simple(frame: &Frame, window: SampleBox, origin: Origin) -> Detect
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 主通道裁决：大箭头信 v1，小箭头信 v3，只有一路就用那一路。
+    #[test]
+    fn fuse_arrow_routes_by_size() {
+        // 大箭头（视频，60px）→ v1
+        let p = fuse_arrow(Some(10.0), 0.9, Some((12.0, 60.0)));
+        assert_eq!(p.source, 1, "大箭头应信 v1");
+        assert_eq!(p.deg, Some(10.0));
+        // 小箭头（真机，28px）→ v3
+        let p = fuse_arrow(Some(10.0), 0.9, Some((12.0, 28.0)));
+        assert_eq!(p.source, 2, "小箭头应信 v3");
+        assert_eq!(p.deg, Some(12.0));
+        // 只有 v3
+        let p = fuse_arrow(None, 0.0, Some((12.0, 28.0)));
+        assert_eq!(p.source, 2);
+        // 两路分歧 → suspect
+        let p = fuse_arrow(Some(10.0), 0.9, Some((200.0, 60.0)));
+        assert!(p.suspect, "差 170° 应标 suspect");
+        // 两路一致 → 不 suspect
+        let p = fuse_arrow(Some(10.0), 0.9, Some((15.0, 60.0)));
+        assert!(!p.suspect);
+    }
 
     fn blank(w: i32, h: i32) -> Frame {
         Frame::new(w, h, [40u8, 60, 45, 255].repeat((w * h) as usize))

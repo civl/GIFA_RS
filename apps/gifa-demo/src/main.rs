@@ -2886,15 +2886,17 @@ fn filter_event(
 
     // 箭头：门限挡下的帧不上报（叠加层保持上一次的角度）
     let cone_math = ev.result.view.map(to_math).unwrap_or(-1.0);
-    let arrow_out = ev.result.arrow.map(to_math).and_then(|a| {
-        ui.ab.smooth(
-            a,
-            ev.result.arrow_conf as f64,
-            ev.at_ms,
-            cone_math,
-            view_conf,
-        )
-    });
+    // 两路分歧的帧（suspect）：压低置信度，让 α-β 更慢地跟 —— 宁可保守，别被翻错带跑
+    let arrow_conf = if ev.result.suspect {
+        (ev.result.arrow_conf as f64 * 0.4).clamp(0.0, 1.0)
+    } else {
+        ev.result.arrow_conf as f64
+    };
+    let arrow_out = ev
+        .result
+        .arrow
+        .map(to_math)
+        .and_then(|a| ui.ab.smooth(a, arrow_conf, ev.at_ms, cone_math, view_conf));
     (arrow_out.map(to_math), view_deg, view_conf, view_w)
 }
 
