@@ -357,6 +357,24 @@ mod tests {
         assert!(turned, "扇形也翻过去时应当允许改判");
     }
 
+    /// 低置信度的持续错值不许被采纳。
+    ///
+    /// 场景：箭头被导航路线条切掉尖端，v3 会稳定地给出偏 ~120° 的错值，
+    /// 而且是连续多帧（detect 把这种帧的 conf 压到 0.2）。
+    /// 原来"连续 2 帧 + conf≥0.5"的确认路径会把它认下来；conf 0.2 时必须认不下来。
+    #[test]
+    fn low_conf_never_confirms_persistent_wrong_value() {
+        let mut f = AbFilter::with_gate(65.0);
+        f.smooth(10.0, 0.9, 0.0, -1.0, 0.0);
+        for i in 1..=8 {
+            let t = i as f64 * 100.0;
+            assert!(
+                f.smooth(130.0, 0.2, t, -1.0, 0.0).is_none(),
+                "第 {i} 帧：conf 0.2 的 120° 跳变不该被采纳"
+            );
+        }
+    }
+
     #[test]
     fn first_frame_snaps() {
         let mut f = AbFilter::default();

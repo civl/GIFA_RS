@@ -380,39 +380,171 @@ pub fn direction_v3(rgba: &[u8], size: usize, center: (f64, f64), r_arrow: f64) 
         return None;
     }
     let (mask, _) = mask_of(rgba, size);
-    let (cxm0, cym0) = (center.0, (size - 1) as f64 - center.1);
+    let (cx0, cy0) = (center.0, (size - 1) as f64 - center.1);
     let r_core = if r_arrow > 0.0 { r_arrow * 1.2 } else { 0.0 };
+    let pixels = pixels_in_disk(&mask, size, (cx0, cy0), r_core);
+    hex_from_pixels(&largest_blob_of(&pixels, size), size)
+}
 
-    // 取内圆里的最大连通块（r_core<=0 时用全图）
-    let mut scoped = vec![0u8; mask.len()];
-    for i in 0..mask.len() {
-        if mask[i] == 0 {
+/// v4：中心圆内的**所有**青色像素取并集（不是只取最大连通块）。
+///
+/// 为什么需要：小地图上会画红白色的**导航路线条**，它可能从箭头中间穿过去，
+/// 把青色箭头切成两半。v3 只取最大那块 —— 于是一侧的残片单独做 PCA，
+/// 主轴被算歪 50~60°，方向错 120° 左右（真机 57 帧语料里 5 帧这样，
+/// 占 8.8%，且都是"路线条正好压在箭头上"的帧）。
+///
+/// 碎块的**并集**保留了箭头的整体轮廓（只少了被路线条遮住的那一条薄缝），
+/// 主轴就基本正确了。中心圆限制住范围，避免把远处的青色标记并进来。
+pub fn direction_v4(rgba: &[u8], size: usize, center: (f64, f64)) -> Option<HexV3> {
+    if size < 24 || rgba.len() < size * size * 4 {
+        return None;
+    }
+    let (mask, _) = mask_of(rgba, size);
+    let (cx0, cy0) = (center.0, (size - 1) as f64 - center.1);
+    // 中心圆半径按窗口比例取：真机 158px 窗 → 28px，视频 250px 窗 → 45px；
+    // 两者的箭头半径分别约 15 / 30，都盖得住，又远小于窗口不会并进别的青色。
+    let r_core = size as f64 * 0.18;
+    let pixels = pixels_in_disk(&mask, size, (cx0, cy0), r_core);
+    if pixels.len() < 40 {
+        return None;
+    }
+    hex_from_pixels(&pixels, size)
+}
+
+/// 实验用：可调"中心圆半径比例 + 闭运算半径"的变体，便于在语料上扫参数。
+///
+/// 背景：导航路线条会把箭头切开，v3（只取最大连通块）于是把残片当整体，
+/// 主轴歪 50~60°。这里提供两个旋钮：
+///   · `disk_frac`：只看中心圆内的像素（0 = 不看窗口以外的限制）
+///   · `close_r`  ：先做闭运算（膨胀+腐蚀），把被路线条切开的缝补上
+pub fn direction_v5(
+    rgba: &[u8],
+    size: usize,
+    center: (f64, f64),
+    disk_frac: f64,
+    close_r: usize,
+) -> Option<HexV3> {
+    if size < 24 || rgba.len() < size * size * 4 {
+        return None;
+    }
+    let (mask, _) = mask_of(rgba, size);
+    let (cx0, cy0) = (center.0, (size - 1) as f64 - center.1);
+    let r_core = if disk_frac > 0.0 {
+        size as f64 * disk_frac
+    } else {
+        0.0
+    };
+    let mut pixels = pixels_in_disk(&mask, size, (cx0, cy0), r_core);
+    if pixels.is_empty() {
+        return None;
+    }
+    if close_r > 0 {
+        let mut sub = vec![0u8; size * size];
+        for &i in &pixels {
+            sub[i] = 1;
+        }
+        let closed = close_binary(&sub, size, close_r);
+        pixels = closed
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| (*v != 0).then_some(i))
+            .collect();
+    }
+    hex_from_pixels(&largest_blob_of(&pixels, size), size)
+}
+
+/// 二值闭运算（圆盘结构元），用来补"细条把目标切开"的缝。
+fn close_binary(src: &[u8], size: usize, r: usize) -> Vec<u8> {
+    let dil = morph(src, size, r, true);
+    morph(&dil, size, r, false)
+}
+
+/// 圆盘膨胀（`grow=true`）或腐蚀
+fn morph(src: &[u8], size: usize, r: usize, grow: bool) -> Vec<u8> {
+    let mut out = vec![0u8; src.len()];
+    let ri = r as i32;
+    let mut offs = Vec::new();
+    for dy in -ri..=ri {
+        for dx in -ri..=ri {
+            if dx * dx + dy * dy <= ri * ri {
+                offs.push((dx, dy));
+            }
+        }
+    }
+    for y in 0..size {
+        for x in 0..size {
+            let i = y * size + x;
+            let hit = |xx: i32, yy: i32| -> bool {
+                xx >= 0
+                    && yy >= 0
+                    && (xx as usize) < size
+                    && (yy as usize) < size
+                    && src[yy as usize * size + xx as usize] != 0
+            };
+            if grow {
+                if offs
+                    .iter()
+                    .any(|(dx, dy)| hit(x as i32 + dx, y as i32 + dy))
+                {
+                    out[i] = 1;
+                }
+            } else if offs
+                .iter()
+                .all(|(dx, dy)| hit(x as i32 + dx, y as i32 + dy))
+            {
+                out[i] = 1;
+            }
+        }
+    }
+    out
+}
+
+/// 掩码里落在圆内的像素索引（`r <= 0` 表示不限制）
+fn pixels_in_disk(mask: &[u8], size: usize, center: (f64, f64), r: f64) -> Vec<usize> {
+    let mut out = Vec::new();
+    for (i, m) in mask.iter().enumerate() {
+        if *m == 0 {
             continue;
         }
-        if r_core > 0.0 {
+        if r > 0.0 {
             let (x, y) = ((i % size) as f64, (i / size) as f64);
-            let (dx, dy) = (x - cxm0, y - cym0);
-            if dx * dx + dy * dy > r_core * r_core {
+            let (dx, dy) = (x - center.0, y - center.1);
+            if dx * dx + dy * dy > r * r {
                 continue;
             }
         }
-        scoped[i] = 1;
+        out.push(i);
     }
-    let blob = largest_blob(&scoped, size);
+    out
+}
+
+/// 给定掩码子集，取其中最大连通块
+fn largest_blob_of(pixels: &[usize], size: usize) -> Vec<usize> {
+    if pixels.is_empty() {
+        return Vec::new();
+    }
+    let mut sub = vec![0u8; size * size];
+    for &i in pixels {
+        sub[i] = 1;
+    }
+    largest_blob(&sub, size)
+}
+
+/// PCA 主轴 + 两端宽度定鼻尖。v3/v4 共用的核心。
+fn hex_from_pixels(blob: &[usize], size: usize) -> Option<HexV3> {
     if blob.len() < 40 {
         return None;
     }
-    // 以 blob 质心为原点做 PCA
     let n = blob.len() as f64;
     let mut sx = 0.0;
     let mut sy = 0.0;
-    for &i in &blob {
+    for &i in blob {
         sx += (i % size) as f64;
         sy += (i / size) as f64;
     }
     let (mx, my) = (sx / n, sy / n);
     let (mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0);
-    for &i in &blob {
+    for &i in blob {
         let dx = (i % size) as f64 - mx;
         let dy = (i / size) as f64 - my;
         sxx += dx * dx;
@@ -421,13 +553,12 @@ pub fn direction_v3(rgba: &[u8], size: usize, center: (f64, f64), r_arrow: f64) 
     }
     // 主轴方向（数组坐标，y 向下）
     let theta = 0.5 * (2.0 * sxy).atan2(sxx - syy);
-    let axis = (theta.cos(), theta.sin()); // 数组坐标下的单位向量
+    let axis = (theta.cos(), theta.sin());
     let perp = (-axis.1, axis.0);
 
-    // 沿轴投影的范围
     let mut lo = f64::MAX;
     let mut hi = f64::MIN;
-    for &i in &blob {
+    for &i in blob {
         let dx = (i % size) as f64 - mx;
         let dy = (i / size) as f64 - my;
         let t = dx * axis.0 + dy * axis.1;
@@ -439,10 +570,9 @@ pub fn direction_v3(rgba: &[u8], size: usize, center: (f64, f64), r_arrow: f64) 
         return None;
     }
 
-    // 两端各取 20% 长度，量垂直宽度（峰-峰）
     let width_at = |from: f64, to: f64| -> f64 {
         let (mut a, mut b) = (f64::MAX, f64::MIN);
-        for &i in &blob {
+        for &i in blob {
             let dx = (i % size) as f64 - mx;
             let dy = (i / size) as f64 - my;
             let t = dx * axis.0 + dy * axis.1;
@@ -461,11 +591,15 @@ pub fn direction_v3(rgba: &[u8], size: usize, center: (f64, f64), r_arrow: f64) 
     };
     let w_lo = width_at(lo, lo + span * 0.22);
     let w_hi = width_at(hi - span * 0.22, hi);
+    // 尖端钝度：外侧 10% 的宽度 vs 中段宽度（路线条把尖端切掉时会明显变大）
+    let body_w = width_at(lo + span * 0.3, hi - span * 0.3);
+    let tip_w = width_at(lo, lo + span * 0.10).max(width_at(hi - span * 0.10, hi));
+    let tip_blunt = if body_w > 1.0 { tip_w / body_w } else { 0.0 };
 
     // 窄的那端是鼻尖：lo 端更窄 → 鼻尖在 lo 方向（即 -axis）
     let sign = if w_lo < w_hi { -1.0 } else { 1.0 };
     let nose_dir = (axis.0 * sign, axis.1 * sign);
-    // 数组坐标 → 数学坐标（y 翻）：数学下鼻尖方向 = (dx, -dy)
+    // 数组坐标 → 数学坐标（y 翻）
     let deg = (90.0 - (-nose_dir.1).atan2(nose_dir.0).to_degrees()).rem_euclid(360.0);
     Some(HexV3 {
         deg,
@@ -473,10 +607,12 @@ pub fn direction_v3(rgba: &[u8], size: usize, center: (f64, f64), r_arrow: f64) 
         w_lo,
         w_hi,
         axis_conf: (w_lo - w_hi).abs() / (w_lo + w_hi).max(1.0),
+        tip_blunt,
         area: blob.len(),
     })
 }
 
+/// v3 的结果
 /// v3 的结果
 #[derive(Debug, Clone, Copy)]
 pub struct HexV3 {
@@ -486,5 +622,11 @@ pub struct HexV3 {
     pub w_hi: f64,
     /// 两端宽度的相对差（越大越确信"哪头是鼻尖"）
     pub axis_conf: f64,
+    /// 尖端钝度：最外侧 10% 的宽度 / 中段宽度。
+    ///
+    /// 正常箭头一端是尖的、另一端是燕尾，两者都不超过中段宽度（实测 ≤0.82）；
+    /// 而**被导航路线条切掉尖端**的残片会露出一个比中段还宽的平截面（≥0.89）。
+    /// 真机 57 帧全朝向语料上：阈值 0.85 能拦下 4/5 个 >45° 的坏帧，且零误伤。
+    pub tip_blunt: f64,
     pub area: usize,
 }
