@@ -13,7 +13,7 @@ GIFA 的 Rust 复刻工程（对应仓库根的 `task.md`）。
 | 真实游戏（2560×1440 绿地，5 分钟长跑） | 箭头 **2989/3004（100%）**、视锥 98% |
 | 性能 | 截帧 11.4ms / 检测 1.0~1.2ms，5 分钟无漂移 |
 | 资源 | 内存 24→25MB、CPU 2.7% 单核、线程/句柄无增长 |
-| 自检门禁 | 18 项全过；测试 130 通过 |
+| 自检门禁 | **22 项全过**；`cargo test` **138 通过** |
 
 ```powershell
 # 在游戏里跑（会自动找 UnityWndClass 窗口、隐藏浮窗、只留叠加层）
@@ -44,7 +44,7 @@ gifa-demo.exe --game 300 --autocenter
 │  ├─ FLOAT-UI.md               # 浮窗界面移植：桥接、交互、自检
 │  ├─ LIVE-TEST.md              # 实战联调：真实游戏里抓到并修掉的 7 个问题
 │  ├─ PACKAGING.md              # 打包：清单注入、单文件、校验和、WebView2 检查
-│  └─ REGRESSION.md             # 回归门禁：17 项、性能预算、手工矩阵清单
+│  └─ REGRESSION.md             # 回归门禁：22 项、跨语言契约对拍、性能预算、手工矩阵
 ├─ crates/
 │  ├─ gifa-core/                # 纯领域：设置 / 方位布局 / 快捷键解析 / 播放状态机
 │  │  ├─ src/settings.rs        #   与原版 settings.json 同构 + 深合并 + 钳位
@@ -153,6 +153,9 @@ cargo run -p gifa-demo -- --settings-test
 # 浮窗界面自检（几何/控件/进度拖动/自动隐藏/URL 条）
 cargo run -p gifa-demo -- --open BV1xx411c7mD --ui-test
 
+# 所有开关的速查（按用途分组）
+gifa-demo.exe --help
+
 # 识别链路自检：真实截屏 / 合成地图端到端
 cargo run -p gifa-demo -- --open BV1xx411c7mD --vision-test
 
@@ -181,6 +184,13 @@ cargo run -p gifa-demo -- --open BV1xx411c7mD --dump-frame frames --dump-count 4
 # 列出可见窗口（找游戏窗口/排查遮挡）
 cargo run -p gifa-demo -- --list-windows
 
+# 热键：录制换绑 + 输入态让路
+cargo run -p gifa-demo -- --bind-test
+
+# 历史/收藏：收藏当前视频 / 按分 P 载入
+cargo run -p gifa-demo -- --fav-test
+cargo run -p gifa-demo -- --load-test
+
 # ---- 标定工具 ----
 # 逐帧标注 → 出准确率/阈值报告（详见 docs/VISION.md）
 python scripts/label-tool.py apps/gifa-demo/data/labelseq apps/gifa-demo/data/label.csv apps/gifa-demo/data/label
@@ -190,7 +200,7 @@ cargo run -p gifa-demo -- --vision-synth
 # 纯函数单测
 cargo test
 
-# 发布前门禁：单测 + 10 个自检 + 识别冒烟 + 性能预算（17 项，退出码即结论）
+# 发布前门禁：22 项（编译 + 测试 + clippy + fmt + 13 个自检 + 识别冒烟 + 性能预算）
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
@@ -210,7 +220,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 
 ## M2：真 B 站页面（2026-11-21）
 
-舞台从离线占位页换成 `www.bilibili.com/video/BV...`，页面里注入 `player-agent.js`：
+舞台从离线占位页换成 `www.bilibili.com/video/BV...`，页面里注入 `crates/gifa-player/assets/player-agent.js`：
 
 ```
 Rust ──PlayerCommand{cmd:seek-by,value:5}──► agent.dispatch()  → <video>
@@ -256,7 +266,7 @@ Rust ◄──{t:"state", paused, currentTime, duration, bvid, part, …}── 
 | 5 | nav 接口 | `未登录（nav ok）` |
 | 1-3,6-8 | 元数据 / 三条指令 | 同 M2 |
 
-登录窗（`docs/m3-login.png`）：独立顶层窗 `1000×720`，加载 `passport.bilibili.com/login`，
+登录窗（`apps/gifa-demo/docs/m3-login.png`）：独立顶层窗 `1000×720`，加载 `passport.bilibili.com/login`，
 **与舞台共用同一个 WebContext** —— Cookie 落在同一份 profile，扫完码不用搬 token。
 登录成功后轮询 `nav` 自动发现，关窗并重载视频（B 站只在新文档里按登录态给高清）。
 
@@ -353,7 +363,7 @@ GDI 截屏 → 采样窗（`r×2.4`）→ 占位检测（青素质心/白像素�
 标题栏（标题/布局/分P/换链接/设置/最小化/关闭）、控制条（播放/时间/进度拖拽/倍速/静音）、
 链接栏、toast、2.6s 自动隐藏、16:9 舞台与 webview 尺寸同步。
 
-自检 5/5：几何 30/34、控件状态、进度拖动 seek、自动隐藏、URL 条推舞台。截图 `docs/m6-ui.png`。
+自检 5/5：几何 30/34、控件状态、进度拖动 seek、自动隐藏、URL 条推舞台。截图 `apps/gifa-demo/docs/m6-ui.png`。
 
 **四个隐蔽的坑**：`file://` 页面拿不到 IPC（wry 不注入，改用编译期内联）；
 自动隐藏条件写反；`#urlbar` 默认可见把舞台顶下去；Rust 每帧推 `showUrlbar:false` 覆盖页面开关。
@@ -419,7 +429,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1   # → dist/GIFA-0.2
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-一条命令 17 项：编译、单测（105）、clippy（0 warning）、10 个自检、识别冒烟、性能预算。
+一条命令 22 项：编译、138 个单测、clippy -D warnings、cargo fmt --check、13 个自检、识别冒烟、性能预算。
 退出码 0/1，可直接接 CI。
 
 性能实测：**冷启动 896ms / 内存 24MB / CPU 0.2%**（预算 2500ms / 200MB / 10%）。

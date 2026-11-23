@@ -491,7 +491,7 @@ python scripts/label-report.py apps/gifa-demo/data/label/labels.json
 原版是在 preload 里跑 `tickBearing` 的。我们改成 Rust 之后必须确认没把那段 JS 带进来，
 否则两套并行：白烧一份 CPU，两边结果还会打架。
 
-现状：注入页面的只有两个脚本 —— `player-agent.js`（播放器控制）和 `overlay.html`
+现状：注入页面的只有两个脚本 —— `crates/gifa-player/assets/player-agent.js`（播放器控制）和 `crates/gifa-shell/assets/overlay.html`
 （叠加层动画，里面的 rAF 只做补间）。两个都不含视觉代码。
 
 `--check` 新增一行把这件事钉住：

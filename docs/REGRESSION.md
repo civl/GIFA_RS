@@ -11,7 +11,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 
 退出码：**0 = 全绿，1 = 有失败**。可以直接接进 CI 或发布脚本。
 
-## 覆盖的 17 项
+## 覆盖的 22 项
 
 | 层 | 项 | 判据 |
 |---|---|---|
@@ -19,7 +19,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 | 静态检查 | `cargo clippy -D warnings` | 任何 warning 都算失败 |
 | 编译 | `cargo build --workspace` | 退出码 |
 | 语料 | 生成视觉对拍素材（node） | 有 node 时现场生成，交给 golden 测试 |
-| 单测 | `cargo test` | **130 通过 / 0 失败**（含视觉 golden 对拍） |
+| 单测 | `cargo test` | **138 通过 / 0 失败**（含视觉 golden 对拍、跨语言契约对拍） |
 | 静态 | `cargo clippy --all-targets` | **0 warning** |
 | 外壳 | `shell-demo` 区域/拖角/命中 | 6/6 |
 | 热键 | `--hotkey-test` 注册/钩子/交换 | 6/6（环境受限时降级 SKIP） |
@@ -28,6 +28,9 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 | 界面 | `--ui-test` 几何/控件/拖动/自动隐藏 | 5/5 |
 | 标定 | `--calib-test` | 4/4 |
 | 叠加层 | `--overlay-test` | 6/6 |
+| 热键录制 | `--bind-test` | 2/2（换绑落盘 + 输入态让路；用 `GIFA_DATA_DIR` 隔离配置） |
+| 历史收藏 | `--fav-test` | 1/1（页面真实点击 → 落盘 → 回推） |
+| 分 P 载入 | `--load-test` | 1/1（带上 part 载入，不跳回第 1 P） |
 | 手柄 | `--gamepad-test` | 6/6 |
 | 沉浸 | `--immersion-test` | 6/6 |
 | 播放 | `--check` B 站加载/解析/登录态 | 8/8 |
@@ -106,7 +109,7 @@ CPU      0.2%       （预算 10%，播放 + 识别 10 帧/秒）
 ## 稳定性
 
 自检会抢窗口、注入输入，偶尔被前台窗口（比如正在运行的游戏）干扰而假失败。
-所以 `check.ps1` 对**失败项自动重试一次**再定性：真坏的东西两次都坏，偶发的一次就能过。
+所以 `scripts/check.ps1` 对**失败项自动重试一次**再定性：真坏的东西两次都坏，偶发的一次就能过。
 
 ## 脚本自身的坑（记一笔）
 
@@ -132,8 +135,8 @@ PowerShell 5.1 下有两件事会让这种脚本莫名其妙地挂：
 
 | 方向 | 测试 | 做法 |
 |---|---|---|
-| Rust → 页面 | `every_command_has_an_agent_handler` | 遍历所有 `PlayerCommand`，从 JSON 抠 `cmd`，去 `player-agent.js` 里找同名 handler |
-| 页面 → Rust（播放器） | `every_agent_message_has_a_variant` | 扫 `player-agent.js` 里的 `t: 'xxx'`，确认 `PlayerMsg` 有对应变体（kebab-case） |
+| Rust → 页面 | `every_command_has_an_agent_handler` | 遍历所有 `PlayerCommand`，从 JSON 抠 `cmd`，去 `crates/gifa-player/assets/player-agent.js` 里找同名 handler |
+| 页面 → Rust（播放器） | `every_agent_message_has_a_variant` | 扫 `crates/gifa-player/assets/player-agent.js` 里的 `t: 'xxx'`，确认 `PlayerMsg` 有对应变体（kebab-case） |
 | 页面 → Rust（界面） | `every_page_message_has_a_rust_arm` | 扫 `app.js` 的 `t: 'xxx'`，确认 `handle_chrome` 有分支 **或** 外壳的 `ChromeMsg` 接住了 |
 
 三条都做过**反向验证**（故意改坏 → 测试红 → 改回），确认不是"永远绿"的摆设。

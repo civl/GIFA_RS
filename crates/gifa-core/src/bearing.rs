@@ -199,6 +199,24 @@ fn clean_name(raw: &str) -> String {
 }
 
 impl Layouts {
+    /// 修复非法状态：至少有一个布局，且 active / default 都指向真实存在的那个。
+    ///
+    /// 为什么需要：`Layouts` 是直接 `Deserialize` 的，用户手改或版本回退都可能
+    /// 留下 `layouts: []`。而 [`active`](Self::active) 里 `expect("至少有一个布局")`
+    /// 在这种情况下会 panic —— 启动即崩，且崩在配置文件解析之后，很难查。
+    pub fn repair(&mut self) {
+        if self.layouts.is_empty() {
+            *self = Self::default();
+            return;
+        }
+        if !self.layouts.iter().any(|l| l.id == self.active_layout_id) {
+            self.active_layout_id = self.layouts[0].id.clone();
+        }
+        if !self.layouts.iter().any(|l| l.id == self.default_layout_id) {
+            self.default_layout_id = self.layouts[0].id.clone();
+        }
+    }
+
     pub fn active(&self) -> &Layout {
         self.layouts
             .iter()

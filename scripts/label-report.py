@@ -3,7 +3,7 @@
 
 用法：
 
-    python scripts/label-report.py apps/gifa-demo/data/label/labels.json
+    python scripts/label-report.py data/label/labels.json
 
 它回答三个问题：
 

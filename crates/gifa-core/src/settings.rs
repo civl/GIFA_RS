@@ -323,6 +323,8 @@ impl Settings {
 
     /// 钳位到合法范围（非法值不崩，退化成默认/边界）
     pub fn normalize(&mut self) {
+        // 布局表可能是空的（配置被手改/版本回退）—— 那里有 expect，先修好
+        self.bearing.layouts.repair();
         self.opacity = clamp(self.opacity, MIN_OPACITY, 1.0);
         self.volume = clamp(self.volume, 0.0, 100.0);
         self.playback_rate = clamp(self.playback_rate, 0.25, 3.0);
@@ -498,5 +500,73 @@ mod tests {
         // 缺的字段用默认补齐
         assert_eq!(s.hotkey(Action::SeekFwd), Some("Alt+Right"));
         assert_eq!(s.gamepad.disc.radius, 132);
+    }
+
+    #[test]
+    fn history_dedupes_and_caps() {
+        let mut st = Settings::default();
+        for i in 0..(HISTORY_CAP + 5) {
+            st.push_history(RecentEntry::new(format!("BV{i:04}"), "", 1, i as i64));
+        }
+        assert_eq!(st.history.len(), HISTORY_CAP, "历史上限没生效");
+        assert_eq!(
+            st.history[0].text,
+            format!("BV{:04}", HISTORY_CAP + 4),
+            "最新的应该在最前"
+        );
+
+        // 同一个视频同一 P 再打开一次：不新增，只挪到最前并更新内容
+        let n = st.history.len();
+        st.push_history(RecentEntry::new("BV0001", "新标题", 1, 999));
+        assert_eq!(st.history.len(), n, "重复项没有去重");
+        assert_eq!(st.history[0].title, "新标题");
+
+        // 不同分 P 算不同条目
+        st.push_history(RecentEntry::new("BV0001", "", 2, 1000));
+        assert_eq!(st.history[0].part, 2);
+    }
+
+    #[test]
+    fn favorite_toggles() {
+        let mut st = Settings::default();
+        let e = RecentEntry::new("BV1xx411c7mD", "某个视频", 1, 1);
+        assert!(st.toggle_favorite(e.clone()), "第一次点应该是已收藏");
+        assert!(st.is_favorite("bv1xx411c7md", 1), "判定应忽略大小写");
+        assert!(!st.toggle_favorite(e), "第二次点应该是取消收藏");
+        assert!(st.favorites.is_empty());
+        assert!(!st.is_favorite("BV1xx411c7mD", 1));
+    }
+
+    #[test]
+    fn normalize_backfills_part_from_old_urls() {
+        // 早期只存原文（`?p=2` 在 URL 里），part 字段一直是 1 → 点收藏会跳回第一集
+        let mut st = Settings::default();
+        st.history.push(RecentEntry::new(
+            "https://www.bilibili.com/video/BV1PyxQ6sEbH/?vd_source=x&p=2",
+            "",
+            1,
+            0,
+        ));
+        st.favorites
+            .push(RecentEntry::new("BV1PyxQ6sEbH?p=3", "", 1, 0));
+        st.normalize();
+        assert_eq!(st.history[0].part, 2, "老 URL 里的 p=2 应该补进 part");
+        assert_eq!(st.favorites[0].part, 3);
+    }
+
+    #[test]
+    fn empty_layout_list_is_repaired_not_panicking() {
+        // 配置被手改/版本回退可能留下空布局表；active() 里有 expect，必须先修好
+        let mut st: Settings = serde_json::from_str(
+            r#"{ "bearing": { "layouts": { "layouts": [], "activeLayoutId": "x", "defaultLayoutId": "y" } } }"#,
+        )
+        .expect("空布局也要能反序列化");
+        st.normalize();
+        assert!(
+            !st.bearing.layouts.layouts.is_empty(),
+            "normalize 应该补回内置布局"
+        );
+        let active = st.bearing.layouts.active(); // 不 panic
+        assert_eq!(active.id, st.bearing.layouts.layouts[0].id);
     }
 }

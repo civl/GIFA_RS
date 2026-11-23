@@ -7,8 +7,8 @@
 | 文件 | 来源 | 说明 |
 |---|---|---|
 | `web/style.css` | 原版 `src/renderer/style.css` | **逐行照搬**（742 行），配色/字号/间距/响应式断点全部沿用 |
-| `web/chrome.html` | 原版 `src/renderer/index.html` | 内联 SVG 图标表、标题栏、URL 条、舞台、控制条、缩放手柄、toast |
-| `web/app.js` | 原版 `src/renderer/app.js` 的**桥接改写** | 交互照搬，`window.api` / `<webview>` 换成本项目 IPC |
+| `apps/gifa-demo/web/chrome.html` | 原版 `src/renderer/index.html` | 内联 SVG 图标表、标题栏、URL 条、舞台、控制条、缩放手柄、toast |
+| `apps/gifa-demo/web/app.js` | 原版 `src/renderer/app.js` 的**桥接改写** | 交互照搬，`window.api` / `<webview>` 换成本项目 IPC |
 
 图标用内联 `<symbol>` 而不是 emoji：emoji 在不同系统字体下大小、颜色、基线都不一样，
 浮窗缩到 240px 时会糊成一团。

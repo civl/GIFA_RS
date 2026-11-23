@@ -3,8 +3,8 @@
 
 用法（在 `` 下）：
 
-    python scripts/label-tool.py apps/gifa-demo/data/seq apps/gifa-demo/data/seq.csv \
-        apps/gifa-demo/data/label
+    python scripts/label-tool.py data/seq data/seq.csv \
+        data/label
 
 产出 `label.html`：双击用浏览器打开即可，不依赖网络、不依赖本地服务器。
 

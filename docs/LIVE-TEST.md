@@ -270,7 +270,8 @@ apps/gifa-demo/data/gamelabel/label.html
 
 ## 真机 39 帧人工真值：参数定标（2026-11-22 16:10）
 
-标注文件：`labels/2/labels.json`（39 帧，真值集中在 339°~342°，西北偏北）。
+标注文件：`apps/gifa-demo/data/gamelabel/` 里的 39 帧（真值集中在 339°~342°，西北偏北）；
+早期标注目录已随目录整理删除，语料本身在 `docs/calibration/`。
 
 ### 之前把结论搞反了
 
@@ -419,7 +420,7 @@ Rust 发的是 `seek-by`（kebab-case，和其它 `fetch-view` / `video-rect` �
 agent 里的 handler 却写成了 `seekBy`（camelCase）。`dispatch` 找不到就只打一行日志，
 **不会有任何报错**——热键"能用"（能触发）、播放器"没反应"，最难查的那种。
 
-修好之后：`Alt+←/→` 实测能跳，截图对比（`docs/seek-before.png` / `seek-after.png`）画面变了。
+修好之后：`Alt+←/→` 实测能跳，截图对比（`apps/gifa-demo/docs/seek-before.png` / `apps/gifa-demo/docs/seek-after.png`）画面变了。
 
 **加了回归测试** `every_command_has_an_agent_handler`：
 遍历所有 `PlayerCommand`，从 JSON 里抠出 `cmd` 字段，再去 agent 源码里确认有同名 handler。

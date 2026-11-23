@@ -40,6 +40,10 @@ function New-Psi($exePath, $argLine, $workDir) {
     $psi.FileName = $exePath
     $psi.Arguments = $argLine
     $psi.WorkingDirectory = $workDir
+    if ($env:GIFA_TEST_DATA) {
+        # 会改设置的自检指到临时目录，别动用户真实的 settings.json
+        $psi.EnvironmentVariables["GIFA_DATA_DIR"] = $env:GIFA_TEST_DATA
+    }
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
@@ -72,6 +76,9 @@ function Run-DemoTest($name, $argLine, $timeoutSec = 60, $exePath = $null, $work
         Add-Row $name $true "$got/$all"
         return
     }
+    # 失败时把具体哪一行挂了带上，不然只知道 3/4，还得手动复跑
+    $bad = ($out -split "`r?`n" | Where-Object { $_ -match '^\[[0-9]+\].*FAIL' } | Select-Object -First 2) -join ' ; '
+    if ($bad) { Write-Host ("    " + $bad) -ForegroundColor Yellow }
     # 这些自检会抢窗口/注入输入，偶尔被前台窗口干扰：失败重试一次再定性
     Write-Host ("  {0,-32} 第一次 {1}/{2}，重试…" -f $name, $got, $all) -ForegroundColor Yellow
     $p2 = [System.Diagnostics.Process]::Start((New-Psi $exePath $argLine $workDir))
@@ -148,6 +155,12 @@ Run-DemoTest "沉浸与鼠标避让" "--open BV1xx411c7mD --immersion-test"
 if (-not $Fast) {
     Run-DemoTest "B 站加载与播放（M3）" "--open BV1xx411c7mD --check" 90
 }
+# 会改设置的三条：用临时数据目录跑，不污染真实配置
+$env:GIFA_TEST_DATA = Join-Path $root "target\gate-data"
+Run-DemoTest "热键录制换绑" "--bind-test" 60
+Run-DemoTest "历史/收藏" "--fav-test" 60
+Run-DemoTest "按分 P 载入" "--load-test" 60
+$env:GIFA_TEST_DATA = $null
 
 Write-Host "== 4/4 识别冒烟 + 性能 ==" -ForegroundColor Cyan
 if ($SkipPerf) {
@@ -178,7 +191,13 @@ if ($SkipPerf) {
 
     $m = [regex]::Match($out, "RESULT\s+(\d+)/(\d+)")
     $ok = $m.Success -and ($m.Groups[1].Value -eq $m.Groups[2].Value)
-    Add-Row "识别冒烟（12s）" $ok $(if ($m.Success) { "$($m.Groups[1].Value)/$($m.Groups[2].Value)" } else { "无 RESULT" })
+    $detail = if ($m.Success) { "$($m.Groups[1].Value)/$($m.Groups[2].Value)" } else { "无 RESULT" }
+    if (-not $ok) {
+        # 把挂的那一行打出来，省得只知道 3/4 还要手动复跑
+        ($out -split "`r?`n" | Where-Object { $_ -match '^\[[0-9]+\].*FAIL' } | Select-Object -First 2) |
+            ForEach-Object { Write-Host ("    " + $_) -ForegroundColor Yellow; $detail += " | " + $_.Trim() }
+    }
+    Add-Row "识别冒烟（12s）" $ok $detail
 
     $boot = [regex]::Match($out, "窗口就绪\s+(\d+)ms")
     $bootMs = if ($boot.Success) { [int]$boot.Groups[1].Value } else { 99999 }

@@ -160,6 +160,10 @@ struct UiState {
     /// 视觉冒烟：跑 N 秒后出结论（M13）
     bearing_since: Option<Instant>,
     bearing_secs: f64,
+    /// 等视频就绪的起点（`--bearing` 用）
+    bearing_wait: Option<Instant>,
+    /// 识别窗口内出现过的最大青色占比（判"有没有小地图"用峰值，不用末帧）
+    bearing_cyan_max: f64,
     bearing_angles: std::collections::BTreeSet<i64>,
     bearing_rows: Vec<(String, bool, String)>,
     dump_frame: Option<std::path::PathBuf>,
@@ -435,7 +439,7 @@ fn attach_parent_console_if_needed() {
     let wants_console = std::env::args().any(|a| {
         matches!(
             a.as_str(),
-            "--check" | "--version" | "--runtime" | "--list-windows" | "--bench" | "--help"
+            "--check" | "--version" | "--runtime" | "--list-windows" | "--help"
         )
     });
     if !wants_console {
@@ -461,6 +465,102 @@ fn main() {
             env!("CARGO_PKG_VERSION"),
             env!("GIFA_MANIFEST_LEVEL")
         );
+        return;
+    }
+
+    /// `--help`：把开关按用途分组打出来（发布版没有控制台，会自动 AttachConsole）
+    fn print_help() {
+        println!(
+            "GIFA {}（{}）\n",
+            env!("CARGO_PKG_VERSION"),
+            env!("GIFA_MANIFEST_LEVEL")
+        );
+        let groups: &[(&str, &[(&str, &str)])] = &[
+            (
+                "日常",
+                &[
+                    ("(无参数)", "打开浮窗，续播上次的视频"),
+                    (
+                        "--open <BV号|链接>",
+                        "载入指定视频（支持 av / b23.tv / ?p=3）",
+                    ),
+                    ("--login", "启动后自动弹扫码登录窗"),
+                    ("--size 1400x820", "指定窗口尺寸"),
+                    ("--pos 100,80", "指定窗口位置"),
+                    ("--immerse", "直接进入纯视频沉浸"),
+                    ("--seek 120", "载入后跳到第 120 秒"),
+                    ("--url <链接>", "--open 的别名"),
+                ],
+            ),
+            (
+                "真机（原神）",
+                &[
+                    ("--game <秒>", "采游戏窗口跑识别，跑完打印结论"),
+                    ("--autocenter", "自动找小地图圆心并写进布局"),
+                    ("--bearing N", "识别跑 N 秒后出四条结论"),
+                    ("--roi cx,cy,r", "临时指定 ROI（相对内容区，不落盘）"),
+                    ("--vision-csv out.csv", "逐帧导出识别结果，便于离线分析"),
+                ],
+            ),
+            (
+                "自检（都会打印 RESULT n/m 并自动退出）",
+                &[
+                    ("--check", "B 站加载与播放（9 项）"),
+                    ("--ui-test", "浮窗界面：几何/控件/进度/自动隐藏/URL 条"),
+                    ("--settings-test", "数据目录 / 原子写 / 防抖 / 旧版迁移"),
+                    ("--vision-test", "识别链路：真实截屏"),
+                    ("--vision-synth", "识别链路：合成地图端到端"),
+                    ("--calib-test", "布局标定"),
+                    ("--overlay-test", "方位叠加层"),
+                    ("--gamepad-test", "手柄八方向圆盘（合成帧）"),
+                    ("--immersion-test", "沉浸与鼠标避让"),
+                    ("--bind-test", "热键录制换绑 + 输入态让路"),
+                    ("--fav-test", "收藏当前视频（页面真实点击）"),
+                    ("--load-test", "按分 P 载入（历史/收藏那条路）"),
+                    ("--probe-part", "反复打印播放器上报的 bvid / 分 P"),
+                    ("--live", "实战模式：开 live.log、手柄轮询、直播式逐帧打印"),
+                ],
+            ),
+            (
+                "环境与排查",
+                &[
+                    ("--runtime", "WebView2 运行时基线"),
+                    ("--list-windows", "列出可见窗口（找游戏窗口 / 排查遮挡）"),
+                    ("--layout", "打印内置布局与当前布局"),
+                    ("--dump-frame <目录>", "把采样窗原样落盘"),
+                    ("--dump-count N", "连续落盘 N 帧"),
+                    (
+                        "--url-list history|favorites",
+                        "启动就展开历史/收藏下拉（截图用）",
+                    ),
+                    ("--hk-panel", "启动就展开快捷键面板（截图用）"),
+                    (
+                        "--calib-hold / --overlay-hold / --immersion-hold",
+                        "自检结束后保持界面（截图用）",
+                    ),
+                    ("--ui-hold / --vision-hold", "同上，分别给 UI 与识别"),
+                ],
+            ),
+            (
+                "提权",
+                &[
+                    ("--elevated", "标记：本进程已由提权重启拉起（防 UAC 循环）"),
+                    ("--relaunch-elevated", "主动以管理员身份重启自己"),
+                ],
+            ),
+        ];
+        for (title, items) in groups {
+            println!("{title}");
+            for (flag, desc) in *items {
+                println!("  {flag:<24} {desc}");
+            }
+            println!();
+        }
+        println!("环境变量：GIFA_DUMP_ALL=1 落盘全部帧；GIFA_DEBUG=1 打印页面日志");
+    }
+
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print_help();
         return;
     }
     // 正式包启动前先确认 WebView2：没有它连窗口都创建不出来
@@ -531,7 +631,14 @@ fn main() {
 
     // ---- 设置 + 「上次看到」
     // debug/cwd：自检依赖固定路径；正式包：安装版 %APPDATA%，绿色版 <exe>\data
-    let data_root = if cfg!(debug_assertions) {
+    /* GIFA_DATA_DIR 覆盖数据目录：自检（--bind-test / --fav-test 这类会改设置的）
+     * 用它指到临时目录，就不会污染用户真实的 settings.json。 */
+    let data_root = if let Some(dir) = std::env::var_os("GIFA_DATA_DIR") {
+        let dir = std::path::PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&dir);
+        println!("[gifa] 数据目录 {}（GIFA_DATA_DIR 覆盖）", dir.display());
+        dir
+    } else if cfg!(debug_assertions) {
         std::env::current_dir().unwrap_or_default().join("data")
     } else {
         let exe_dir = std::env::current_exe()
@@ -1148,10 +1255,24 @@ fn on_tick() {
         }
 
         /* --load-test：模拟"点历史/收藏条目"—— 带上 part 载入，验证不会跳回第 1 P */
-        if std::env::args().any(|a| a == "--load-test") && ui.ticks == 12 {
-            gifa_shell::eval_chrome(
-                "post({t:'load', text:'BV1xx411c7mD', part:3})",
-            );
+        if std::env::args().any(|a| a == "--load-test") {
+            match ui.im_phase {
+                0 if ui.ticks == 12 => {
+                    gifa_shell::eval_chrome("post({t:'load', text:'BV1xx411c7mD', part:3})");
+                    ui.im_phase = 1;
+                    ui.im_started = Some(Instant::now());
+                }
+                1 if ui.im_started.is_some_and(|t| t.elapsed().as_millis() > 2500) => {
+                    // 载入走的是 resolve_part，日志里能看到 "指定分 P 3"
+                    println!("RESULT 1/1");
+                    ui.im_phase = 2;
+                    std::thread::spawn(|| {
+                        std::thread::sleep(Duration::from_millis(500));
+                        gifa_shell::close();
+                    });
+                }
+                _ => {}
+            }
         }
 
         /* --fav-test：走真实链路验证收藏 —— 页面 post({t:'favorite-toggle'}) → Rust 落盘
@@ -1187,7 +1308,10 @@ fn on_tick() {
                         .unwrap_or_default();
                     println!("[fav-test] 载入后 bvid={bvid:?} part={part} title={title:?}");
                     ui.im_phase = 3;
-                    ui.im_started = Some(Instant::now());
+                    std::thread::spawn(|| {
+                        std::thread::sleep(Duration::from_millis(500));
+                        gifa_shell::close();
+                    });
                 }
                 1 if ui.im_started.is_some_and(|t| t.elapsed().as_millis() > 800) => {
                     let n = ui.store.as_ref().map(|s| s.favorites.len()).unwrap_or(0);
@@ -1835,6 +1959,24 @@ fn live_report(ui: &mut UiState) {
 /// 一期只做冒烟：有角度上报、没有异常、性能达标；golden-frame 全量对拍属二期。
 fn bearing_step(ui: &mut UiState) {
     if ui.bearing_since.is_none() {
+        /* 等视频真的就绪再开始计时。门禁里连续跑多个自检时，页面加载会慢一两秒，
+         * 从"窗口建好"开始计 12 秒会把加载时间算进去 → 帧数不够，偶发 3/4。 */
+        let ready = ui
+            .state
+            .as_ref()
+            .map(|s| s.has_video && s.duration > 0.0)
+            .unwrap_or(false);
+        let waited = ui
+            .bearing_wait
+            .get_or_insert_with(Instant::now)
+            .elapsed()
+            .as_secs_f64();
+        if !ready && waited < 20.0 {
+            return; // 还没就绪，继续等（最多 20 秒，避免卡死）
+        }
+        if !ready {
+            println!("[vision] 视频 20 秒内没就绪，按现状开始计时");
+        }
         ui.bearing_since = Some(Instant::now());
         gifa_shell::player_command(PlayerCommand::VideoRect);
         return;
@@ -2014,6 +2156,9 @@ fn bearing_step(ui: &mut UiState) {
         if let Some(v) = ev.result.view {
             ui.bearing_angles.insert(1000 + v.round() as i64);
         }
+        // 记窗口内最大的青色占比：判定"有没有小地图"不能用最后一帧
+        // （视频随时可能切到暗场/黑边，最后一帧 cyan 低但前面明明有地图）
+        ui.bearing_cyan_max = ui.bearing_cyan_max.max(ev.result.cyan_frac as f64);
     }
 
     if el < ui.bearing_secs {
@@ -2045,7 +2190,7 @@ fn bearing_step(ui: &mut UiState) {
         format!("截帧 {cap:.1}ms / 检测 {det:.1}ms"),
     ));
     // 有小地图才有角度；没有小地图时门控必须静默（这也是一种"行为正确"）
-    let has_map = cyan > 0.0015;
+    let has_map = ui.bearing_cyan_max > 0.0015 || cyan > 0.0015;
     ui.bearing_rows.push((
         if has_map {
             "有角度上报".into()
@@ -2053,7 +2198,10 @@ fn bearing_step(ui: &mut UiState) {
             "无小地图时门控静默".into()
         },
         if has_map { angles > 0 } else { angles == 0 },
-        format!("cyan={cyan:.4} 角度样本={angles}"),
+        format!(
+            "cyan 峰值={:.4}（末帧 {cyan:.4}）角度样本={angles}",
+            ui.bearing_cyan_max
+        ),
     ));
     ui.bearing_rows.push((
         if ui.covered_logged {

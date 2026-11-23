@@ -127,6 +127,6 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 
 ## 下一步（M12 剩余）
 
-1. 装 NSIS 后补 `installer.nsi`：可选目录、开始菜单/桌面快捷方式、`HKCU\..\Run` 自启、卸载保留数据、旧绿色版 `data\` 迁移；
+1. 装 NSIS 后补 `installer/gifa.nsi`：可选目录、开始菜单/桌面快捷方式、`HKCU\..\Run` 自启、卸载保留数据、旧绿色版 `data\` 迁移；
 2. 用 Windows SDK 的 `rc.exe`（或 CI 里的 `winresource` crate）补图标与版本资源；
 3. 在干净的 Win10 22H2 上跑一遍：双击 → UAC → 起窗 → 加载视频 → 热键生效。
