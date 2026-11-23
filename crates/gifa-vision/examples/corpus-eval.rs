@@ -99,6 +99,7 @@ fn main() {
     let params = ArrowParams {
         bis_err_max: 25.0,
         ang_margin_min: 18.0,
+        ..Default::default()
     };
     for (label, dir, labels, w) in [
         (

@@ -79,6 +79,7 @@ fn pipe_params_on_realgame() {
     let params = ArrowParams {
         bis_err_max: 25.0,
         ang_margin_min: 18.0,
+        ..Default::default()
     };
     let mut ws = ArrowWorkspace::default();
     let mut ok = 0;
@@ -113,6 +114,7 @@ fn pipe_params_keep_good_and_drop_contaminated() {
     let params = ArrowParams {
         bis_err_max: 25.0,
         ang_margin_min: 18.0,
+        ..Default::default()
     };
     let mut ws = ArrowWorkspace::default();
 

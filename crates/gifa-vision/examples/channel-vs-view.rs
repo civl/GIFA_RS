@@ -35,6 +35,7 @@ fn main() {
     let params = ArrowParams {
         bis_err_max: 25.0,
         ang_margin_min: 18.0,
+        ..Default::default()
     };
     let mut ws = ArrowWorkspace::default();
     let (mut v1_n, mut v1_good, mut v3_n, mut v3_good) = (0, 0, 0, 0);

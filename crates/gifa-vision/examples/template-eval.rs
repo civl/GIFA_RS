@@ -222,6 +222,7 @@ fn main() {
         let params = gifa_vision::arrow::ArrowParams {
             bis_err_max: 25.0,
             ang_margin_min: 18.0,
+            ..Default::default()
         };
         for i in 0..frames.len() {
             let f = &frames[i];

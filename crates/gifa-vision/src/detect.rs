@@ -112,6 +112,7 @@ fn arrow_params() -> crate::arrow::ArrowParams {
     crate::arrow::ArrowParams {
         bis_err_max: 25.0,
         ang_margin_min: 18.0,
+        ..Default::default()
     }
 }
 

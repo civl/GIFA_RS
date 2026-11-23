@@ -78,6 +78,7 @@ fn main() {
     let params = ArrowParams {
         bis_err_max: 25.0,
         ang_margin_min: 18.0,
+        ..Default::default()
     };
     println!("旋转扫描（步长 {step}°）：每格 = 误差；x = 该帧不可用");
     println!("  朝向   v1      v3");

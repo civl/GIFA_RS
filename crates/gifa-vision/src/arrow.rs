@@ -121,11 +121,13 @@ fn eval_triple(n: &Corner, t1: &Corner, t2: &Corner, params: &ArrowParams) -> Tr
 
     let ok = sep > 60.0
         && sep < 150.0
-        && (95.0..=162.0).contains(&o1)
-        && (95.0..=162.0).contains(&o2)
+        && o1 >= params.tail_angle_min
+        && o1 <= params.tail_angle_max
+        && o2 >= params.tail_angle_min
+        && o2 <= params.tail_angle_max
         && bis_err <= params.bis_err_max
-        && n.far < t1.far.min(t2.far) * 1.02
-        && nose_flat > -0.5;
+        && n.far < t1.far.min(t2.far) * params.nose_far_ratio
+        && nose_flat > params.nose_flat_min;
 
     let score = if ok {
         ang_margin.min(25.0) / 45.0
@@ -167,6 +169,13 @@ pub struct ArrowParams {
     pub bis_err_max: f64,
     /// 三点评分余量的下限（度）。原版 4。
     pub ang_margin_min: f64,
+    /// 鼻尖"比两翼更靠内"的容差倍数。原版 1.02（鼻子必须更靠内）。
+    pub nose_far_ratio: f64,
+    /// 鼻尖"扁平度"下限。原版 -0.5。
+    pub nose_flat_min: f64,
+    /// 鼻子到两翼的夹角允许区间（度）。原版 95..162。
+    pub tail_angle_min: f64,
+    pub tail_angle_max: f64,
 }
 
 impl Default for ArrowParams {
@@ -174,6 +183,10 @@ impl Default for ArrowParams {
         Self {
             bis_err_max: 15.0,
             ang_margin_min: 4.0,
+            nose_far_ratio: 1.02,
+            nose_flat_min: -0.5,
+            tail_angle_min: 95.0,
+            tail_angle_max: 162.0,
         }
     }
 }
