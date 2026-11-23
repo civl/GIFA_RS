@@ -438,15 +438,15 @@ function renderParts() {
     sel.classList.add('hidden');
     return;
   }
-  const key = pages.map((p) => p.part).join(',');
+  // p.page 是序号（数字），p.title 是标题文本 —— 别把标题当 value
+  const key = pages.map((p) => `${p.page}:${p.title}`).join(',');
   if (sel.dataset.key !== key) {
     sel.dataset.key = key;
     sel.innerHTML = '';
     for (const p of pages) {
       const o = document.createElement('option');
-      o.value = String(p.part);
-      // 当前 P 标出来：原版就是「P1 · 标题」这种写法
-      const label = p.title ? `P${p.part} · ${p.title}` : `P${p.part}`;
+      o.value = String(p.page);
+      const label = p.title ? `P${p.page} · ${p.title}` : `P${p.page}`;
       o.textContent = p.duration ? `${label}（${fmt(p.duration)}）` : label;
       sel.appendChild(o);
     }
@@ -598,7 +598,9 @@ function wireUi() {
   $('btnClose').addEventListener('click', () => post({ t: 'close' }));
 
   $('partSelect').addEventListener('change', (e) => {
-    post({ t: 'part', p: Number(e.target.value) || 1 });
+    const p = Number(e.target.value);
+    if (!Number.isFinite(p) || p < 1) return; // 防御：以前这里会发出 NaN
+    post({ t: 'part', p });
   });
   $('layoutSelect').addEventListener('change', (e) => {
     post({ t: 'layout-select', id: e.target.value });

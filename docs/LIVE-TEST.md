@@ -501,3 +501,46 @@ for f in ["web/chrome.html", "web/app.js", "web/style.css"] {
 [gifa] 载入 https://www.bilibili.com/video/BV1PyxQ6sEbH/?p=2&autoplay=1
 [fav-test] 载入后 bvid="BV1PyxQ6sEbH" part=2 title="大枢纽 共4个(1-4)…"
 ```
+
+
+## 选集下拉永远跳第一集
+
+根因是**字段名对上了、含义没对上**：
+
+B 站 `pages` 接口给的是 `{page: 1, part: "标题文本", duration: 123}` ——
+`page` 是序号，`part` 是**标题字符串**。
+
+页面里却写成了：
+
+```js
+o.value = String(p.part);              // → "大枢纽 共4个…" 这种标题
+post({ t: 'part', p: Number(e.target.value) });  // Number("大枢纽…") = NaN → 后端兜底成 1
+```
+
+所以点哪一集都跳第 1 集，而**列表本身显示正常**（标题确实是这一集的），很难往"值错了"上想。
+
+修法：
+- payload 改成 `{"page": 序号, "title": 标题}`（名字对含义，避免下一个人再踩）
+- 页面 `o.value = String(p.page)`，标签 `P{page} · {title}`
+- 发送前 `Number.isFinite` 兜底，不再发 NaN
+
+顺带补的两个洞：
+
+1. **`--open` 打开的视频不取元数据** → 选集下拉是空的。现在 bvid 一变就 `FetchView`。
+2. **UI 自检没覆盖选集** → 加了第 5 行：程序化选中第 2 项，断言导航到 `?p=2`
+   （单 P 视频自动跳过）。实测 `BV1PyxQ6sEbH`（23 集）→ 导航 `?p=2&autoplay=1`。
+
+## 截帧耗时飙升是环境问题
+
+复跑时 `截帧 163ms` 稳定失败。用两种方式对照：
+
+| 方式 | 耗时 |
+|---|---|
+| 我们的 `capture_screen`（112×112） | 163ms |
+| PowerShell `CopyFromScreen`（同样矩形） | **166ms** |
+
+连一次 16×16 的 BitBlt 都要 168ms —— **系统截屏本身就慢了**（屏幕休眠/远程会话/
+显卡切软件合成时就是这样），不是代码退化。
+
+所以自检里加了基线判别：先测一个 16×16 的基线，基线就 >30ms 时只报检测耗时、
+不判截帧为失败，并在结果里注明原因。否则每次锁屏都会让门禁假红。

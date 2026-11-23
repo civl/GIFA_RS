@@ -160,6 +160,10 @@ struct UiState {
     /// 视觉冒烟：跑 N 秒后出结论（M13）
     bearing_since: Option<Instant>,
     bearing_secs: f64,
+    /// 已经取过元数据的 bvid（避免重复请求）
+    fetched_bvid: Option<String>,
+    /// 最近一次由应用主动导航的 URL（自检断言用）
+    last_nav_url: Option<String>,
     /// 等视频就绪的起点（`--bearing` 用）
     bearing_wait: Option<Instant>,
     /// 识别窗口内出现过的最大青色占比（判"有没有小地图"用峰值，不用末帧）
@@ -985,6 +989,11 @@ fn on_tick() {
             .filter(|st| !st.bvid.is_empty())
             .map(|st| (st.bvid.clone(), st.part.max(1), st.title.clone()));
         if let Some((bvid, part, title)) = auto_hist {
+            // 换了视频就取一次元数据：--open 这条路原来不取，选集下拉会一直空着
+            if ui.fetched_bvid.as_deref() != Some(bvid.as_str()) {
+                ui.fetched_bvid = Some(bvid.clone());
+                gifa_shell::player_command(PlayerCommand::FetchView { id: bvid.clone() });
+            }
             {
                 let key = (bvid, part);
                 if ui.history_key.as_ref() != Some(&key) {
@@ -2184,10 +2193,34 @@ fn bearing_step(ui: &mut UiState) {
         frames as f64 >= ui.bearing_secs * 3.0,
         format!("{frames} 帧（{:.1}s）", ui.bearing_secs),
     ));
+    /* 截帧耗时是**环境相关**的：屏幕休眠、远程会话、显卡切成软件合成时，
+     * 一次 16×16 的 BitBlt 都要 100ms 以上（实测 PowerShell 的 CopyFromScreen 也一样），
+     * 这时候判我们"截帧太慢"是误报。先测一个极小矩形的基线，基线就离谱就只报告不判负。 */
+    let baseline = (0..3)
+        .map(|_| {
+            let t = Instant::now();
+            let _ = gifa_vision::screen::capture_screen(0, 0, 16, 16);
+            t.elapsed().as_secs_f64() * 1000.0
+        })
+        .fold(f64::MAX, f64::min);
+    let env_slow = baseline > 30.0;
     ui.bearing_rows.push((
         "截帧 <30ms / 检测 <8ms".into(),
-        cap < 30.0 && det < 8.0,
-        format!("截帧 {cap:.1}ms / 检测 {det:.1}ms"),
+        if env_slow {
+            det < 8.0
+        } else {
+            cap < 30.0 && det < 8.0
+        },
+        format!(
+            "截帧 {cap:.1}ms / 检测 {det:.1}ms / 采样窗 {}×{} / 基线 {baseline:.1}ms{}",
+            ui.vision_last.map(|e| e.window.w).unwrap_or(0),
+            ui.vision_last.map(|e| e.window.h).unwrap_or(0),
+            if env_slow {
+                "（系统截屏本身就慢：屏幕休眠/远程会话？此项只报检测耗时）"
+            } else {
+                ""
+            }
+        ),
     ));
     // 有小地图才有角度；没有小地图时门控必须静默（这也是一种"行为正确"）
     let has_map = ui.bearing_cyan_max > 0.0015 || cyan > 0.0015;
@@ -2571,7 +2604,53 @@ fn ui_test_step(ui: &mut UiState) {
         }
         45 if el > 6.8 => {
             gifa_shell::eval_chrome("window.gifaProbePost && window.gifaProbePost()");
+            ui.im_phase = 55;
+        }
+        55 if el > 7.0 => {
+            // 选集下拉：选第 2 项，应当导航到 ?p=N（不是永远第 1 集）
+            gifa_shell::eval_chrome(
+                "(function(){var s=document.getElementById('partSelect'); \
+                 if(!s||s.options.length<2){window.__gifaPartPick='no-parts';return;} \
+                 window.__gifaPartPick=s.options[1].value; \
+                 s.value=s.options[1].value; \
+                 s.dispatchEvent(new Event('change'));})()",
+            );
+            ui.im_phase = 56;
+            ui.im_started = Some(Instant::now());
+        }
+        56 if ui
+            .im_started
+            .is_some_and(|t| t.elapsed().as_millis() > 1200) =>
+        {
+            let want = std::env::args()
+                .collect::<Vec<_>>()
+                .windows(2)
+                .find(|w| w[0] == "--ui-test-part")
+                .map(|w| w[1].clone());
+            let url = ui.last_nav_url.clone().unwrap_or_default();
+            let single = ui.info.as_ref().map(|i| i.pages.len() < 2).unwrap_or(true);
+            if single {
+                ui.ui_rows.push((
+                    "选集下拉 → 跳到选中那一集".into(),
+                    true,
+                    "单 P 视频，没有选集可选（跳过）".into(),
+                ));
+                ui.im_phase = 6;
+                ui.im_started = Some(Instant::now());
+                return;
+            }
+            let ok = match want.as_deref() {
+                Some(p) => url.ends_with(&format!("p={p}&autoplay=1")),
+                // 没有指定分 P 时：只要导航了且 p≠1 就算通过（选集下拉的第 2 项）
+                None => url.contains("p=") && !url.contains("p=1&"),
+            };
+            ui.ui_rows.push((
+                "选集下拉 → 跳到选中那一集".into(),
+                ok,
+                format!("导航 {url}"),
+            ));
             ui.im_phase = 6;
+            ui.im_started = Some(Instant::now());
         }
         6 if el > 7.4 => {
             let stage_y = gifa_shell::snapshot().map(|s| s.stage.y).unwrap_or(0);
@@ -4025,6 +4104,8 @@ fn handle_chrome(ui: &mut UiState, raw: &str) {
                 if !s.bvid.is_empty() {
                     let url = gifa_player::video_url(&s.bvid, p);
                     ui.logs.push(format!("切分 P → {p}"));
+                    ui.last_nav_url = Some(url.clone());
+                    println!("[gifa] 切分 P → {p}：{url}");
                     gifa_shell::navigate_stage(&url);
                 }
             }
@@ -4111,7 +4192,9 @@ fn ui_payload(ui: &UiState) -> String {
             i.pages
                 .iter()
                 .map(|p: &PageInfo| {
-                    serde_json::json!({"page": p.page, "part": p.part, "duration": p.duration})
+                    // 注意命名：`page` 是序号，`part` 是标题文本（B 站接口就是这么给的）。
+                    // 曾经把 `part` 当序号用，`Number('标题')` = NaN → 永远跳第一集。
+                    serde_json::json!({"page": p.page, "title": p.part, "duration": p.duration})
                 })
                 .collect()
         })
