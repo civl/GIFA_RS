@@ -36,6 +36,17 @@ pub struct AbFilter {
     pub flip_gate: f64,
 }
 
+impl AbFilter {
+    /// 指定单帧跳变门限（度）。生产管线用 65：10fps 下物理上限是 54°/帧，
+    /// 真实转身永远进不到这个门限，而 90~120° 的假跳变会被拦下。
+    pub fn with_gate(gate: f64) -> Self {
+        Self {
+            flip_gate: gate,
+            ..Default::default()
+        }
+    }
+}
+
 impl Default for AbFilter {
     fn default() -> Self {
         Self {
@@ -97,7 +108,20 @@ impl AbFilter {
                 }
             }
             self.suspect += 1;
-            let confirmed = vote_new > vote_old || (self.suspect >= 2 && conf >= 0.5);
+            /* 交叉校验：视野扇形是**独立通道**，它说"原来那个才对"时不能强行改判。
+             *
+             * 为什么加这条：原来的逻辑是"连续 2 帧 + 置信度 0.5 就认"，
+             * 于是一个**持续错的**观测（比如把别的青色块当成箭头）连错两帧就会被采纳，
+             * 而扇形明明一直指向旧值。真机实测两路从不同时翻，正好用这一点互相兜底。
+             *
+             * 不会误杀真实转身：一次转身受 540°/s 限制，10fps 下每帧 ≤54°，
+             * 根本进不到这个分支（这里只处理单帧 >门限 的跳变）。 */
+            let cone_vetoes = cone_conf > 0.3 && vote_old > vote_new;
+            let confirmed = if cone_vetoes {
+                false
+            } else {
+                vote_new > vote_old || (self.suspect >= 2 && conf >= 0.5)
+            };
             if !confirmed {
                 self.t = now;
                 return None;
@@ -281,10 +305,7 @@ mod tests {
     /// 原版 130° 的门限会放过 90~120° 的假跳变（真机 40 秒能见到十几次）。
     #[test]
     fn tight_gate_rejects_impossible_jump() {
-        let mut f = AbFilter {
-            flip_gate: 80.0,
-            ..Default::default()
-        };
+        let mut f = AbFilter::with_gate(80.0);
         let mut t = 0.0;
         f.smooth(30.0, 0.9, t, 0.0, 0.0);
         t += 100.0;
@@ -294,10 +315,7 @@ mod tests {
         );
 
         // 真实快速转身：50°/帧
-        let mut f2 = AbFilter {
-            flip_gate: 80.0,
-            ..Default::default()
-        };
+        let mut f2 = AbFilter::with_gate(80.0);
         let mut tt = 0.0;
         let mut last = 0.0f64;
         f2.smooth(0.0, 0.9, tt, 0.0, 0.0);
@@ -309,6 +327,34 @@ mod tests {
                 "50°/帧 的真实转身不该被拦"
             );
         }
+    }
+
+    /// 交叉校验：扇形明确指着旧值时，连续 2 帧的错观测也不能被采纳。
+    #[test]
+    fn cone_veto_blocks_persistently_wrong_arrow() {
+        let mut f = AbFilter::with_gate(65.0);
+        // 初始：箭头 100°，扇形也指 100°
+        f.smooth(100.0, 0.9, 0.0, 100.0, 0.9);
+        // 之后连续 4 帧箭头突然报 0°（差了 100°），扇形一直说 100°
+        for i in 1..=4 {
+            let t = i as f64 * 100.0;
+            assert!(
+                f.smooth(0.0, 0.9, t, 100.0, 0.9).is_none(),
+                "第 {i} 帧：扇形否掉时不该采纳"
+            );
+        }
+        // 扇形也跟着翻过去 → 此时才允许改判
+        let mut f2 = AbFilter::with_gate(65.0);
+        f2.smooth(100.0, 0.9, 0.0, 100.0, 0.9);
+        let mut turned = false;
+        for i in 1..=4 {
+            let t = i as f64 * 100.0;
+            if f2.smooth(0.0, 0.9, t, 0.0, 0.9).is_some() {
+                turned = true;
+                break;
+            }
+        }
+        assert!(turned, "扇形也翻过去时应当允许改判");
     }
 
     #[test]
