@@ -17,7 +17,8 @@ use std::time::{Duration, Instant};
 
 use crate::arrow::ArrowWorkspace;
 use crate::cone::ConeWorkspace;
-use crate::detect::{detect_window, Detect, SampleBox};
+use crate::detect::{detect_window_prior, Detect, SampleBox};
+use crate::prior::ShapePrior;
 use crate::screen;
 
 /// 一次识别结果（带耗时，便于判断性能是否达标）
@@ -61,6 +62,11 @@ where
             let mut seq = 0u64;
             let mut ws = ArrowWorkspace::default();
             let mut cws = ConeWorkspace::default();
+            /* 形状先验：运行中自举。
+             * 攒够 MIN_FRAMES 帧（v1 与 v3 一致可信的帧）之前完全不影响行为，
+             * 攒够之后 v3 与模板互证，分歧的帧不上报（由滤波层保持上一帧）。
+             * 见 detect_window_prior 的注释与 docs/VISION.md。 */
+            let mut prior = ShapePrior::new();
             let mut next = Instant::now();
             loop {
                 next += interval;
@@ -81,7 +87,7 @@ where
                 let t1 = Instant::now();
                 // 截的就是采样窗本身，正方形，直接喂给箭头算法
                 let side = win.w.min(win.h).max(8) as usize;
-                let result = detect_window(&frame.data, side, &mut ws, &mut cws);
+                let result = detect_window_prior(&frame.data, side, &mut ws, &mut cws, &mut prior);
                 // 只 dump「画面里有东西」的帧：没有小地图的转场/作者卡存下来没意义
                 // GIFA_DUMP_ALL=1 时每帧都存（做帧间位移/时序实验要连续序列）
                 let dump_all = std::env::var_os("GIFA_DUMP_ALL").is_some();

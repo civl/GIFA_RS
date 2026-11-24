@@ -72,6 +72,10 @@ pub struct Detect {
     pub reject_reason: u8,
     /// 两路（v1/v3）都出结果但分歧过大 —— 供滤波层更谨慎地处理
     pub suspect: bool,
+    /// 形状先验（同域模板）给出的角度（罗盘角），诊断用
+    pub prior: Option<f64>,
+    /// 先验匹配的精确率
+    pub prior_precision: f32,
     /// 箭头来源：0=v1 三点拟合，2=六边形兜底
     pub arrow_source: u8,
     /// |鼻子角 − 输出轴角|（标定时用来看闸门余量）
@@ -167,11 +171,53 @@ fn arrow_params() -> crate::arrow::ArrowParams {
     }
 }
 
+/// 两路（v1 / v3）都对上同一帧时，才允许把它喂给形状先验当训练样本。
+/// 两个估计器结构完全不同、大错帧集合实测互不重叠，所以"一致"是很强的证据。
+const BOOTSTRAP_AGREE_DEG: f64 = 15.0;
+
+/// v3 与形状先验差多少以内算"一致"——一致就取平均上报，否则整帧不上报。
+/// 依据：m1 语料 57 帧实测，两路的失败帧完全不重叠；
+/// 一致才上报 → 中位 1.2°、p90 6.0°、0 帧 >45°（v3 单独是 4 帧 >45°）。
+const FUSE_AGREE_DEG: f64 = 30.0;
+
+/// 圆周上的中点（走短弧）
+fn circ_mid(a: f64, b: f64) -> f64 {
+    (a + crate::arrow::ang_diff(b, a) / 2.0 + 720.0) % 360.0
+}
+
 pub fn detect_window(
     rgba: &[u8],
     size: usize,
     aws: &mut crate::arrow::ArrowWorkspace,
     cws: &mut crate::cone::ConeWorkspace,
+) -> Detect {
+    detect_core(rgba, size, aws, cws, None)
+}
+
+/// 带形状先验的检测：v3 与"同域模板匹配"两路互证，分歧就整帧不上报。
+///
+/// 为什么需要：导航路线条会把箭头尖端整个盖掉，残片是个小三角，
+/// PCA 主轴偏 50~60°，方向错 120° 左右（m1 语料 57 帧里 4 帧）。
+/// 模板匹配在那 4 帧上误差只有 0.4°~5.7°，但它在另一段连续帧上会错 ——
+/// 两路的失败帧**完全不相交**，所以"一致才上报"能同时躲开两边的坑。
+///
+/// 先验在 `ShapePrior` 里自举：只有 v1 与 v3 都出结果且相差 ≤15° 的帧才被吸收。
+pub fn detect_window_prior(
+    rgba: &[u8],
+    size: usize,
+    aws: &mut crate::arrow::ArrowWorkspace,
+    cws: &mut crate::cone::ConeWorkspace,
+    prior: &mut crate::prior::ShapePrior,
+) -> Detect {
+    detect_core(rgba, size, aws, cws, Some(prior))
+}
+
+fn detect_core(
+    rgba: &[u8],
+    size: usize,
+    aws: &mut crate::arrow::ArrowWorkspace,
+    cws: &mut crate::cone::ConeWorkspace,
+    prior: Option<&mut crate::prior::ShapePrior>,
 ) -> Detect {
     let mut out = Detect::default();
     /* 箭头的采样窗要比视锥小一圈。
@@ -258,7 +304,51 @@ pub fn detect_window(
     let c = (size as f64 / 2.0, size as f64 / 2.0);
     let v3 = crate::hexagon::direction_v3(rgba, size, c, 0.0);
 
-    let pick = fuse_arrow(v1_compass, arrow.conf, v3.map(|h| (h.deg, h.span)));
+    /* ---- 形状先验：自举 + 互证
+     *
+     * 自举条件"v1 与 v3 都出结果且相差 ≤15°"：两个估计器结构完全不同，
+     * 同时错到同一个方向几乎不可能，所以这种帧可以当真值用。
+     */
+    let mut prior_match = None;
+    if let Some(p) = prior {
+        if let (Some(a1), Some(h)) = (v1_compass, v3.as_ref()) {
+            if crate::arrow::ang_diff(a1, h.deg).abs() <= BOOTSTRAP_AGREE_DEG {
+                p.observe(rgba, size, circ_mid(a1, h.deg));
+            }
+        }
+        prior_match = p.match_frame(rgba, size, 15.0);
+    }
+    out.prior = prior_match.map(|m| m.deg);
+    out.prior_precision = prior_match.map(|m| m.precision as f32).unwrap_or(0.0);
+
+    let mut pick = fuse_arrow(v1_compass, arrow.conf, v3.map(|h| (h.deg, h.span)));
+
+    /* ---- 一致性融合（只用于"小箭头"域）
+     *
+     * 大箭头（视频，≥40px）时 v1 是 0.03° 量级，比模板准，不掺和。
+     * 小箭头（真机，~28px）时 v3 与模板各有各的坑，所以两者互证。
+     */
+    if let (Some(m), Some(h)) = (prior_match, v3.as_ref()) {
+        if h.span < ARROW_PX_PREFER_V1 {
+            if crate::arrow::ang_diff(h.deg, m.deg).abs() <= FUSE_AGREE_DEG {
+                pick = ArrowPick {
+                    deg: Some(circ_mid(h.deg, m.deg)),
+                    conf: 0.7,
+                    source: 5, // 两路一致，取平均
+                    suspect: pick.suspect,
+                };
+            } else {
+                // 分歧 → 这一帧不上报，让滤波层保持上一帧
+                pick = ArrowPick {
+                    deg: None,
+                    conf: 0.0,
+                    source: 6,
+                    suspect: true,
+                };
+            }
+        }
+    }
+
     out.arrow = pick.deg;
     out.arrow_conf = pick.conf;
     out.arrow_source = pick.source;
@@ -386,7 +476,20 @@ pub fn detect_simple(frame: &Frame, window: SampleBox, origin: Origin) -> Detect
 mod tests {
     use super::*;
 
-    /// 主通道裁决：大箭头信 v1，小箭头信 v3，只有一路就用那一路。
+    /// 圆周中点要沿**短弧**取，不能走"跨过 0° 就绕一大圈"。
+    #[test]
+    fn circ_mid_takes_short_arc() {
+        // 350° 与 10° 的中点应当接近 0/360，而不是 180
+        let m = circ_mid(350.0, 10.0);
+        let err = ((m - 0.0 + 540.0) % 360.0 - 180.0).abs();
+        assert!(err < 1.0, "350° 与 10° 的中点应当是 0°，实际 {m:.1}°");
+        // 普通情形
+        let m = circ_mid(100.0, 120.0);
+        assert!((m - 110.0).abs() < 1e-6, "应当是 110°，实际 {m}");
+        // 对称性
+        assert!((circ_mid(10.0, 350.0) - circ_mid(350.0, 10.0)).abs() < 1e-6);
+    }
+
     #[test]
     fn fuse_arrow_routes_by_size() {
         // 大箭头（视频，60px）→ v1

@@ -78,7 +78,13 @@ fn crop_at(m: &[f32], side: usize, center: Option<(f64, f64)>) -> Vec<f32> {
 /// 掩码质心（全窗口坐标）
 fn centroid(m: &[f32], side: usize) -> Option<(f64, f64)> {
     let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
-    for (i, v) in m.iter().enumerate() { if *v > 0.5 { sx += (i % side) as f64; sy += (i / side) as f64; n += 1.0; } }
+    for (i, v) in m.iter().enumerate() {
+        if *v > 0.5 {
+            sx += (i % side) as f64;
+            sy += (i / side) as f64;
+            n += 1.0;
+        }
+    }
     if n < 20.0 {
         None
     } else {

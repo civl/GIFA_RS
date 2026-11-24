@@ -17,6 +17,7 @@ pub mod filter;
 pub mod frame;
 pub mod hexagon;
 pub mod pipeline;
+pub mod prior;
 pub mod recovery;
 pub mod result;
 pub mod screen;
@@ -30,6 +31,7 @@ pub use filter::{view_payload, AbFilter, ConeObs, ViewOut, ViewSource, ViewState
 pub use frame::{Frame, FrameSource, Roi};
 pub use hexagon::{direction as hex_direction, HexDirection};
 pub use pipeline::{start as start_pipeline, start_with_dump as start_pipeline_dump, VisionEvent};
+pub use prior::{PriorMatch, ShapePrior};
 pub use recovery::{analyze_arrow_with_recovery, analyze_cone_with_recovery, centered_patch};
 pub use result::{Arrow, Bearing, Cone};
 pub use screen::capture_screen;

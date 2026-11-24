@@ -5,61 +5,232 @@ pub const LABELS: &[u8] = include_bytes!("../../../../docs/calibration/m1-labels
 
 #[allow(clippy::type_complexity)]
 pub static FRAMES: &[(u64, &[u8])] = &[
-    (1, include_bytes!("../../../../docs/calibration/m1-sub/f001-158.bin")),
-    (9, include_bytes!("../../../../docs/calibration/m1-sub/f009-158.bin")),
-    (17, include_bytes!("../../../../docs/calibration/m1-sub/f017-158.bin")),
-    (25, include_bytes!("../../../../docs/calibration/m1-sub/f025-158.bin")),
-    (33, include_bytes!("../../../../docs/calibration/m1-sub/f033-158.bin")),
-    (41, include_bytes!("../../../../docs/calibration/m1-sub/f041-158.bin")),
-    (49, include_bytes!("../../../../docs/calibration/m1-sub/f049-158.bin")),
-    (57, include_bytes!("../../../../docs/calibration/m1-sub/f057-158.bin")),
-    (65, include_bytes!("../../../../docs/calibration/m1-sub/f065-158.bin")),
-    (73, include_bytes!("../../../../docs/calibration/m1-sub/f073-158.bin")),
-    (81, include_bytes!("../../../../docs/calibration/m1-sub/f081-158.bin")),
-    (89, include_bytes!("../../../../docs/calibration/m1-sub/f089-158.bin")),
-    (97, include_bytes!("../../../../docs/calibration/m1-sub/f097-158.bin")),
-    (105, include_bytes!("../../../../docs/calibration/m1-sub/f105-158.bin")),
-    (113, include_bytes!("../../../../docs/calibration/m1-sub/f113-158.bin")),
-    (121, include_bytes!("../../../../docs/calibration/m1-sub/f121-158.bin")),
-    (129, include_bytes!("../../../../docs/calibration/m1-sub/f129-158.bin")),
-    (137, include_bytes!("../../../../docs/calibration/m1-sub/f137-158.bin")),
-    (145, include_bytes!("../../../../docs/calibration/m1-sub/f145-158.bin")),
-    (153, include_bytes!("../../../../docs/calibration/m1-sub/f153-158.bin")),
-    (161, include_bytes!("../../../../docs/calibration/m1-sub/f161-158.bin")),
-    (169, include_bytes!("../../../../docs/calibration/m1-sub/f169-158.bin")),
-    (177, include_bytes!("../../../../docs/calibration/m1-sub/f177-158.bin")),
-    (185, include_bytes!("../../../../docs/calibration/m1-sub/f185-158.bin")),
-    (193, include_bytes!("../../../../docs/calibration/m1-sub/f193-158.bin")),
-    (201, include_bytes!("../../../../docs/calibration/m1-sub/f201-158.bin")),
-    (209, include_bytes!("../../../../docs/calibration/m1-sub/f209-158.bin")),
-    (217, include_bytes!("../../../../docs/calibration/m1-sub/f217-158.bin")),
-    (225, include_bytes!("../../../../docs/calibration/m1-sub/f225-158.bin")),
-    (233, include_bytes!("../../../../docs/calibration/m1-sub/f233-158.bin")),
-    (241, include_bytes!("../../../../docs/calibration/m1-sub/f241-158.bin")),
-    (249, include_bytes!("../../../../docs/calibration/m1-sub/f249-158.bin")),
-    (257, include_bytes!("../../../../docs/calibration/m1-sub/f257-158.bin")),
-    (265, include_bytes!("../../../../docs/calibration/m1-sub/f265-158.bin")),
-    (273, include_bytes!("../../../../docs/calibration/m1-sub/f273-158.bin")),
-    (281, include_bytes!("../../../../docs/calibration/m1-sub/f281-158.bin")),
-    (289, include_bytes!("../../../../docs/calibration/m1-sub/f289-158.bin")),
-    (297, include_bytes!("../../../../docs/calibration/m1-sub/f297-158.bin")),
-    (305, include_bytes!("../../../../docs/calibration/m1-sub/f305-158.bin")),
-    (313, include_bytes!("../../../../docs/calibration/m1-sub/f313-158.bin")),
-    (321, include_bytes!("../../../../docs/calibration/m1-sub/f321-158.bin")),
-    (329, include_bytes!("../../../../docs/calibration/m1-sub/f329-158.bin")),
-    (337, include_bytes!("../../../../docs/calibration/m1-sub/f337-158.bin")),
-    (345, include_bytes!("../../../../docs/calibration/m1-sub/f345-158.bin")),
-    (353, include_bytes!("../../../../docs/calibration/m1-sub/f353-158.bin")),
-    (361, include_bytes!("../../../../docs/calibration/m1-sub/f361-158.bin")),
-    (369, include_bytes!("../../../../docs/calibration/m1-sub/f369-158.bin")),
-    (377, include_bytes!("../../../../docs/calibration/m1-sub/f377-158.bin")),
-    (385, include_bytes!("../../../../docs/calibration/m1-sub/f385-158.bin")),
-    (393, include_bytes!("../../../../docs/calibration/m1-sub/f393-158.bin")),
-    (401, include_bytes!("../../../../docs/calibration/m1-sub/f401-158.bin")),
-    (409, include_bytes!("../../../../docs/calibration/m1-sub/f409-158.bin")),
-    (417, include_bytes!("../../../../docs/calibration/m1-sub/f417-158.bin")),
-    (425, include_bytes!("../../../../docs/calibration/m1-sub/f425-158.bin")),
-    (433, include_bytes!("../../../../docs/calibration/m1-sub/f433-158.bin")),
-    (441, include_bytes!("../../../../docs/calibration/m1-sub/f441-158.bin")),
-    (449, include_bytes!("../../../../docs/calibration/m1-sub/f449-158.bin")),
+    (
+        1,
+        include_bytes!("../../../../docs/calibration/m1-sub/f001-158.bin"),
+    ),
+    (
+        9,
+        include_bytes!("../../../../docs/calibration/m1-sub/f009-158.bin"),
+    ),
+    (
+        17,
+        include_bytes!("../../../../docs/calibration/m1-sub/f017-158.bin"),
+    ),
+    (
+        25,
+        include_bytes!("../../../../docs/calibration/m1-sub/f025-158.bin"),
+    ),
+    (
+        33,
+        include_bytes!("../../../../docs/calibration/m1-sub/f033-158.bin"),
+    ),
+    (
+        41,
+        include_bytes!("../../../../docs/calibration/m1-sub/f041-158.bin"),
+    ),
+    (
+        49,
+        include_bytes!("../../../../docs/calibration/m1-sub/f049-158.bin"),
+    ),
+    (
+        57,
+        include_bytes!("../../../../docs/calibration/m1-sub/f057-158.bin"),
+    ),
+    (
+        65,
+        include_bytes!("../../../../docs/calibration/m1-sub/f065-158.bin"),
+    ),
+    (
+        73,
+        include_bytes!("../../../../docs/calibration/m1-sub/f073-158.bin"),
+    ),
+    (
+        81,
+        include_bytes!("../../../../docs/calibration/m1-sub/f081-158.bin"),
+    ),
+    (
+        89,
+        include_bytes!("../../../../docs/calibration/m1-sub/f089-158.bin"),
+    ),
+    (
+        97,
+        include_bytes!("../../../../docs/calibration/m1-sub/f097-158.bin"),
+    ),
+    (
+        105,
+        include_bytes!("../../../../docs/calibration/m1-sub/f105-158.bin"),
+    ),
+    (
+        113,
+        include_bytes!("../../../../docs/calibration/m1-sub/f113-158.bin"),
+    ),
+    (
+        121,
+        include_bytes!("../../../../docs/calibration/m1-sub/f121-158.bin"),
+    ),
+    (
+        129,
+        include_bytes!("../../../../docs/calibration/m1-sub/f129-158.bin"),
+    ),
+    (
+        137,
+        include_bytes!("../../../../docs/calibration/m1-sub/f137-158.bin"),
+    ),
+    (
+        145,
+        include_bytes!("../../../../docs/calibration/m1-sub/f145-158.bin"),
+    ),
+    (
+        153,
+        include_bytes!("../../../../docs/calibration/m1-sub/f153-158.bin"),
+    ),
+    (
+        161,
+        include_bytes!("../../../../docs/calibration/m1-sub/f161-158.bin"),
+    ),
+    (
+        169,
+        include_bytes!("../../../../docs/calibration/m1-sub/f169-158.bin"),
+    ),
+    (
+        177,
+        include_bytes!("../../../../docs/calibration/m1-sub/f177-158.bin"),
+    ),
+    (
+        185,
+        include_bytes!("../../../../docs/calibration/m1-sub/f185-158.bin"),
+    ),
+    (
+        193,
+        include_bytes!("../../../../docs/calibration/m1-sub/f193-158.bin"),
+    ),
+    (
+        201,
+        include_bytes!("../../../../docs/calibration/m1-sub/f201-158.bin"),
+    ),
+    (
+        209,
+        include_bytes!("../../../../docs/calibration/m1-sub/f209-158.bin"),
+    ),
+    (
+        217,
+        include_bytes!("../../../../docs/calibration/m1-sub/f217-158.bin"),
+    ),
+    (
+        225,
+        include_bytes!("../../../../docs/calibration/m1-sub/f225-158.bin"),
+    ),
+    (
+        233,
+        include_bytes!("../../../../docs/calibration/m1-sub/f233-158.bin"),
+    ),
+    (
+        241,
+        include_bytes!("../../../../docs/calibration/m1-sub/f241-158.bin"),
+    ),
+    (
+        249,
+        include_bytes!("../../../../docs/calibration/m1-sub/f249-158.bin"),
+    ),
+    (
+        257,
+        include_bytes!("../../../../docs/calibration/m1-sub/f257-158.bin"),
+    ),
+    (
+        265,
+        include_bytes!("../../../../docs/calibration/m1-sub/f265-158.bin"),
+    ),
+    (
+        273,
+        include_bytes!("../../../../docs/calibration/m1-sub/f273-158.bin"),
+    ),
+    (
+        281,
+        include_bytes!("../../../../docs/calibration/m1-sub/f281-158.bin"),
+    ),
+    (
+        289,
+        include_bytes!("../../../../docs/calibration/m1-sub/f289-158.bin"),
+    ),
+    (
+        297,
+        include_bytes!("../../../../docs/calibration/m1-sub/f297-158.bin"),
+    ),
+    (
+        305,
+        include_bytes!("../../../../docs/calibration/m1-sub/f305-158.bin"),
+    ),
+    (
+        313,
+        include_bytes!("../../../../docs/calibration/m1-sub/f313-158.bin"),
+    ),
+    (
+        321,
+        include_bytes!("../../../../docs/calibration/m1-sub/f321-158.bin"),
+    ),
+    (
+        329,
+        include_bytes!("../../../../docs/calibration/m1-sub/f329-158.bin"),
+    ),
+    (
+        337,
+        include_bytes!("../../../../docs/calibration/m1-sub/f337-158.bin"),
+    ),
+    (
+        345,
+        include_bytes!("../../../../docs/calibration/m1-sub/f345-158.bin"),
+    ),
+    (
+        353,
+        include_bytes!("../../../../docs/calibration/m1-sub/f353-158.bin"),
+    ),
+    (
+        361,
+        include_bytes!("../../../../docs/calibration/m1-sub/f361-158.bin"),
+    ),
+    (
+        369,
+        include_bytes!("../../../../docs/calibration/m1-sub/f369-158.bin"),
+    ),
+    (
+        377,
+        include_bytes!("../../../../docs/calibration/m1-sub/f377-158.bin"),
+    ),
+    (
+        385,
+        include_bytes!("../../../../docs/calibration/m1-sub/f385-158.bin"),
+    ),
+    (
+        393,
+        include_bytes!("../../../../docs/calibration/m1-sub/f393-158.bin"),
+    ),
+    (
+        401,
+        include_bytes!("../../../../docs/calibration/m1-sub/f401-158.bin"),
+    ),
+    (
+        409,
+        include_bytes!("../../../../docs/calibration/m1-sub/f409-158.bin"),
+    ),
+    (
+        417,
+        include_bytes!("../../../../docs/calibration/m1-sub/f417-158.bin"),
+    ),
+    (
+        425,
+        include_bytes!("../../../../docs/calibration/m1-sub/f425-158.bin"),
+    ),
+    (
+        433,
+        include_bytes!("../../../../docs/calibration/m1-sub/f433-158.bin"),
+    ),
+    (
+        441,
+        include_bytes!("../../../../docs/calibration/m1-sub/f441-158.bin"),
+    ),
+    (
+        449,
+        include_bytes!("../../../../docs/calibration/m1-sub/f449-158.bin"),
+    ),
 ];
