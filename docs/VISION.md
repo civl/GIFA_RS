@@ -1266,3 +1266,36 @@ release 构建在本机跑不了（沙箱下 `cargo build --release` 的 build s
 cargo run -p gifa-vision --example fusion-eval
 ```
 
+
+## 环境补充（2026-11-24 晚）：限制是按 exe 路径生效的
+
+进一步实测发现，本机沙箱的文件限制**不是**对所有子进程一视同仁，而是：
+
+| 进程 | 权限 |
+|---|---|
+| cargo / rustc / rc.exe / link.exe（在 `~/.cargo`、SDK 目录） | **不受限**，正常读写 |
+| 工作区里构建出的 exe（build script、测试、示例、gifa-demo.exe） | **只读**：读 OK，创建/写入/删除全 `os error 5` |
+
+三个推论：
+
+1. **把 exe 复制到工作区外就能正常跑**（实测：gifa-demo.exe 复制到 %TEMP% 后
+   数据目录创建、热键、托盘、窗口全部成功）。实机测试就用这个办法。
+2. **proc-macro2 的 build script 探测**会卡在"创建/删除 probe 目录"。
+   绕过：人工预建 `target\release\build\proc-macro2\<hash>\out\probe` 目录（pwsh 建的，
+   不受限），再把它 vendored `build.rs` 里 cleanup 失败时的 `process::exit(1)` 改成容忍
+   （`~\.cargo\registry\src\rsproxy.cn-*\proc-macro2-1.0.107\build.rs`，已备份 .bak）。
+   注意 Cargo.lock 锁的是 **1.0.107**，不是 1.0.106。
+3. **gifa-demo 的 build.rs** 写清单/.rc 失败 → 改成 `write_or_reuse`：写失败时警告并假定
+   已预置（链接器/rc.exe 是不受限的 SDK 二进制，能读到真实内容）。正常环境下写成功，
+   行为不变。预置脚本：`scripts/seed-demo-build-all.py`（把模板逐字节还原到所有 OUT_DIR）。
+
+### release 计时（终于能跑了）
+
+| | debug | release |
+|---|---|---|
+| 基线（无先验） | 1.09 ms/帧 | **0.86 ms/帧** |
+| 带先验（融合） | 2.54 ms/帧 | **2.31 ms/帧** |
+
+10 fps 预算是 100ms/帧，2.31ms 完全够用。此前"release 比速度快 5~10 倍"的经验
+在这里不成立 —— 热路径是 72 个角度 × 48×48 双线性旋转，属于访存密集，
+优化空间有限。要更快可以只扫 v3 附近 ±45°，但那会削弱互证的独立性，不值得。

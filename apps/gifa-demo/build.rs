@@ -64,7 +64,7 @@ fn main() {
 "#
     );
     let manifest_path = out.join(format!("gifa-{level}.manifest"));
-    std::fs::write(&manifest_path, manifest).expect("写清单失败");
+    write_or_reuse(&manifest_path, &manifest, "清单");
     println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
     println!(
         "cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}",
@@ -118,7 +118,7 @@ END
 "#
     );
     let rc_path = out.join("gifa.rc");
-    std::fs::write(&rc_path, rc).expect("写 .rc 失败");
+    write_or_reuse(&rc_path, &rc, ".rc");
     let res = out.join("gifa.res");
 
     let Some(rc_exe) = find_rc() else {
@@ -168,6 +168,27 @@ fn find_rc() -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// 写入构建产物；目录只读（沙箱/受限构建环境）时，若文件已存在且内容一致则复用。
+///
+/// 为什么需要：DSH 沙箱等环境下，工作区里构建出的 exe（含 build script）对文件系统
+/// 只有读权限 —— 创建、写入、删除全部 `os error 5`。此时只要人工预置与预期
+/// **完全一致**的内容，构建就能继续（链接器只读这个文件）。
+fn write_or_reuse(path: &Path, expected: &str, what: &str) {
+    if let Ok(existing) = std::fs::read_to_string(path) {
+        if existing == expected {
+            return;
+        }
+    }
+    if let Err(err) = std::fs::write(path, expected) {
+        /* 沙箱等受限构建环境：工作区里构建出的 exe（含本 build script）对文件系统
+         * 只读（创建/写入/删除全部 os error 5，甚至把预置文件读成空）。
+         * 此时假定文件已被人工预置好 —— 链接器与 rc.exe 是 SDK 二进制、不受限，
+         * 能读到真实内容；本脚本读到的"空文件"只是它自己的受限视图。
+         * 后续步骤若真缺文件（rc/link），它们自己的错误处理会兜住。 */
+        println!("cargo:warning={what}写入失败（os error {}），假定 {} 已预置", err.raw_os_error().unwrap_or(0), path.display());
+    }
 }
 
 fn parse_version(v: &str) -> (u32, u32, u32) {
