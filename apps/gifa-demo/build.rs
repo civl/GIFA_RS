@@ -187,7 +187,11 @@ fn write_or_reuse(path: &Path, expected: &str, what: &str) {
          * 此时假定文件已被人工预置好 —— 链接器与 rc.exe 是 SDK 二进制、不受限，
          * 能读到真实内容；本脚本读到的"空文件"只是它自己的受限视图。
          * 后续步骤若真缺文件（rc/link），它们自己的错误处理会兜住。 */
-        println!("cargo:warning={what}写入失败（os error {}），假定 {} 已预置", err.raw_os_error().unwrap_or(0), path.display());
+        println!(
+            "cargo:warning={what}写入失败（os error {}），假定 {} 已预置",
+            err.raw_os_error().unwrap_or(0),
+            path.display()
+        );
     }
 }
 

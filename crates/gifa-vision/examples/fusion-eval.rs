@@ -146,6 +146,8 @@ fn main() {
     }
     let mut steady_err = Vec::new();
     let mut steady_drop = 0;
+    let mut gross_rows: Vec<String> = Vec::new();
+    let mut gross_truths: Vec<(u64, f64)> = Vec::new();
     let t0 = std::time::Instant::now();
     for (seq, bytes) in m1_corpus::FRAMES {
         let Some(&truth) = truth_of.get(seq) else {
@@ -154,8 +156,30 @@ fn main() {
         let side = (bytes.len() / 4).isqrt();
         let out = detect_window_prior(bytes, side, &mut aws, &mut cws, &mut prior2);
         match out.arrow {
-            Some(a) => steady_err.push(ang_diff(a, truth).abs()),
-            None => steady_drop += 1,
+            Some(a) => {
+                let e = ang_diff(a, truth).abs();
+                steady_err.push(e);
+                if e > 45.0 {
+                    gross_rows.push(format!(
+                        "  seq {seq}: err {e:.1} src {}  prior {:?}  prec {:.2} recall {:.2}  v3 {:?}",
+                        out.arrow_source, out.prior, out.prior_precision, out.prior_recall, out.v3_diag
+                    ));
+                    gross_truths.push((*seq, truth));
+                }
+            }
+            None => {
+                steady_drop += 1;
+                if let Some(v3) = out.v3_diag {
+                    let e = ang_diff(v3, truth).abs();
+                    if e > 45.0 {
+                        gross_rows.push(format!(
+                            "  seq {seq}: 丢弃（v3 错 {e:.1}°）  prior {:?}  prec {:.2} recall {:.2}",
+                            out.prior, out.prior_precision, out.prior_recall
+                        ));
+                        gross_truths.push((*seq, truth));
+                    }
+                }
+            }
         }
     }
     let with_prior = t0.elapsed().as_secs_f64() * 1000.0 / m1_corpus::FRAMES.len() as f64;
@@ -174,6 +198,93 @@ fn main() {
 
     println!("  （先验攒了 {} 帧）", prior2.frames());
     stat(steady_err, steady_drop, total).line("稳态（全量）");
+    if !gross_rows.is_empty() {
+        println!("  大错帧明细:");
+        for r in &gross_rows {
+            println!("{}", r);
+        }
+        // 对第一个大错帧打印"真值角度上的得分 vs 匹配选出的得分"
+        if let (Some(&(seq_bad, truth)), Some(_bytes)) = (
+            gross_truths.first(),
+            gross_truths
+                .first()
+                .and_then(|(s, _)| m1_corpus::FRAMES.iter().find(|(fs, _)| fs == s))
+                .map(|(_, b)| *b),
+        ) {
+            let bytes = m1_corpus::FRAMES
+                .iter()
+                .find(|(s, _)| *s == seq_bad)
+                .map(|(_, b)| *b);
+            if let Some(bytes) = bytes {
+                let side = (bytes.len() / 4).isqrt();
+                println!("  seq {seq_bad} 在各角度的得分（precision/recall）:");
+                for probe in [
+                    ("真值", truth),
+                    (
+                        "prior 选的",
+                        prior2
+                            .match_frame(bytes, side, 15.0)
+                            .map(|m| m.deg)
+                            .unwrap_or(0.0),
+                    ),
+                ] {
+                    if let Some((p, r)) = prior2.precision_at(bytes, side, probe.1) {
+                        println!(
+                            "    {} {:>6.1}° → precision {p:.3} recall {r:.3}",
+                            probe.0, probe.1
+                        );
+                    }
+                }
+                if let Some(render) = prior2.debug_render(bytes, side) {
+                    println!(
+                        "    模板 | 候选(seq {seq_bad}) | 交集(T=只有模板 C=只有候选 = =都有):"
+                    );
+                    for line in render.lines() {
+                        println!("    {line}");
+                    }
+                }
+            }
+        }
+    }
+    /* ---- 对照：用**人工真值**建先验（oracle）
+     *
+     * 区分"自举模板质量不行"和"度量/裁切本身不行"：
+     * oracle 能修好那 4 帧 → 问题在自举；修不好 → 问题在度量。
+     */
+    let mut oracle = ShapePrior::new();
+    for (seq, bytes) in m1_corpus::FRAMES {
+        let Some(&truth) = truth_of.get(seq) else {
+            continue;
+        };
+        let side = (bytes.len() / 4).isqrt();
+        oracle.observe(bytes, side, truth);
+    }
+    let mut oe = Vec::new();
+    let mut od = 0;
+    let mut og = Vec::new();
+    for (seq, bytes) in m1_corpus::FRAMES {
+        let Some(&truth) = truth_of.get(seq) else {
+            continue;
+        };
+        let side = (bytes.len() / 4).isqrt();
+        let out = detect_window_prior(bytes, side, &mut aws, &mut cws, &mut oracle);
+        match out.arrow {
+            Some(a) => {
+                let e = ang_diff(a, truth).abs();
+                oe.push(e);
+                if e > 45.0 {
+                    og.push(*seq);
+                }
+            }
+            None => od += 1,
+        }
+    }
+    println!("  （oracle 先验用 {} 帧建）", oracle.frames());
+    stat(oe, od, total).line("oracle 先验");
+    if !og.is_empty() {
+        println!("  oracle 仍大错的帧: {og:?}");
+    }
+
     println!(
         "  耗时：基线 {base_ms:.2}ms/帧，带先验 {with_prior:.2}ms/帧（+{:.0}%）",
         (with_prior / base_ms.max(1e-6) - 1.0) * 100.0

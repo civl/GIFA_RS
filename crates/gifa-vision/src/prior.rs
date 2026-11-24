@@ -30,7 +30,7 @@
 //! 对称的 NCC / F1 会把"被盖掉一块"当成不相似，正好丢掉这一点。
 
 /// 裁切半径：中心 `2*HALF` 见方。真机箭头轴长 ~26~35px，64 见方足够。
-pub const HALF: usize = 24;
+pub const HALF: usize = 32;
 const CROP: usize = 2 * HALF;
 
 /// 至少积累这么多帧才认为先验可用。
@@ -89,18 +89,20 @@ impl ShapePrior {
     ///
     /// 调用方负责只在**可信**的帧上调用（见模块注释：v1 ∧ v3 一致）。
     /// 返回是否真的吸收了。
+    ///
+    /// 中心化用的是**箭头连通块的质心**（4 邻域最大块），不是全窗口青色质心：
+    /// 实机小地图上有路点图标等其它青色元素，混进质心会把裁切中心带偏
+    /// （首份实机采集里 52% 的帧因此与 v3 分歧被丢弃）。
     pub fn observe(&mut self, rgba: &[u8], size: usize, deg: f64) -> bool {
         if size < 24 || rgba.len() < size * size * 4 {
             return false;
         }
-        let m = cyan_mask(rgba, size);
-        let area = m.iter().filter(|v| **v > 0.5).count();
-        if !(AREA_MIN..=AREA_MAX).contains(&area) {
-            return false;
-        }
-        let Some(c) = centroid(&m, size) else {
+        let Some((m, c, area)) = blob_of(rgba, size) else {
             return false;
         };
+        if !area_ok(area, size) {
+            return false;
+        }
         self.ensure_side(size);
         let crop = crop_at(&m, size, c);
         // 转到"尖端朝上"的规范朝向
@@ -124,6 +126,62 @@ impl ShapePrior {
             .collect()
     }
 
+    /// 诊断：把模板和当前帧的候选裁切渲染成 ASCII（模板 + 候选 + 两者交集）。
+    ///
+    /// 每行三栏并排，用于肉眼核对模板形状与候选形状到底差在哪。
+    pub fn debug_render(&self, rgba: &[u8], size: usize) -> Option<String> {
+        let (m, _c, area) = blob_of(rgba, size)?;
+        if !area_ok(area, size) {
+            return None;
+        }
+        let cand = crop_at(&m, size, _c);
+        let tpl = self.mask();
+        let mut s = String::new();
+        for y in 0..CROP {
+            let mut row_t = String::new();
+            let mut row_c = String::new();
+            let mut row_i = String::new();
+            for x in 0..CROP {
+                let i = y * CROP + x;
+                let (t, c) = (tpl[i] >= 0.5, cand[i] >= 0.5);
+                row_t.push(if t { '#' } else { '.' });
+                row_c.push(if c { '#' } else { '.' });
+                row_i.push(if t && c {
+                    '=' // 两者都有
+                } else if t {
+                    'T' // 只有模板有
+                } else if c {
+                    'C' // 只有候选有
+                } else {
+                    '.'
+                });
+            }
+            s.push_str(&format!("{row_t}  {row_c}  {row_i}\n"));
+        }
+        Some(s)
+    }
+
+    /// 诊断：返回在**指定角度**上的 (precision, recall)。
+    ///
+    /// 用于回答"模板在真值角度上得分多少"——如果真值角度的分数比匹配选出的
+    /// 角度还低，说明模板本身被污染（自举吸收了坏帧），而不是搜索的问题。
+    pub fn precision_at(&self, rgba: &[u8], size: usize, deg: f64) -> Option<(f64, f64)> {
+        if !self.ready() || size < 24 || rgba.len() < size * size * 4 {
+            return None;
+        }
+        let (m, c, area) = blob_of(rgba, size)?;
+        if !area_ok(area, size) {
+            return None;
+        }
+        let cand = crop_at(&m, size, c);
+        let tpl = self.mask();
+        if tpl.iter().all(|v| *v < 0.5) {
+            return None;
+        }
+        let t = rotate(&tpl, deg);
+        Some(score(&t, &cand))
+    }
+
     /// 匹一帧，返回最可能的朝向。
     ///
     /// 先粗扫 `coarse_deg`，再在最优点附近细扫 `coarse_deg / 5`。
@@ -131,12 +189,10 @@ impl ShapePrior {
         if !self.ready() || size < 24 || rgba.len() < size * size * 4 {
             return None;
         }
-        let m = cyan_mask(rgba, size);
-        let area = m.iter().filter(|v| **v > 0.5).count();
-        if !(AREA_MIN..=AREA_MAX).contains(&area) {
+        let (m, c, area) = blob_of(rgba, size)?;
+        if !area_ok(area, size) {
             return None;
         }
-        let c = centroid(&m, size)?;
         let cand = crop_at(&m, size, c);
         let tpl = self.mask();
         if tpl.iter().all(|v| *v < 0.5) {
@@ -224,20 +280,85 @@ fn cyan_mask(rgba: &[u8], size: usize) -> Vec<f32> {
         .collect()
 }
 
-fn centroid(m: &[f32], side: usize) -> Option<(f64, f64)> {
-    let (mut sx, mut sy, mut n) = (0.0, 0.0, 0.0);
+/// 提取**用于匹配的载荷**：裁剪用的遮罩、裁剪中心、箭头面积。
+///
+/// 中心用「中心圆内所有青色像素」的质心，**不是**最大连通块的质心：
+/// 路线条会把箭头切成两半，最大块只是其中一片，用它当中心会让模板与候选错位
+/// ——实测即使用人工真值建模板也修不好那 4 个遮挡帧（误差仍 125°）。
+/// 用中心圆内的全部青色，两片残块一起参与，中心就落在箭头真正的中心上。
+/// 圆半径限制是为了排除远处路点图标之类的青色。
+///
+/// 面积（用来判断"这是不是一个箭头"）仍按最大连通块算：
+/// 混进外来青色时全窗口面积会虚高，最大块更接近箭头本身。
+fn blob_of(rgba: &[u8], size: usize) -> Option<(Vec<f32>, (f64, f64), usize)> {
+    let m = cyan_mask(rgba, size);
+    let n = size * size;
+
+    // 中心圆内的全青色质心
+    let (wc, r2) = {
+        let wc = (size as f64 - 1.0) / 2.0;
+        let r = size as f64 * 0.30;
+        (wc, r * r)
+    };
+    let (mut sx, mut sy, mut cnt) = (0.0, 0.0, 0.0);
     for (i, v) in m.iter().enumerate() {
-        if *v > 0.5 {
-            sx += (i % side) as f64;
-            sy += (i / side) as f64;
-            n += 1.0;
+        if *v <= 0.5 {
+            continue;
         }
+        let (x, y) = ((i % size) as f64, (i / size) as f64);
+        let (dx, dy) = (x - wc, y - wc);
+        if dx * dx + dy * dy > r2 {
+            continue;
+        }
+        sx += x;
+        sy += y;
+        cnt += 1.0;
     }
-    if n < 40.0 {
-        None
-    } else {
-        Some((sx / n, sy / n))
+    if cnt < 40.0 {
+        return None;
     }
+    let center = (sx / cnt, sy / cnt);
+
+    // 最大连通块只用来定"箭头有多大"
+    let mut seen = vec![false; n];
+    let mut best = 0usize;
+    let mut stack: Vec<usize> = Vec::new();
+    for seed in 0..n {
+        if m[seed] <= 0.5 || seen[seed] {
+            continue;
+        }
+        stack.clear();
+        stack.push(seed);
+        seen[seed] = true;
+        let mut comp = 0usize;
+        while let Some(cur) = stack.pop() {
+            comp += 1;
+            let y = cur / size;
+            let x = cur % size;
+            for (dy, dx) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                let ny = y as i32 + dy;
+                let nx = x as i32 + dx;
+                if nx < 0 || ny < 0 || nx >= size as i32 || ny >= size as i32 {
+                    continue;
+                }
+                let k = ny as usize * size + nx as usize;
+                if m[k] > 0.5 && !seen[k] {
+                    seen[k] = true;
+                    stack.push(k);
+                }
+            }
+        }
+        best = best.max(comp);
+    }
+    if best < 40 {
+        return None;
+    }
+    Some((m, center, best))
+}
+
+/// 块面积的合理区间（绝对值；本项目的采样窗都是 ~158px，箭头 ~400px）
+fn area_ok(area: usize, _size: usize) -> bool {
+    (AREA_MIN..=AREA_MAX).contains(&area)
 }
 
 /// 以 `center` 为中心裁 64×64。

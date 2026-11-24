@@ -76,6 +76,10 @@ pub struct Detect {
     pub prior: Option<f64>,
     /// 先验匹配的精确率
     pub prior_precision: f32,
+    /// 先验匹配的召回率（模板有几成被覆盖；遮挡会降低）
+    pub prior_recall: f32,
+    /// v3 的原始角度（罗盘角），诊断用 —— 融合丢弃帧时 CSV 里仍能看到它
+    pub v3_diag: Option<f64>,
     /// 箭头来源：0=v1 三点拟合，2=六边形兜底
     pub arrow_source: u8,
     /// |鼻子角 − 输出轴角|（标定时用来看闸门余量）
@@ -179,6 +183,21 @@ const BOOTSTRAP_AGREE_DEG: f64 = 15.0;
 /// 依据：m1 语料 57 帧实测，两路的失败帧完全不重叠；
 /// 一致才上报 → 中位 1.2°、p90 6.0°、0 帧 >45°（v3 单独是 4 帧 >45°）。
 const FUSE_AGREE_DEG: f64 = 30.0;
+
+/// 分歧达到这个量级才认为是"翻转/轴错"级别（会毁掉上屏值）。
+///
+/// 依据：实机 450 帧重放里，v3 与先验的分歧中 **110/114 都是 ≥100° 的翻转级**。
+const FLIP_DROP_DEG: f64 = 100.0;
+
+/// 翻转级分歧时是"丢帧"还是"用 v3 但压置信度"。
+///
+/// 默认 **false（不丢帧）**，依据实机 450 帧重放：
+///   · 丢帧 → 上报覆盖率 399→285（36% 的帧不上报），最长连续 40 帧（4 秒）冻结
+///   · 不丢 → 覆盖率 100%，翻转级的错值交给**已实测有效**的滤波+视锥否决兜底
+///     （m1 语料上 3/4 的遮挡帧就是被视锥否决拦下的）
+///
+/// 想要"宁可不报也不报错"的话把它改成 true。
+const FUSE_DROP_ON_FLIP: bool = false;
 
 /// 圆周上的中点（走短弧）
 fn circ_mid(a: f64, b: f64) -> f64 {
@@ -320,29 +339,51 @@ fn detect_core(
     }
     out.prior = prior_match.map(|m| m.deg);
     out.prior_precision = prior_match.map(|m| m.precision as f32).unwrap_or(0.0);
+    out.prior_recall = prior_match.map(|m| m.recall as f32).unwrap_or(0.0);
+    out.v3_diag = v3.map(|h| h.deg);
 
     let mut pick = fuse_arrow(v1_compass, arrow.conf, v3.map(|h| (h.deg, h.span)));
 
-    /* ---- 一致性融合（只用于"小箭头"域）
+    /* ---- 一致性融合（只用于"小箭头"域），按先验质量分级
      *
      * 大箭头（视频，≥40px）时 v1 是 0.03° 量级，比模板准，不掺和。
      * 小箭头（真机，~28px）时 v3 与模板各有各的坑，所以两者互证。
+     *
+     * 首份实机采集的教训：不区分先验质量的话，模板差的时候 52% 的帧被丢弃
+     * （最长 17 秒连续不上报）。所以：
+     *   · 一致（≤30°）且先验 precision ≥0.5 → 取中点（m1 语料：p90 25.5°→6.0°）
+     *   · 一致但先验弱 → 仍用 v3，不受影响
+     *   · 分歧且先验 precision ≥0.8 → 丢弃（m1 的 4 个遮挡帧就是这种，中位 precision 高）
+     *   · 分歧但先验弱 → 用 v3 但压置信度（suspect，滤波层更谨慎），不再整帧丢弃
      */
     if let (Some(m), Some(h)) = (prior_match, v3.as_ref()) {
         if h.span < ARROW_PX_PREFER_V1 {
-            if crate::arrow::ang_diff(h.deg, m.deg).abs() <= FUSE_AGREE_DEG {
-                pick = ArrowPick {
-                    deg: Some(circ_mid(h.deg, m.deg)),
-                    conf: 0.7,
-                    source: 5, // 两路一致，取平均
-                    suspect: pick.suspect,
-                };
-            } else {
-                // 分歧 → 这一帧不上报，让滤波层保持上一帧
+            let diff = crate::arrow::ang_diff(h.deg, m.deg).abs();
+            let prec = m.precision;
+            if diff <= FUSE_AGREE_DEG {
+                if prec >= 0.5 {
+                    pick = ArrowPick {
+                        deg: Some(circ_mid(h.deg, m.deg)),
+                        conf: 0.7,
+                        source: 5, // 两路一致，取平均
+                        suspect: pick.suspect,
+                    };
+                }
+                // 先验弱但一致 → 保持 v3（不动）
+            } else if FUSE_DROP_ON_FLIP && prec >= 0.8 && diff >= FLIP_DROP_DEG {
+                // 分歧大且先验强 → 这一帧不上报，让滤波层保持上一帧
                 pick = ArrowPick {
                     deg: None,
                     conf: 0.0,
                     source: 6,
+                    suspect: true,
+                };
+            } else {
+                // 分歧小（或先验弱）→ 用 v3 但压置信度，别让滤波层轻信
+                pick = ArrowPick {
+                    deg: pick.deg,
+                    conf: (pick.conf * 0.5).clamp(0.0, 1.0),
+                    source: 7,
                     suspect: true,
                 };
             }

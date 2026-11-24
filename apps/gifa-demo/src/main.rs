@@ -2829,7 +2829,7 @@ fn pump_vision(ui: &mut UiState) {
             // seq,cyan,arrow(raw),arrowConf,view(raw),viewConf,capMs,detMs,arrowF,viewF
             let _ = writeln!(
                 f,
-                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2},{:?},{:?},{},{:?},{:?},{}",
+                "{},{:.5},{:?},{:.4},{:?},{:.4},{:.2},{:.2},{:?},{:?},{},{:?},{:?},{},{:?},{:?},{:.3},{:.3}",
                 ev.seq,
                 ev.result.cyan_frac,
                 ev.result.arrow,
@@ -2843,7 +2843,11 @@ fn pump_vision(ui: &mut UiState) {
                 ev.result.reject_reason,
                 ev.result.nose_gap,
                 ev.result.ang_margin,
-                ev.result.arrow_source
+                ev.result.arrow_source,
+                ev.result.v3_diag,
+                ev.result.prior,
+                ev.result.prior_precision,
+                ev.result.prior_recall
             );
         }
         ui.vision_count += 1;
